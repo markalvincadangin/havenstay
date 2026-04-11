@@ -1,0 +1,46 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+#[Fillable([
+    'billing_id',
+    'item_type',
+    'item_description',
+    'amount',
+])]
+class BillingLineItem extends Model
+{
+    use HasFactory;
+
+    protected $table = 'billing_line_items';
+
+    protected $primaryKey = 'billing_line_item_id';
+
+    const TYPE_BASE_RENT = 'base_rent';
+
+    const TYPE_UTILITY = 'utility';
+
+    const TYPE_ADD_ON = 'add_on';
+
+    const TYPE_PENALTY = 'penalty';
+
+    const TYPE_ADJUSTMENT = 'adjustment';
+
+    protected function casts(): array
+    {
+        return [
+            'item_type' => 'string',
+            'amount' => 'decimal:2',
+        ];
+    }
+
+    public function billing(): BelongsTo
+    {
+        return $this->belongsTo(Billing::class, 'billing_id', 'billing_id');
+    }
+}

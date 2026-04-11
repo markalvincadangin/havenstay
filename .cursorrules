@@ -1,0 +1,37 @@
+# HavenStay Project Rules
+
+## Project Identity
+- **HavenStay** is a Boarding House Management System (BHMS) for small-scale operations.
+- **Academic Context:** Strict adherence to Course Compliance Requirements (CCR-001 to CCR-008) is required.
+- **Authority:** Always refer to `CLAUDE.md`, `docs/SRS.md`, and `docs/SDD.md` before implementation.
+
+## Tech Stack
+- **Backend:** Laravel 13 (PHP 8.3+), Sanctum 4.x
+- **Frontend:** Next.js 16 (App Router, React 19), Tailwind CSS v4, React Hook Form 7.x
+- **Database:** MySQL 8.4+ (Production/Compliance), SQLite (Dev/Unit Testing)
+- **API Style:** RESTful JSON
+
+## Directory Structure
+- `backend/`: Laravel API
+- `frontend/`: Next.js Web App
+- `db/`: SQL schema, triggers, and views
+- `docs/`: Product and engineering documentation
+
+## Core Constraints (Non-Negotiable)
+1. **CCR Compliance:** Never remove or simplify away triggers (24 total), views (6 total), or transaction logs.
+2. **Database Integrity:**
+   - Contracts link to `bed_space_id`, NEVER direct `room_id`.
+   - `billing` table has NO amount columns; totals are computed from `billing_line_items` and `payments`.
+   - `rooms.status` must never be set to 'occupied' (invalid ENUM).
+3. **Logic Placement:** Business logic MUST live in Service classes, NOT Controllers or Models.
+4. **Authorization:** Use `AuthorizationService` exclusively. NEVER use Laravel Gates/Policies.
+5. **Multi-Tenant Safety:** Call `AuditService::setAuditUserContext($actor->id)` before every transaction-based write to trigger-covered tables on MySQL.
+
+## Workflow Rules
+- Check `docs/SRS.md` for Functional Requirements (FR-*).
+- Check `docs/SDD.md` for technical design and DB patterns.
+- Run `php artisan test` in `backend/` for logic validation.
+- Run `npm run lint && npm run build` in `frontend/` regularly.
+
+## How to use CLAUDE.md
+- For any complex task, explicitly read `CLAUDE.md` to ensure operational alignment.

@@ -1,0 +1,515 @@
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+
+class ReportService
+{
+    /**
+     * Generate an occupancy report by room and bed.
+     * Aligned with hardened schema vw_room_occupancy.
+     *
+     * FR-028, FR-031
+     *
+     * @return array{summary: array{total_rooms: int, total_beds: int, occupied_beds: int, vacant_beds: int}, rows: Collection}
+     */
+    public static function occupancy(): array
+    {
+        // CCR-005: Multi-table JOIN via vw_room_occupancy
+        // CCR-003: SELECT query
+        // vw_room_occupancy counts bed_space rows for total_beds.
+        // Solo rooms may have no bed_space rows, so we join rooms.capacity as a fallback.
+        $rows = DB::table('vw_room_occupancy')
+            ->join('rooms', 'rooms.room_id', '=', 'vw_room_occupancy.room_id')
+            ->select('vw_room_occupancy.*', 'rooms.capacity as room_capacity')
+            ->orderBy('vw_room_occupancy.room_code')
+            ->get()
+            ->map(function ($row) {
+                // For solo rooms with no bed_space rows, COUNT returns 0 — fall back to rooms.capacity
+                $totalBeds = (int) $row->total_beds > 0 ? (int) $row->total_beds : (int) $row->room_capacity;
+                $occupiedBeds = (int) $row->occupied_beds;
+                // Hardened vacancy check: only available if room status is 'available'
+                $vacantBeds = (strtolower($row->room_status ?? '') === 'available') ? (int) $row->vacant_beds : 0;
+
+                return [
+                    'room_id' => (int) $row->room_id,
+                    'room_code' => $row->room_code,
+                    'room_type' => $row->room_type,
+                    'total_beds' => $totalBeds,
+                    'occupied_beds' => $occupiedBeds,
+                    'vacant_beds' => $vacantBeds,
+                    'occupancy_rate' => $totalBeds > 0
+                        ? round(($occupiedBeds / $totalBeds) * 100, 2)
+                        : 0.0,
+                ];
+            });
+
+        return [
+            'summary' => [
+                'total_rooms' => $rows->count(),
+                'total_beds' => $rows->sum('total_beds'),
+                'occupied_beds' => $rows->sum('occupied_beds'),
+                'vacant_beds' => $rows->sum('vacant_beds'),
+            ],
+            'rows' => $rows->values(),
+        ];
+    }
+
+    /**
+     * Generate a billing and collections summary report.
+     * Aligned with hardened schema vw_billing_summary.
+     *
+     * FR-029, FR-031
+     *
+     * @param  array{start_date?: string, end_date?: string}  $filters
+     * @return array{filters: array, summary: array, rows: Collection}
+     */
+    public static function billingSummary(array $filters = []): array
+    {
+        // CCR-005: Multi-table JOIN via vw_billing_summary
+        // CCR-003: SELECT query
+        $query = DB::table('vw_billing_summary')
+            ->select(
+                'vw_billing_summary.*',
+                DB::raw('(SELECT MAX(payment_date) FROM payments WHERE payments.billing_id = vw_billing_summary.billing_id) AS last_payment_date')
+            )
+            ->orderByDesc('billing_period_from')
+            ->orderByDesc('billing_id');
+
+        if (! empty($filters['start_date']) && ! empty($filters['end_date'])) {
+            // CCR-004: BETWEEN operator for date range
+            $query->whereBetween('billing_period_from', [$filters['start_date'], $filters['end_date']]);
+        } elseif (! empty($filters['start_date'])) {
+            $query->where('billing_period_from', '>=', $filters['start_date']);
+        } elseif (! empty($filters['end_date'])) {
+            $query->where('billing_period_from', '<=', $filters['end_date']);
+        }
+
+        $rows = $query->get()->map(function ($row) {
+            $totalAmount = (float) ($row->total_amount ?? 0);
+            $totalPaid = (float) ($row->total_paid ?? 0);
+
+            return [
+                'billing_id' => (int) $row->billing_id,
+                'contract_id' => (int) $row->contract_id,
+                'tenant_id' => (int) $row->tenant_id,
+                'tenant_name' => $row->tenant_name,
+                'room_code' => $row->room_code,
+                'billing_period_from' => $row->billing_period_from,
+                'billing_period_to' => $row->billing_period_to,
+                'due_date' => $row->due_date,
+                'amount_due' => $totalAmount,
+                'amount_paid' => $totalPaid,
+                'outstanding_balance' => $totalAmount - $totalPaid,
+                'status' => $row->billing_status,
+                'last_payment_date' => $row->last_payment_date,
+            ];
+        });
+
+        return [
+            'filters' => [
+                'start_date' => $filters['start_date'] ?? null,
+                'end_date' => $filters['end_date'] ?? null,
+            ],
+            'summary' => [
+                'billing_count' => $rows->count(),
+                'billed_total' => round($rows->sum('amount_due'), 2),
+                'collected_total' => round($rows->sum('amount_paid'), 2),
+                'outstanding_total' => round($rows->sum('outstanding_balance'), 2),
+            ],
+            'rows' => $rows->values(),
+        ];
+    }
+
+    /**
+     * Generate an outstanding balances report.
+     * Utilizes vw_billing_summary filtered for unpaid/partial.
+     *
+     * FR-030, CCR-004, CCR-005
+     *
+     * @param  array{tenant_id?: int, due_from?: string, due_to?: string}  $filters
+     * @return array{filters: array, summary: array, rows: Collection}
+     */
+    public static function outstandingBalances(array $filters = []): array
+    {
+        // CCR-005: Multi-table JOIN via vw_billing_summary
+        // CCR-003: SELECT with WHERE conditions
+        $query = DB::table('vw_billing_summary')
+            ->whereRaw('(total_amount - total_paid) > 0');
+
+        if (! empty($filters['tenant_id'])) {
+            $query->where('tenant_id', (int) $filters['tenant_id']);
+        }
+
+        // CCR-004: BETWEEN operator for date range filters
+        if (! empty($filters['due_from']) && ! empty($filters['due_to'])) {
+            $query->whereBetween('due_date', [$filters['due_from'], $filters['due_to']]);
+        } elseif (! empty($filters['due_from'])) {
+            $query->where('due_date', '>=', $filters['due_from']);
+        } elseif (! empty($filters['due_to'])) {
+            $query->where('due_date', '<=', $filters['due_to']);
+        }
+
+        $rows = $query->orderByDesc('due_date')
+            ->orderByDesc('billing_id')
+            ->get()
+            ->map(function ($row) {
+                $totalAmount = (float) ($row->total_amount ?? 0);
+                $totalPaid = (float) ($row->total_paid ?? 0);
+
+                return [
+                    'billing_id' => (int) $row->billing_id,
+                    'contract_id' => (int) $row->contract_id,
+                    'tenant_id' => (int) $row->tenant_id,
+                    'tenant_name' => $row->tenant_name,
+                    'room_code' => $row->room_code,
+                    'billing_period_from' => $row->billing_period_from,
+                    'billing_period_to' => $row->billing_period_to,
+                    'due_date' => $row->due_date,
+                    'amount_due' => $totalAmount,
+                    'amount_paid' => $totalPaid,
+                    'outstanding_balance' => $totalAmount - $totalPaid,
+                    'status' => $row->billing_status,
+                ];
+            });
+
+        return [
+            'filters' => [
+                'tenant_id' => isset($filters['tenant_id']) ? (int) $filters['tenant_id'] : null,
+                'due_from' => $filters['due_from'] ?? null,
+                'due_to' => $filters['due_to'] ?? null,
+            ],
+            'summary' => [
+                'account_count' => $rows->count(),
+                'total_outstanding' => round($rows->sum('outstanding_balance'), 2),
+            ],
+            'rows' => $rows->values(),
+        ];
+    }
+
+    /**
+     * Generate a detailed financial ledger for a specific tenant.
+     * Aggregates billings (debits) and payments (credits) chronologically.
+     *
+     * FR-032a
+     *
+     * @return array{tenant: object, entries: array, summary: array}
+     */
+    public static function tenantLedger(int $tenantId): array
+    {
+        $tenant = DB::table('tenants')->where('tenant_id', $tenantId)->first();
+
+        if (! $tenant) {
+            return ['tenant' => null, 'entries' => [], 'summary' => []];
+        }
+
+        // 1. Get all billings (Debits)
+        $billings = DB::table('vw_billing_summary')
+            ->where('tenant_id', $tenantId)
+            ->get()
+            ->map(fn ($b) => [
+                'date' => $b->billing_period_from,
+                'description' => "Billing Cycle: {$b->billing_period_from} to {$b->billing_period_to} (ID: #{$b->billing_id})",
+                'type' => 'debit',
+                'amount' => (float) $b->total_amount,
+                'link_id' => $b->billing_id,
+                'link_type' => 'billing',
+            ]);
+
+        // 2. Get all payments (Credits)
+        $payments = DB::table('vw_collections_summary')
+            ->where('tenant_id', $tenantId)
+            ->get()
+            ->map(fn ($p) => [
+                'date' => $p->payment_date,
+                'description' => "Payment Received: {$p->payment_method} (Ref: ".($p->reference_number ?? 'N/A').") (ID: #{$p->payment_id})",
+                'type' => 'credit',
+                'amount' => (float) $p->amount_paid,
+                'link_id' => $p->payment_id,
+                'link_type' => 'payment',
+            ]);
+
+        // 3. Combine and sort
+        $entries = $billings->concat($payments)
+            ->sortBy('date')
+            ->values();
+
+        // 4. Calculate running balance
+        $runningBalance = 0;
+        $ledger = $entries->map(function ($entry) use (&$runningBalance) {
+            if ($entry['type'] === 'debit') {
+                $runningBalance += $entry['amount'];
+            } else {
+                $runningBalance -= $entry['amount'];
+            }
+            $entry['running_balance'] = round($runningBalance, 2);
+
+            return $entry;
+        });
+
+        return [
+            'tenant' => [
+                'id' => $tenant->tenant_id,
+                'name' => "{$tenant->first_name} {$tenant->last_name}",
+                'status' => $tenant->status,
+            ],
+            'summary' => [
+                'total_billed' => round($ledger->where('type', 'debit')->sum('amount'), 2),
+                'total_paid' => round($ledger->where('type', 'credit')->sum('amount'), 2),
+                'current_balance' => round($runningBalance, 2),
+            ],
+            'entries' => $ledger->all(),
+        ];
+    }
+
+    /**
+     * Generate a collections performance report.
+     * Aligned with vw_collections_summary.
+     *
+     * FR-032b, CCR-004, CCR-005
+     *
+     * @param  array{start_date?: string, end_date?: string, payment_method?: string}  $filters
+     * @return array{filters: array, summary: array, rows: Collection}
+     */
+    public static function collectionsPerformance(array $filters = []): array
+    {
+        // CCR-005: Multi-table JOIN via vw_collections_summary
+        // CCR-003: SELECT with date-range filters
+        $query = DB::table('vw_collections_summary')
+            ->orderByDesc('payment_date')
+            ->orderByDesc('payment_id');
+
+        if (! empty($filters['start_date']) && ! empty($filters['end_date'])) {
+            // CCR-004: BETWEEN operator
+            $query->whereBetween('payment_date', [$filters['start_date'], $filters['end_date']]);
+        } elseif (! empty($filters['start_date'])) {
+            $query->where('payment_date', '>=', $filters['start_date']);
+        } elseif (! empty($filters['end_date'])) {
+            $query->where('payment_date', '<=', $filters['end_date']);
+        }
+
+        if (! empty($filters['payment_method'])) {
+            $query->where('payment_method', $filters['payment_method']);
+        }
+
+        $rows = $query->get()->map(function ($row) {
+            return (array) $row;
+        });
+
+        return [
+            'filters' => [
+                'start_date' => $filters['start_date'] ?? null,
+                'end_date' => $filters['end_date'] ?? null,
+                'payment_method' => $filters['payment_method'] ?? null,
+            ],
+            'summary' => [
+                'payment_count' => $rows->count(),
+                'total_collected' => round($rows->sum('amount_paid'), 2),
+            ],
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * Tenant contract timeline (all statuses) via reporting view.
+     *
+     * FR-031, FR-032, CCR-004 (BETWEEN on move-in), CCR-005 (JOIN via vw_tenant_contract_history)
+     *
+     * @param  array{from?: string, to?: string, status?: string}  $filters
+     * @return array{filters: array, summary: array, rows: Collection}
+     */
+    public static function tenantHistory(array $filters = []): array
+    {
+        $query = DB::table('vw_tenant_contract_history')
+            ->orderByDesc('move_in_date')
+            ->orderByDesc('contract_id');
+
+        if (! empty($filters['from']) && ! empty($filters['to'])) {
+            $query->whereBetween('move_in_date', [$filters['from'], $filters['to']]);
+        } elseif (! empty($filters['from'])) {
+            $query->where('move_in_date', '>=', $filters['from']);
+        } elseif (! empty($filters['to'])) {
+            $query->where('move_in_date', '<=', $filters['to']);
+        }
+
+        $status = $filters['status'] ?? 'all';
+        if ($status === 'active') {
+            $query->where('contract_status', 'active');
+        } elseif ($status === 'completed') {
+            $query->where('contract_status', 'completed');
+        } elseif ($status === 'terminated') {
+            $query->where('contract_status', 'terminated');
+        } elseif ($status === 'moved_out') {
+            $query->whereIn('contract_status', ['completed', 'terminated']);
+        }
+
+        $rows = $query->get()->map(function ($row) {
+            $moveOut = $row->actual_move_out_date ?? $row->expected_move_out_date;
+
+            return [
+                'contract_id' => (int) $row->contract_id,
+                'tenant_id' => (int) $row->tenant_id,
+                'tenant_name' => $row->tenant_name,
+                'email' => $row->email ?? null,
+                'move_in_date' => $row->move_in_date,
+                'move_out_date' => $moveOut,
+                'room_label' => $row->room_code.' / '.$row->bed_label,
+                'status' => $row->contract_status,
+            ];
+        });
+
+        return [
+            'filters' => [
+                'from' => $filters['from'] ?? null,
+                'to' => $filters['to'] ?? null,
+                'status' => $status,
+            ],
+            'summary' => [
+                'contract_count' => $rows->count(),
+            ],
+            'rows' => $rows->values(),
+        ];
+    }
+
+    /**
+     * Build CSV headings and rows for stream download responses.
+     *
+     * FR-032, FR-032b
+     *
+     * @return array{headers: string[], rows: array[]}
+     */
+    public static function toCsvPayload(string $type, array $report): array
+    {
+        return match ($type) {
+            'occupancy' => self::occupancyCsv(collect($report['rows'] ?? [])),
+            'billing-summary' => self::billingSummaryCsv(collect($report['rows'] ?? [])),
+            'outstanding-balances' => self::outstandingBalancesCsv(collect($report['rows'] ?? [])),
+            'collections-performance' => self::collectionsPerformanceCsv(collect($report['rows'] ?? [])),
+            'tenant-history' => self::tenantHistoryCsv(collect($report['rows'] ?? [])),
+            'tenant-ledger' => self::tenantLedgerCsv(collect($report['entries'] ?? []), $report['tenant'] ?? null),
+            default => ['headers' => [], 'rows' => []],
+        };
+    }
+
+    private static function tenantLedgerCsv(Collection $entries, ?object $tenant): array
+    {
+        return [
+            'headers' => ['date', 'description', 'type', 'amount', 'running_balance'],
+            'rows' => $entries->map(fn ($e) => [
+                $e['date'],
+                $e['description'],
+                strtoupper($e['type']),
+                $e['amount'],
+                $e['running_balance'],
+            ])->all(),
+        ];
+    }
+
+    private static function occupancyCsv(Collection $rows): array
+    {
+        return [
+            'headers' => ['room_code', 'room_type', 'total_beds', 'occupied_beds', 'vacant_beds', 'occupancy_rate'],
+            'rows' => $rows->map(fn ($row) => [
+                $row['room_code'],
+                $row['room_type'],
+                $row['total_beds'],
+                $row['occupied_beds'],
+                $row['vacant_beds'],
+                $row['occupancy_rate'],
+            ])->all(),
+        ];
+    }
+
+    private static function billingSummaryCsv(Collection $rows): array
+    {
+        return [
+            'headers' => [
+                'billing_id',
+                'contract_id',
+                'tenant_name',
+                'room_code',
+                'billing_period_from',
+                'billing_period_to',
+                'due_date',
+                'amount_due',
+                'amount_paid',
+                'outstanding_balance',
+                'status',
+                'last_payment_date',
+            ],
+            'rows' => $rows->map(fn ($row) => [
+                $row['billing_id'],
+                $row['contract_id'],
+                $row['tenant_name'],
+                $row['room_code'],
+                $row['billing_period_from'],
+                $row['billing_period_to'],
+                $row['due_date'],
+                $row['amount_due'],
+                $row['amount_paid'],
+                $row['outstanding_balance'],
+                $row['status'],
+                $row['last_payment_date'],
+            ])->all(),
+        ];
+    }
+
+    private static function outstandingBalancesCsv(Collection $rows): array
+    {
+        return self::billingSummaryCsv($rows); // Redirect to same format
+    }
+
+    private static function collectionsPerformanceCsv(Collection $rows): array
+    {
+        return [
+            'headers' => [
+                'payment_id',
+                'payment_date',
+                'amount_paid',
+                'payment_method',
+                'reference_number',
+                'tenant_name',
+                'room_code',
+                'billing_id',
+            ],
+            'rows' => $rows->map(fn ($row) => [
+                $row['payment_id'],
+                $row['payment_date'],
+                $row['amount_paid'],
+                $row['payment_method'],
+                $row['reference_number'],
+                $row['tenant_name'],
+                $row['room_code'],
+                $row['billing_id'],
+            ])->all(),
+        ];
+    }
+
+    private static function tenantHistoryCsv(Collection $rows): array
+    {
+        return [
+            'headers' => [
+                'contract_id',
+                'tenant_id',
+                'tenant_name',
+                'email',
+                'move_in_date',
+                'move_out_date',
+                'room',
+                'status',
+            ],
+            'rows' => $rows->map(fn ($row) => [
+                $row['contract_id'],
+                $row['tenant_id'],
+                $row['tenant_name'],
+                $row['email'] ?? '',
+                $row['move_in_date'],
+                $row['move_out_date'] ?? '',
+                $row['room_label'],
+                $row['status'],
+            ])->all(),
+        ];
+    }
+}

@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Laravel
+storage/*.key
+storage/logs/*.log
+storage/framework/sessions/*
+storage/framework/views/*.php
+storage/framework/cache/data/*
+storage/debugbar/*.json
+public/storage/
+public/hot/
+public/build/
+.phpunit.cache/
+.phpunit.result.cache
+
+# AI planning / governance docs
+.ai-docs/
+ai/
+
+# Copilot / AI skill configuration
+.github/copilot-instructions.md
+.github/skills/
+CLAUDE.md
+
+# AI Tools & Agents
+.agent/
+.kiro/
+.testsprite/
+testsprite_tests/
+.cursor/
+.claudecodestash/
+.gemini/
+.open-code/
+.agent-brain/
+.aider/
+.clinar/
+.mcp/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.testing.example
+!**/.env.example
+db/replica_daily_start.env
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.pem
+
+# Temporary/debug artifacts
+*.tmp
+*.tmp.*
+*.bak
+*.swp
+*.log
+build_output.txt
+lint_output.txt
+test-results/
+coverage/
+playwright-report/
+blob-report/
+

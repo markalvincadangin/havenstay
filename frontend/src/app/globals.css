@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+:root {
+  /* MASTER.md Design System - HavenStay Evolution */
+  
+  /* Brand Palette - Deep Teal */
+  --color-primary: #0D9488;
+  --color-primary-dark: #0F766E;
+  --color-primary-light: #CCFBF1;
+  
+  /* Sidebar & Core UI */
+  --color-sidebar: #0F172A;
+  --color-sidebar-text: #94A3B8;
+  --color-sidebar-active: #FFFFFF;
+  
+  /* Layout Surfaces */
+  --color-background: #FAFAF9;
+  --color-surface: #FFFFFF;
+  --color-border: #E7E5E4;
+  --color-border-strong: #D6D3D1;
+  
+  /* Typography */
+  --color-text: #1C1917;
+  --color-text-secondary: #78716C;
+  --color-text-disabled: #A8A29E;
+  
+  /* Functional Accents */
+  --color-cta: #0D9488; /* Standardized to primary per brand rules */
+  --color-danger: #991B1B;
+  --color-warning: #92400E;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Shadow Depths - Soft UI Evolution */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+  
+  /* Legacy & Semantic (for backward compatibility) */
+  --surface-base: var(--color-background);
+  --surface-card: var(--color-surface);
+  --surface-muted: #F5F5F4;
+  
+  --primary-50: #F0FDFA;
+  --primary-400: #2DD4BF;
+  --primary-600: var(--color-primary);
+  --primary-800: #115E59;
+
+  --font-sans: 'DM Sans', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+@layer base {
+  body {
+    background: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', var(--font-sans);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* --- Soft UI Evolution Utilities --- */
+@layer components {
+  .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .kpi-card-evolution {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    transition: box-shadow 150ms ease, border-color 150ms ease;
+  }
+  
+  .kpi-card-evolution:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    border-color: var(--color-border-strong);
+  }
+}
+
+@media print {
+  aside, header, button { display: none !important; }
+  main { padding: 0 !important; background: #fff !important; }
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  
+  .text-tabular { font-variant-numeric: tabular-nums; }
+
+  /**
+   * Page & strip titles — design-system/havenstay/MASTER.md Section 3.1
+   * Avoid tracking-tighter on multi-word H1s; use word-spacing so titles breathe.
+   */
+  .hs-page-title {
+    font-family: "Plus Jakarta Sans", var(--font-sans), system-ui, sans-serif;
+    font-size: 1.5rem;
+    line-height: 2rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    word-spacing: 0.075em;
+    color: rgb(28 25 23);
+  }
+
+  .hs-page-subtitle {
+    word-spacing: 0.04em;
+  }
+
+  .hs-strip-title {
+    font-family: "Plus Jakarta Sans", var(--font-sans), system-ui, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    word-spacing: 0.055em;
+    color: rgb(41 37 36);
+  }
+}
+
+/* Hide browser-native password reveal/clear buttons (Edge, etc) to prevent redundancy */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
