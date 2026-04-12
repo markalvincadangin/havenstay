@@ -1,8 +1,26 @@
-# HavenStay BHMS
+# HavenStay Boarding House Management System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Laravel](https://img.shields.io/badge/Backend-Laravel%2013-red)](https://laravel.com)
-[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-black)](https://nextjs.org)
+[![Laravel](https://img.shields.io/badge/Backend-Laravel%2013-red?logo=laravel)](https://laravel.com)
+[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-black?logo=next.js)](https://nextjs.org)
+[![Docker](https://img.shields.io/badge/Infrastructure-Docker-blue?logo=docker)](https://www.docker.com/)
+
+HavenStay is a centralized, high-performance boarding house management system designed for operational efficiency and audit compliance.
+
+### 🚀 Live Environments
+*   **Production Application**: [https://havenstay-theta.vercel.app/](https://havenstay-theta.vercel.app/)
+*   **Production API**: [https://havenstay-qhun.onrender.com/api/health](https://havenstay-qhun.onrender.com/api/health)
+
+---
+
+## 🛠️ Getting Started (Local Development)
+
+The easiest way to get HavenStay running locally is via **Docker**. This ensures your environment perfectly matches production, including the primary-replica database architecture.
+
+Please follow the **[DOCKER_SETUP.md](./DOCKER_SETUP.md)** guide for a 5-minute installation.
+
+### Legacy Setup (Optional)
+If you prefer not to use Docker, see the **[QUICK_START.md](./QUICK_START.md)** for manual installation via Laravel Herd or XAMPP.
 
 **HavenStay** is a high-performance Boarding House Management System (BHMS) designed for property managers who require precision, auditability, and ease of use. It handles the entirely of the tenant lifecycle—from onboarding and contract management to granular billing, payment processing, and operational reporting.
 
@@ -29,26 +47,6 @@ HavenStay is built on a modern, decoupled architecture designed for stability an
 - [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md): Endpoint listing and authentication guide.
 - [**CONTRIBUTING.md**](CONTRIBUTING.md): Guidelines for developers joining the project.
 
-## Quickstart
-
-### 1. Backend Setup
-```bash
-cd backend
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate --seed
-php artisan serve
-```
-
-### 2. Frontend Setup
-```bash
-cd frontend
-npm install
-cp .env.example .env.local
-npm run dev
-```
-
 ## Demo Credentials (Development)
 The local seeder provides the following credentials for evaluation:
 - **Admin**: `admin@havenstay.local` / `HavenStay123!`
@@ -59,8 +57,10 @@ The local seeder provides the following credentials for evaluation:
 
 ### Repository Standards
 
-- **`.ai-docs/`**: Reserved for AI operational planning and evidence workflows.
-- **`docs/`**: Contains product engineering specs (SRS, SDD, Test Plan).
+*   **`docs/`**: Technical documentation, SRS, and architecture (SDD).
+*   **`design-system/`**: Authoritative UI/UX specifications and component library.
+*   **`backend/`**: Laravel core, API services, and migrations.
+*   **`frontend/`**: Next.js source and design tokens.
 - **Audit Logging**: Mandatory for all transactional writes via the `AuditService`.
 
 ---

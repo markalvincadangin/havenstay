@@ -29,6 +29,8 @@ ai/
 .github/copilot-instructions.md
 .github/skills/
 CLAUDE.md
+KIRO.md
+UI_PROMPTING_GUIDE.md
 
 # AI Tools & Agents
 .agent/

@@ -1,0 +1,80 @@
+services:
+  # Primary Database (3306)
+  db-primary:
+    image: mysql:8.4
+    container_name: havenstay-db-primary
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: havenstay_db
+    command: 
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --log-replica-updates=ON
+      - --binlog-expire-logs-seconds=604800
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-primary-data:/var/lib/mysql
+
+  # Replica Database (3307)
+  db-replica:
+    image: mysql:8.4
+    container_name: havenstay-db-replica
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command: 
+      - --server-id=2
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --log-replica-updates=ON
+    ports:
+      - "3307:3306"
+    depends_on:
+      - db-primary
+    volumes:
+      - db-replica-data:/var/lib/mysql
+
+  # Backend (Laravel)
+  backend:
+    build:
+      context: ./backend
+    container_name: havenstay-backend
+    restart: always
+    ports:
+      - "8000:80"
+    volumes:
+      - ./backend:/var/www/html
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=mysql
+      - DB_HOST=db-primary
+      - DB_PORT=3306
+      - DB_DATABASE=havenstay_db
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+      - DB_READ_HOST=db-primary # Initially set to primary to allow migration
+      - DB_READ_PORT=3306
+    depends_on:
+      - db-primary
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+    container_name: havenstay-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+
+volumes:
+  db-primary-data:
+  db-replica-data:
