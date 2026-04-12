@@ -6,18 +6,20 @@ import { motion, useReducedMotion } from "framer-motion";
 import {
   AlertCircle,
   BarChart3,
+  BedDouble,
   BookMarked,
   CreditCard,
   FileText,
   Receipt,
   Users,
+  ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import { canViewReports } from "../../lib/auth";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
 import Alert from "../_components/ui/Alert";
 import { AppMain } from "../_components/ui/AppShell";
 import Breadcrumbs from "../_components/ui/Breadcrumbs";
-import { Card } from "../_components/ui/Card";
 import PageHeader from "../_components/ui/PageHeader";
 import { SkeletonGridPage } from "../_components/ui/Skeleton";
 import UserRoleBadge from "../_components/ui/UserRoleBadge";
@@ -30,40 +32,60 @@ const pageVariants = {
 
 const REPORT_LINKS = [
   {
-    title: "Occupancy",
-    description: "Room and bed utilization, vacancy counts, and occupancy rates by room.",
+    title: "Occupancy Report",
+    description: "Room-level utilization, bed counts, and occupancy rates.",
     href: "/reports/occupancy",
     icon: BarChart3,
+    color: "text-blue-600 bg-blue-50"
   },
   {
-    title: "Billing summary",
-    description: "Revenue and billing cycles within a date range—aligned with billing summary export.",
+    title: "Bed occupancy",
+    description: "Per-bed status with tenant and active contract context.",
+    href: "/reports/occupancy-status",
+    icon: BedDouble,
+    color: "text-cyan-600 bg-cyan-50"
+  },
+  {
+    title: "Active contracts",
+    description: "Current leases with room, bed, and monthly rate.",
+    href: "/reports/active-contracts",
+    icon: FileText,
+    color: "text-slate-600 bg-slate-50"
+  },
+  {
+    title: "Billing Summary",
+    description: "Revenue snapshots and billing history across the authoritative management ledger.",
     href: "/reports/billing-summary",
     icon: Receipt,
+    color: "text-rose-600 bg-rose-50"
   },
   {
-    title: "Outstanding balances",
-    description: "Unpaid and overdue cycles so staff can prioritize collections.",
+    title: "Outstanding Balances",
+    description: "Real-time overview of unpaid bills and overdue accounts mapped by tenant.",
     href: "/reports/outstanding-balances",
     icon: AlertCircle,
+    color: "text-amber-600 bg-amber-50"
   },
   {
-    title: "Tenant ledger",
-    description: "Itemized financial history and running balance per Tenant.",
+    title: "Tenant Ledger",
+    description: "Itemized financial history and running balance records for individual tenants.",
     href: "/reports/tenant-ledger",
     icon: BookMarked,
+    color: "text-teal-600 bg-teal-50"
   },
   {
-    title: "Tenant history",
-    description: "Lease timeline and status derived from contract records.",
+    title: "Tenant History",
+    description: "Historical lease timelines and property-wide tenant mobility records.",
     href: "/reports/tenant-history",
     icon: Users,
+    color: "text-indigo-600 bg-indigo-50"
   },
   {
-    title: "Collections performance",
-    description: "Payment throughput and patterns to support cash-flow reviews.",
+    title: "Collections Performance",
+    description: "Payment tracking and cash-flow summaries with authoritative time-series analysis.",
     href: "/reports/collections",
     icon: CreditCard,
+    color: "text-emerald-600 bg-emerald-50"
   },
 ];
 
@@ -73,85 +95,72 @@ export default function ReportsHomePage() {
   const canAccess = useMemo(() => canViewReports(currentUser), [currentUser]);
 
   if (authLoading) {
-    return <SkeletonGridPage cards={6} />;
+    return <SkeletonGridPage cards={8} />;
   }
 
   return (
     <AppMain>
       <motion.div
-        className="mx-auto mt-8 w-full max-w-7xl space-y-6"
+        className="mt-8 space-y-6"
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
+        transition={shouldReduceMotion ? { duration: 0.2 } : pageVariants.transition}
       >
         <PageHeader
           title="Reports"
-          subtitle="Six report areas—occupancy, billing summary, outstanding balances, tenant ledger, tenant contract history, and collections—with filters and CSV export where available."
+          subtitle="Operational exports and summaries."
           breadcrumbs={<Breadcrumbs items={[{ label: "Reports" }]} />}
           actions={
-            <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
+            <div className="flex items-center gap-4">
+               <div className="flex items-center gap-2 px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl">
+                  <ShieldCheck size={14} className="text-teal-600" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Verified Access</span>
+               </div>
+               <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
+            </div>
           }
         />
 
         {!canAccess ? (
-          <Alert variant="warning" title="Access restricted">
-            You do not have permission to view reports. Ask an administrator if you need access.
+          <Alert variant="warning" title="Access Restricted">
+            Your account does not have permission to view financial or operational reports. Please contact management for access.
           </Alert>
-        ) : null}
+        ) : (
+          <div className="space-y-8">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {REPORT_LINKS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-label={`Open ${item.title} report`}
+                    className="group flex flex-col gap-6 rounded-2xl border border-stone-200 bg-white p-8 shadow-sm transition-all duration-300 hover:border-teal-200/80 hover:shadow-xl hover:-translate-y-1"
+                  >
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/60 shadow-sm transition-shadow group-hover:shadow-md ${item.color}`}>
+                      <Icon size={22} strokeWidth={2.5} aria-hidden />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-black uppercase tracking-tight text-stone-900 group-hover:text-teal-900 transition-colors">
+                        {item.title}
+                      </h3>
+                      <p className="text-[11px] font-medium leading-relaxed text-stone-400 group-hover:text-stone-500 transition-colors">
+                        {item.description}
+                      </p>
+                    </div>
 
-        {canAccess ? (
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 bg-stone-50/50 px-6 py-4 sm:px-8 sm:py-5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                  <FileText size={16} aria-hidden />
-                </div>
-                <div>
-                  <h2 className="hs-strip-title">Report Library</h2>
-                  <p className="mt-0.5 text-xs font-medium text-stone-500">
-                    Each report opens in its own workspace with filters and export.
-                  </p>
-                </div>
-              </div>
+                    <div className="mt-auto pt-6 border-t border-stone-50 flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 group-hover:text-teal-700 transition-colors">Generate Report</span>
+                      <ChevronRight size={14} className="text-stone-300 group-hover:text-teal-600 transition-transform group-hover:translate-x-1" />
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
 
-            <div className="p-6 sm:p-8">
-              <ul className="grid list-none gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {REPORT_LINKS.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        aria-label={`Open ${item.title} report`}
-                        className="group flex h-full flex-col gap-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-teal-600/25 hover:shadow-md active:scale-[0.99]"
-                      >
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 transition-colors group-hover:bg-teal-100">
-                          <Icon size={22} strokeWidth={2} aria-hidden />
-                        </div>
-                        <div className="min-h-0 flex-1">
-                          <h3 className="text-base font-bold text-stone-900">{item.title}</h3>
-                          <p className="mt-1.5 text-sm font-medium leading-relaxed text-stone-500">
-                            {item.description}
-                          </p>
-                        </div>
-                        <div className="mt-auto flex items-center gap-2 text-xs font-black uppercase tracking-widest text-teal-700">
-                          Open report
-                          <span
-                            className="transition-transform duration-200 group-hover:translate-x-0.5"
-                            aria-hidden
-                          >
-                            →
-                          </span>
-                        </div>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </Card>
-        ) : null}
+          </div>
+        )}
       </motion.div>
     </AppMain>
   );

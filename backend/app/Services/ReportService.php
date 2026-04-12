@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -13,18 +14,24 @@ class ReportService
      *
      * FR-028, FR-031
      *
+     * @param  array{room_type?: string}  $filters
      * @return array{summary: array{total_rooms: int, total_beds: int, occupied_beds: int, vacant_beds: int}, rows: Collection}
      */
-    public static function occupancy(): array
+    public static function occupancy(array $filters = []): array
     {
         // CCR-005: Multi-table JOIN via vw_room_occupancy
         // CCR-003: SELECT query
         // vw_room_occupancy counts bed_space rows for total_beds.
         // Solo rooms may have no bed_space rows, so we join rooms.capacity as a fallback.
-        $rows = DB::table('vw_room_occupancy')
+        $query = DB::table('vw_room_occupancy')
             ->join('rooms', 'rooms.room_id', '=', 'vw_room_occupancy.room_id')
-            ->select('vw_room_occupancy.*', 'rooms.capacity as room_capacity')
-            ->orderBy('vw_room_occupancy.room_code')
+            ->select('vw_room_occupancy.*', 'rooms.capacity as room_capacity');
+
+        if (! empty($filters['room_type']) && in_array($filters['room_type'], ['solo', 'shared'], true)) {
+            $query->where('rooms.room_type', $filters['room_type']);
+        }
+
+        $rows = $query->orderBy('vw_room_occupancy.room_code')
             ->get()
             ->map(function ($row) {
                 // For solo rooms with no bed_space rows, COUNT returns 0 — fall back to rooms.capacity
@@ -52,6 +59,98 @@ class ReportService
                 'total_beds' => $rows->sum('total_beds'),
                 'occupied_beds' => $rows->sum('occupied_beds'),
                 'vacant_beds' => $rows->sum('vacant_beds'),
+            ],
+            'rows' => $rows->values(),
+        ];
+    }
+
+    /**
+     * Bed-level occupancy (FR-015) via `vw_occupancy_status` (CCR-005).
+     *
+     * @param  array{room_id?: int, bed_status?: string}  $filters
+     * @return array{filters: array, summary: array, rows: Collection}
+     */
+    public static function occupancyStatus(array $filters = []): array
+    {
+        $query = DB::table('vw_occupancy_status')
+            ->orderBy('room_code')
+            ->orderBy('bed_label');
+
+        if (! empty($filters['room_id'])) {
+            $query->where('room_id', (int) $filters['room_id']);
+        }
+
+        if (! empty($filters['bed_status'])) {
+            $query->where('bed_status', $filters['bed_status']);
+        }
+
+        $rows = $query->get()->map(function ($row) {
+            return [
+                'bed_space_id' => (int) $row->bed_space_id,
+                'bed_label' => $row->bed_label,
+                'bed_status' => $row->bed_status,
+                'room_id' => (int) $row->room_id,
+                'room_code' => $row->room_code,
+                'tenant_id' => $row->tenant_id !== null ? (int) $row->tenant_id : null,
+                'tenant_name' => $row->tenant_name,
+                'contract_id' => $row->contract_id !== null ? (int) $row->contract_id : null,
+            ];
+        });
+
+        return [
+            'filters' => [
+                'room_id' => isset($filters['room_id']) ? (int) $filters['room_id'] : null,
+                'bed_status' => $filters['bed_status'] ?? null,
+            ],
+            'summary' => [
+                'bed_count' => $rows->count(),
+                'occupied_beds' => $rows->where('bed_status', 'occupied')->count(),
+                'vacant_beds' => $rows->where('bed_status', 'vacant')->count(),
+                'maintenance_beds' => $rows->where('bed_status', 'maintenance')->count(),
+            ],
+            'rows' => $rows->values(),
+        ];
+    }
+
+    /**
+     * Active contracts snapshot via `vw_active_contracts` (CCR-005).
+     *
+     * @param  array{room_id?: int}  $filters
+     * @return array{filters: array, summary: array, rows: Collection}
+     */
+    public static function activeContracts(array $filters = []): array
+    {
+        $query = DB::table('vw_active_contracts')
+            ->orderBy('room_code')
+            ->orderBy('bed_label');
+
+        if (! empty($filters['room_id'])) {
+            $query->where('room_id', (int) $filters['room_id']);
+        }
+
+        $rows = $query->get()->map(function ($row) {
+            return [
+                'contract_id' => (int) $row->contract_id,
+                'move_in_date' => $row->move_in_date,
+                'tenant_id' => (int) $row->tenant_id,
+                'tenant_name' => $row->tenant_name,
+                'contact_number' => $row->contact_number,
+                'email' => $row->email,
+                'room_id' => (int) $row->room_id,
+                'room_code' => $row->room_code,
+                'monthly_rate' => (float) $row->monthly_rate,
+                'bed_space_id' => (int) $row->bed_space_id,
+                'bed_label' => $row->bed_label,
+                'bed_status' => $row->bed_status,
+            ];
+        });
+
+        return [
+            'filters' => [
+                'room_id' => isset($filters['room_id']) ? (int) $filters['room_id'] : null,
+            ],
+            'summary' => [
+                'contract_count' => $rows->count(),
             ],
             'rows' => $rows->values(),
         ];
@@ -175,6 +274,29 @@ class ReportService
                 ];
             });
 
+        $today = Carbon::today()->startOfDay();
+        $pastDueRows = $rows->filter(function (array $row) use ($today) {
+            $bal = (float) ($row['outstanding_balance'] ?? 0);
+            if ($bal <= 0 || empty($row['due_date'])) {
+                return false;
+            }
+            $due = Carbon::parse($row['due_date'])->startOfDay();
+
+            return $due->lt($today);
+        });
+
+        $oldestPastDueDays = 0;
+        if ($pastDueRows->isNotEmpty()) {
+            $oldestPastDueDays = (int) $pastDueRows->map(function (array $row) use ($today) {
+                $due = Carbon::parse($row['due_date'])->startOfDay();
+                if ($due->gte($today)) {
+                    return 0;
+                }
+
+                return $due->diffInDays($today);
+            })->max();
+        }
+
         return [
             'filters' => [
                 'tenant_id' => isset($filters['tenant_id']) ? (int) $filters['tenant_id'] : null,
@@ -184,6 +306,9 @@ class ReportService
             'summary' => [
                 'account_count' => $rows->count(),
                 'total_outstanding' => round($rows->sum('outstanding_balance'), 2),
+                'past_due_count' => $pastDueRows->count(),
+                'past_due_amount' => round($pastDueRows->sum('outstanding_balance'), 2),
+                'oldest_past_due_days' => $oldestPastDueDays,
             ],
             'rows' => $rows->values(),
         ];
@@ -231,9 +356,22 @@ class ReportService
                 'link_type' => 'payment',
             ]);
 
-        // 3. Combine and sort
+        // 3. Combine and sort (stable order for same calendar date: debits by billing_id, then credits by payment_id)
         $entries = $billings->concat($payments)
-            ->sortBy('date')
+            ->sort(function (array $a, array $b): int {
+                $da = (string) ($a['date'] ?? '');
+                $db = (string) ($b['date'] ?? '');
+                if ($da !== $db) {
+                    return $da <=> $db;
+                }
+                $orderA = $a['type'] === 'debit' ? 0 : 1;
+                $orderB = $b['type'] === 'debit' ? 0 : 1;
+                if ($orderA !== $orderB) {
+                    return $orderA <=> $orderB;
+                }
+
+                return ((int) $a['link_id']) <=> ((int) $b['link_id']);
+            })
             ->values();
 
         // 4. Calculate running balance
@@ -384,6 +522,8 @@ class ReportService
     {
         return match ($type) {
             'occupancy' => self::occupancyCsv(collect($report['rows'] ?? [])),
+            'occupancy-status' => self::occupancyStatusCsv(collect($report['rows'] ?? [])),
+            'active-contracts' => self::activeContractsCsv(collect($report['rows'] ?? [])),
             'billing-summary' => self::billingSummaryCsv(collect($report['rows'] ?? [])),
             'outstanding-balances' => self::outstandingBalancesCsv(collect($report['rows'] ?? [])),
             'collections-performance' => self::collectionsPerformanceCsv(collect($report['rows'] ?? [])),
@@ -418,6 +558,66 @@ class ReportService
                 $row['occupied_beds'],
                 $row['vacant_beds'],
                 $row['occupancy_rate'],
+            ])->all(),
+        ];
+    }
+
+    private static function occupancyStatusCsv(Collection $rows): array
+    {
+        return [
+            'headers' => [
+                'bed_space_id',
+                'bed_label',
+                'bed_status',
+                'room_id',
+                'room_code',
+                'tenant_id',
+                'tenant_name',
+                'contract_id',
+            ],
+            'rows' => $rows->map(fn ($row) => [
+                $row['bed_space_id'],
+                $row['bed_label'],
+                $row['bed_status'],
+                $row['room_id'],
+                $row['room_code'],
+                $row['tenant_id'] ?? '',
+                $row['tenant_name'] ?? '',
+                $row['contract_id'] ?? '',
+            ])->all(),
+        ];
+    }
+
+    private static function activeContractsCsv(Collection $rows): array
+    {
+        return [
+            'headers' => [
+                'contract_id',
+                'move_in_date',
+                'tenant_id',
+                'tenant_name',
+                'contact_number',
+                'email',
+                'room_id',
+                'room_code',
+                'monthly_rate',
+                'bed_space_id',
+                'bed_label',
+                'bed_status',
+            ],
+            'rows' => $rows->map(fn ($row) => [
+                $row['contract_id'],
+                $row['move_in_date'],
+                $row['tenant_id'],
+                $row['tenant_name'],
+                $row['contact_number'],
+                $row['email'] ?? '',
+                $row['room_id'],
+                $row['room_code'],
+                $row['monthly_rate'],
+                $row['bed_space_id'],
+                $row['bed_label'],
+                $row['bed_status'],
             ])->all(),
         ];
     }

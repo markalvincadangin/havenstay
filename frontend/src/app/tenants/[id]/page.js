@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "../../../lib/api";
 import { canManageBilling, canManageTenants } from "../../../lib/auth";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
-import { formatDateString, formatPHP } from "../../../lib/formatters";
+import { formatDateString, formatPHP, formatTenantDirectoryName, getTenantInitials } from "../../../lib/formatters";
 import Alert from "../../_components/ui/Alert";
 import { AppMain } from "../../_components/ui/AppShell";
 import { Card } from "../../_components/ui/Card";
@@ -21,7 +21,8 @@ import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
 import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
 import { Table } from "../../_components/ui/Table";
-import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { StatusBadge } from "../../_components/ui/StatusBadge";
+import { secondaryOutlineLinkClass } from "../../_components/ui/LinkTokens";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -29,14 +30,7 @@ const pageVariants = {
   transition: { duration: 0.2, ease: "easeOut" },
 };
 
-function ProfileAvatar({ label }) {
-  const initials = label
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-
+function ProfileAvatar({ initials }) {
   return (
     <div className="flex h-20 w-20 items-center justify-center rounded-[2.5rem] bg-stone-100 text-2xl font-black text-stone-500 ring-4 ring-white shadow-xl">
       {initials}
@@ -114,7 +108,7 @@ export default function TenantDetailsPage() {
 
   if (authLoading || loading) return <AppMain><SkeletonDetailPage /></AppMain>;
 
-  const fullName = tenant ? `${tenant.first_name} ${tenant.last_name}` : "Profile";
+  const fullName = tenant ? formatTenantDirectoryName(tenant) : "Profile";
   const activeContract = contracts.find(c => c.status === 'active');
 
   return (
@@ -133,7 +127,7 @@ export default function TenantDetailsPage() {
                 <span>
                   Personal information, emergency contacts, and active lease records.
                 </span>
-                <span className="mt-1 block font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 sm:mt-0 sm:ml-2 sm:inline">
+                <span className="mt-1 block font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 sm:mt-0 sm:ml-2 sm:inline tabular-nums">
                   #TENANT-{tenant.tenant_id}
                 </span>
               </>
@@ -144,7 +138,7 @@ export default function TenantDetailsPage() {
           breadcrumbs={
             <Breadcrumbs
               items={[
-                { label: "Tenant Registry", href: "/tenants" },
+                { label: "Tenant Directory", href: "/tenants" },
                 { label: "Profile" },
               ]}
             />
@@ -155,17 +149,17 @@ export default function TenantDetailsPage() {
                 type="button"
                 onClick={() => router.push("/tenants")}
                 className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Tenant Registry"
+                aria-label="Back to Tenant Directory"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
               {canManageTenants(currentUser) && (
                 <Link
                   href={`/tenants/${tenantId}/edit`}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-teal-900/10 transition-colors hover:bg-teal-700"
+                  className={secondaryOutlineLinkClass + " px-6"}
                 >
                   <Edit2 size={16} aria-hidden />
-                  Update details
+                  Update Details
                 </Link>
               )}
               <div className="pl-3 border-l border-stone-200">
@@ -186,7 +180,7 @@ export default function TenantDetailsPage() {
           <aside className="lg:col-span-4 space-y-6">
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                <div className="bg-stone-50/50 border-b border-stone-100 px-8 py-6 flex flex-col items-center text-center">
-                  <ProfileAvatar label={fullName} />
+                  <ProfileAvatar initials={tenant ? getTenantInitials(tenant) : "?"} />
                   <h2 className="mt-4 text-xl font-black text-stone-900 tracking-tight">{fullName}</h2>
                   <div className="mt-2">
                     <StatusBadge size="sm">{tenant?.status || "active"}</StatusBadge>
@@ -270,7 +264,7 @@ export default function TenantDetailsPage() {
                    embedded
                    caption="History of tenant contracts"
                    columns={[
-                     { key: "contract_id", label: "Registry ID" },
+                     { key: "contract_id", label: "Contract ID" },
                      { key: "room", label: "Room code" },
                      { key: "dates", label: "Lease period" },
                      { key: "status", label: "Status" },
@@ -283,7 +277,7 @@ export default function TenantDetailsPage() {
                        onClick={() => router.push(`/contracts/${c.contract_id}`)}
                      >
                        <td className="px-6 py-4">
-                         <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
+                         <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
                            #CONTRACT-{c.contract_id}
                          </span>
                        </td>

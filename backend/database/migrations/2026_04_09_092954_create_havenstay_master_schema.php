@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -8,13 +9,37 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Run the migrations.
+     * **Master DDL (MySQL):** `database/sql/havenstay_schema.sql` — edit that file first, then keep the repo-root
+     * mirror `db/havenstay_schema.sql` byte-identical (project canonical for docs/tests).
+     *
+     * **SQLite (tests):** `createTables()` / `createViews()` below mirror the same structure (no MySQL triggers).
      */
     public function up(): void
     {
         if (DB::getDriverName() === 'mysql') {
             $sql = file_get_contents(database_path('sql/havenstay_schema.sql'));
-            DB::unprepared($sql);
+            // Local MySQL with binary logging often rejects CREATE TRIGGER without SUPER (error 1419).
+            // Try the common fix; if the DB user lacks SUPER, this is a no-op and my.cnf must be set — see docs/MYSQL_LOCAL_MIGRATIONS.md
+            try {
+                DB::statement('SET GLOBAL log_bin_trust_function_creators = 1');
+            } catch (Throwable) {
+                // ignore — user may need to set in [mysqld] or skip-log-bin
+            }
+            try {
+                DB::unprepared($sql);
+            } catch (QueryException $e) {
+                $msg = $e->getMessage();
+                if (str_contains($msg, '1419') || str_contains($msg, 'SUPER privilege') || str_contains($msg, 'log_bin_trust_function_creators')) {
+                    throw new RuntimeException(
+                        'MySQL migration failed while applying havenstay_schema.sql (triggers + binlog). '.
+                        'Fix: add under [mysqld] `skip-log-bin` or `log_bin_trust_function_creators=1`, restart MySQL, then run migrate:fresh again. '.
+                        'Details: docs/MYSQL_LOCAL_MIGRATIONS.md. Original: '.$msg,
+                        0,
+                        $e
+                    );
+                }
+                throw $e;
+            }
 
             return;
         }
@@ -40,12 +65,14 @@ return new class extends Migration
             $table->string('first_name', 100);
             $table->string('last_name', 100);
             $table->string('username', 100)->unique();
-            $table->string('email', 150)->nullable()->unique();
+            // Canonical DDL: email is not UNIQUE (see havenstay_schema.sql)
+            $table->string('email', 150)->nullable();
             $table->string('password_hash');
             $table->boolean('is_active')->default(true);
             $table->timestamp('last_login_at')->nullable();
             $table->timestamps();
             $table->foreign('role_id')->references('role_id')->on('roles');
+            $table->index('role_id', 'idx_users_role');
         });
 
         Schema::create('tenants', function (Blueprint $table) {
@@ -59,6 +86,8 @@ return new class extends Migration
             $table->text('address');
             $table->string('status', 20)->default('active');
             $table->timestamps();
+            $table->index(['last_name', 'first_name'], 'idx_tenants_name');
+            $table->index('status', 'idx_tenants_status');
         });
 
         Schema::create('rooms', function (Blueprint $table) {
@@ -71,6 +100,7 @@ return new class extends Migration
             $table->text('amenities')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
+            $table->index('status', 'idx_rooms_status');
         });
 
         Schema::create('bed_spaces', function (Blueprint $table) {
@@ -79,8 +109,9 @@ return new class extends Migration
             $table->string('bed_label', 20);
             $table->string('status', 20)->default('vacant');
             $table->timestamps();
-            $table->unique(['room_id', 'bed_label']);
+            $table->unique(['room_id', 'bed_label'], 'uq_bed_space_per_room');
             $table->foreign('room_id')->references('room_id')->on('rooms');
+            $table->index(['room_id', 'status'], 'idx_bed_spaces_room_status');
         });
 
         Schema::create('contracts', function (Blueprint $table) {
@@ -99,6 +130,8 @@ return new class extends Migration
             $table->foreign('tenant_id')->references('tenant_id')->on('tenants');
             $table->foreign('bed_space_id')->references('bed_space_id')->on('bed_spaces');
             $table->foreign('created_by')->references('user_id')->on('users');
+            $table->index(['tenant_id', 'status'], 'idx_contracts_tenant_status');
+            $table->index(['bed_space_id', 'status'], 'idx_contracts_bed_status');
         });
 
         Schema::create('billing', function (Blueprint $table) {
@@ -110,6 +143,9 @@ return new class extends Migration
             $table->string('status', 20)->default('unpaid');
             $table->timestamps();
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
+            $table->unique(['contract_id', 'billing_period_from', 'billing_period_to'], 'uq_billing_cycle');
+            $table->index(['contract_id', 'status'], 'idx_billing_contract_status');
+            $table->index('due_date', 'idx_billing_due_date');
         });
 
         Schema::create('billing_line_items', function (Blueprint $table) {
@@ -120,6 +156,7 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->timestamps();
             $table->foreign('billing_id')->references('billing_id')->on('billing');
+            $table->index('billing_id', 'idx_line_items_billing');
         });
 
         Schema::create('payments', function (Blueprint $table) {
@@ -133,10 +170,13 @@ return new class extends Migration
             $table->text('remarks')->nullable();
             $table->timestamp('voided_at')->nullable();
             $table->unsignedInteger('voided_by')->nullable();
-            $table->string('void_reason')->nullable();
+            $table->string('void_reason', 255)->nullable();
             $table->timestamp('created_at')->useCurrent();
             $table->foreign('billing_id')->references('billing_id')->on('billing');
             $table->foreign('processed_by')->references('user_id')->on('users');
+            $table->foreign('voided_by')->references('user_id')->on('users')->nullOnDelete();
+            $table->index(['billing_id', 'payment_date'], 'idx_payments_billing_date');
+            $table->index('processed_by', 'idx_payments_processed_by');
         });
 
         Schema::create('audit_logs', function (Blueprint $table) {
@@ -145,22 +185,35 @@ return new class extends Migration
             $table->string('entity_name', 100);
             $table->string('entity_id', 100);
             $table->string('action', 50);
-            $table->text('old_values_json')->nullable();
-            $table->text('new_values_json')->nullable();
+            $table->json('old_values_json')->nullable();
+            $table->json('new_values_json')->nullable();
+            $table->string('correlation_id', 36)->nullable();
             $table->timestamp('created_at')->useCurrent();
+            $table->foreign('user_id')->references('user_id')->on('users')->nullOnDelete();
+            $table->index(['entity_name', 'entity_id'], 'idx_audit_entity');
+            $table->index('created_at', 'idx_audit_timestamp');
+            $table->index('correlation_id', 'idx_audit_correlation');
         });
 
         Schema::create('transaction_logs', function (Blueprint $table) {
             $table->bigIncrements('tx_log_id');
             $table->string('tx_name', 150);
-            $table->timestamp('started_at')->useCurrent();
+            // No DB default — matches havenstay_schema.sql (application sets on insert)
+            $table->dateTime('started_at');
             $table->timestamp('completed_at')->nullable();
             $table->string('status', 20)->default('started');
             $table->unsignedInteger('initiated_by')->nullable();
             $table->string('reference_entity', 100)->nullable();
             $table->string('reference_id', 100)->nullable();
-            $table->text('details_json')->nullable();
+            $table->json('details_json')->nullable();
+            $table->string('correlation_id', 36)->nullable();
+            $table->foreign('initiated_by')->references('user_id')->on('users')->nullOnDelete();
+            $table->index(['status', 'started_at'], 'idx_tx_status_started');
+            $table->index('correlation_id', 'idx_tx_correlation');
         });
+
+        // CHECK constraints from havenstay_schema.sql (chk_rooms_capacity, chk_line_item_amount, etc.) are enforced
+        // in MySQL via the raw SQL path above. SQLite builds vary; automated tests rely on app validation + FKs.
 
         // CCR-008: Note - Triggers are skipped for SQLite due to engine limitations.
         // All CCR evidence is verified against the MySQL primary instance.
@@ -296,6 +349,14 @@ return new class extends Migration
 
     public function down(): void
     {
+        // Views reference base tables — drop views first (MySQL + SQLite).
+        DB::statement('DROP VIEW IF EXISTS vw_billing_summary');
+        DB::statement('DROP VIEW IF EXISTS vw_active_contracts');
+        DB::statement('DROP VIEW IF EXISTS vw_room_occupancy');
+        DB::statement('DROP VIEW IF EXISTS vw_occupancy_status');
+        DB::statement('DROP VIEW IF EXISTS vw_collections_summary');
+        DB::statement('DROP VIEW IF EXISTS vw_tenant_contract_history');
+
         Schema::dropIfExists('transaction_logs');
         Schema::dropIfExists('audit_logs');
         Schema::dropIfExists('payments');
@@ -307,12 +368,5 @@ return new class extends Migration
         Schema::dropIfExists('tenants');
         Schema::dropIfExists('users');
         Schema::dropIfExists('roles');
-
-        DB::statement('DROP VIEW IF EXISTS vw_billing_summary');
-        DB::statement('DROP VIEW IF EXISTS vw_active_contracts');
-        DB::statement('DROP VIEW IF EXISTS vw_room_occupancy');
-        DB::statement('DROP VIEW IF EXISTS vw_occupancy_status');
-        DB::statement('DROP VIEW IF EXISTS vw_collections_summary');
-        DB::statement('DROP VIEW IF EXISTS vw_tenant_contract_history');
     }
 };

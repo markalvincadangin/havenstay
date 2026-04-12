@@ -216,7 +216,61 @@ class ApiWorkflowAndBoundaryTest extends TestCase
 
     public function test_admin_can_view_audit_logs(): void
     {
-        $this->actingAs($this->adminUser)->getJson('/api/audit-logs')->assertOk();
+        $response = $this->actingAs($this->adminUser)->getJson('/api/audit-logs');
+        $response->assertOk();
+        $response->assertJsonStructure([
+            'meta' => [
+                'current_page',
+                'total',
+                'access_denied_total',
+            ],
+        ]);
+        $this->assertIsInt($response->json('meta.access_denied_total'));
+    }
+
+    public function test_admin_can_export_audit_logs_csv(): void
+    {
+        $response = $this->actingAs($this->adminUser)->get('/api/audit-logs/export');
+        $response->assertOk();
+        $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $this->assertStringContainsString('audit_log_id', $response->streamedContent());
+    }
+
+    public function test_staff_cannot_export_audit_logs_csv(): void
+    {
+        $this->actingAs($this->staffUser)->get('/api/audit-logs/export')->assertForbidden();
+    }
+
+    public function test_viewer_cannot_export_audit_logs_csv(): void
+    {
+        $this->actingAs($this->viewerUser)->get('/api/audit-logs/export')->assertForbidden();
+    }
+
+    public function test_transaction_logs_accepts_per_page_query(): void
+    {
+        $this->actingAs($this->adminUser)->getJson('/api/transaction-logs?per_page=50')->assertOk();
+    }
+
+    public function test_transaction_logs_rejects_invalid_status_enum(): void
+    {
+        $this->actingAs($this->adminUser)
+            ->getJson('/api/transaction-logs?status=not_a_real_status')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+    }
+
+    public function test_audit_logs_rejects_invalid_action_enum(): void
+    {
+        $this->actingAs($this->adminUser)
+            ->getJson('/api/audit-logs?action=not_a_real_action')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['action']);
+    }
+
+    public function test_transaction_logs_per_page_validation_max(): void
+    {
+        $this->actingAs($this->adminUser)->getJson('/api/transaction-logs?per_page=999')->assertUnprocessable()
+            ->assertJsonValidationErrors(['per_page']);
     }
 
     public function test_staff_can_post_payment(): void
@@ -228,6 +282,7 @@ class ApiWorkflowAndBoundaryTest extends TestCase
             'amount_paid' => 500,
             'payment_date' => '2026-05-15',
             'payment_method' => 'gcash',
+            'reference_number' => 'GC-TEST-001',
         ])->assertCreated();
     }
 
@@ -243,6 +298,16 @@ class ApiWorkflowAndBoundaryTest extends TestCase
         $this->actingAs($this->staffUser)->getJson(
             '/api/reports/billing-summary?start_date=2026-01-01&end_date=2026-12-31'
         )->assertOk();
+    }
+
+    public function test_viewer_can_access_occupancy_status_report(): void
+    {
+        $this->actingAs($this->viewerUser)->getJson('/api/reports/occupancy-status')->assertOk();
+    }
+
+    public function test_viewer_can_access_active_contracts_report(): void
+    {
+        $this->actingAs($this->viewerUser)->getJson('/api/reports/active-contracts')->assertOk();
     }
 
     public function test_tenant_index_is_readable_by_viewer(): void

@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ClipboardList, Search, X } from "lucide-react";
+import Link from "next/link";
+import { Search, X, Activity, ShieldAlert, Database, Download, ListFilter } from "lucide-react";
 import { apiRequest } from "../../lib/api";
+import { downloadCsvWithAuth } from "../../lib/downloads";
 import { canManageUsers } from "../../lib/auth";
 import { flattenApiErrors } from "../../lib/errors";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
@@ -19,6 +21,18 @@ import PageHeader from "../_components/ui/PageHeader";
 import { SkeletonListPage } from "../_components/ui/Skeleton";
 import UserRoleBadge from "../_components/ui/UserRoleBadge";
 import { Table } from "../_components/ui/Table";
+import { StatusBadge } from "../_components/ui/StatusBadge";
+import { KpiCard } from "../_components/ui/KpiCard";
+import { CorrelationIdCell } from "../_components/ui/CorrelationIdCell";
+import {
+  AUDIT_ACTION_LABELS,
+  AUDIT_ENTITY_FILTER_KEYS,
+  AUDIT_ENTITY_LABELS,
+  formatAuditEntityIdDisplay,
+  formatAuditEntityOrResource,
+} from "../../lib/constants";
+import { buildPaginationQuery, normalizePaginatedList, readStoredPerPage } from "../../lib/pagination";
+import TablePagination from "../_components/ui/TablePagination";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -26,23 +40,7 @@ const pageVariants = {
   transition: { duration: 0.2, ease: "easeOut" },
 };
 
-/** Map raw action enum values to human-readable labels (matches `audit_logs.action` ENUM). */
-const ACTION_LABELS = {
-  create: "Create",
-  update: "Update",
-  status_change: "Status change",
-  login: "Login",
-  logout: "Logout",
-  delete: "Delete",
-  access_denied: "Access denied",
-};
-
-function formatActionLabel(action) {
-  if (!action) return "—";
-  return ACTION_LABELS[action] ?? action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/** Humanize technical database field names for the Audit Detail view. */
+/** Humanize technical database field names */
 const FIELD_LABELS = {
   first_name: "First Name",
   last_name: "Last Name",
@@ -58,29 +56,12 @@ const FIELD_LABELS = {
   deposit_amount: "Deposit",
 };
 
-/** Humanize technical database entity/table names for the UI. */
-const ENTITY_LABELS = {
-  tenants: "Tenants",
-  rooms: "Rooms",
-  contracts: "Contracts",
-  billing: "Billing",
-  payments: "Payments",
-  users: "Users",
-  bed_spaces: "Bed Spaces",
-  billing_line_items: "Line Items",
-  roles: "Roles",
-};
-
-function formatEntityLabel(entity) {
-  return ENTITY_LABELS[entity] ?? entity.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function formatFieldLabel(field) {
   if (!field) return "—";
   return FIELD_LABELS[field] ?? field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatAuditTimestamp(ts) {
+function formatForensicTimestamp(ts) {
   if (!ts) return "—";
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "—";
@@ -90,6 +71,7 @@ function formatAuditTimestamp(ts) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    second: "2-digit",
     hour12: true,
   });
 }
@@ -105,14 +87,44 @@ function safeParseJson(value) {
   }
 }
 
+/** Query string for CSV export (matches GET /api/audit-logs/export). */
+function buildAuditQueryParams(filters) {
+  const params = new URLSearchParams();
+  if (filters?.entityType && filters.entityType !== "all") params.set("entity_type", filters.entityType);
+  if (filters?.actionType && filters.actionType !== "all") params.set("action", filters.actionType);
+  if (filters?.dateFrom) params.set("from", filters.dateFrom);
+  if (filters?.dateTo) params.set("to", filters.dateTo);
+  if (filters?.userQuery) params.set("user", filters.userQuery);
+  if (filters?.correlationQuery?.trim()) params.set("correlation", filters.correlationQuery.trim());
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+function auditListExtra(filters) {
+  const extra = {};
+  if (filters?.entityType && filters.entityType !== "all") extra.entity_type = filters.entityType;
+  if (filters?.actionType && filters.actionType !== "all") extra.action = filters.actionType;
+  if (filters?.dateFrom) extra.from = filters.dateFrom;
+  if (filters?.dateTo) extra.to = filters.dateTo;
+  if (filters?.userQuery) extra.user = filters.userQuery;
+  if (filters?.correlationQuery?.trim()) extra.correlation = filters.correlationQuery.trim();
+  return extra;
+}
+
+function correlationHeaderLabel() {
+  return (
+    <span title="Optional. May match a row on Transaction logs when this change was part of that run.">
+      Correlation
+    </span>
+  );
+}
+
 function buildDiffLines(oldValues, newValues, action) {
   const oldObj = safeParseJson(oldValues);
   const newObj = safeParseJson(newValues);
 
-  // If both are missing and it's update/status_change, return empty
   if (!oldObj && !newObj) return [];
 
-  // FOR CREATE: Show all new values
   if (action === "create" && newObj) {
     return Object.entries(newObj).map(([key, value]) => ({
       field: key,
@@ -121,7 +133,6 @@ function buildDiffLines(oldValues, newValues, action) {
     }));
   }
 
-  // FOR DELETE: Show all old values
   if (action === "delete" && oldObj) {
     return Object.entries(oldObj).map(([key, value]) => ({
       field: key,
@@ -130,7 +141,6 @@ function buildDiffLines(oldValues, newValues, action) {
     }));
   }
 
-  // FOR UPDATE/STATUS_CHANGE
   if (!oldObj || !newObj || typeof oldObj !== "object" || typeof newObj !== "object") return [];
 
   const keys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
@@ -147,114 +157,85 @@ function buildDiffLines(oldValues, newValues, action) {
   return lines;
 }
 
-/** Renders a styled badge for an audit action type */
-function ActionBadge({ action }) {
-  if (!action) return <span className="text-sm text-stone-500">—</span>;
-
-  const label = formatActionLabel(action);
-
-  const variantMap = {
-    create: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    update: "border-teal-200 bg-teal-50 text-teal-900",
-    status_change: "border-amber-200 bg-amber-50 text-amber-900",
-    login: "border-stone-200 bg-stone-100 text-stone-700",
-    logout: "border-stone-200 bg-stone-100 text-stone-700",
-    delete: "border-rose-200 bg-rose-50 text-rose-900",
-    access_denied: "border-rose-200 bg-rose-50 text-rose-900",
-  };
-
-  const classes = variantMap[action] ?? "border-stone-200 bg-stone-100 text-stone-700";
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap ${classes}`}
-    >
-      {label}
-    </span>
-  );
-}
-
 export default function AuditLogsPage() {
   const { user: currentUser, authLoading } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
 
   const [logsReady, setLogsReady] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [apiError, setApiError] = useState("");
   const [logs, setLogs] = useState([]);
+  const [auditMeta, setAuditMeta] = useState(null);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPerPage, setAuditPerPage] = useState(() => readStoredPerPage());
 
   const [entityType, setEntityType] = useState("all");
   const [actionType, setActionType] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [userQuery, setUserQuery] = useState("");
+  const [correlationQuery, setCorrelationQuery] = useState("");
 
   const [selectedLog, setSelectedLog] = useState(null);
   const modalRef = useFocusTrap(!!selectedLog);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   const canAccess = useMemo(() => canManageUsers(currentUser), [currentUser]);
   const accessDenied = !authLoading && currentUser !== null && !canManageUsers(currentUser);
 
-  const loadLogs = useCallback(async (filters) => {
-    const params = new URLSearchParams();
-    if (filters?.entityType && filters.entityType !== "all") params.set("entity_type", filters.entityType);
-    if (filters?.actionType && filters.actionType !== "all") params.set("action", filters.actionType);
-    if (filters?.dateFrom) params.set("from", filters.dateFrom);
-    if (filters?.dateTo) params.set("to", filters.dateTo);
-    if (filters?.userQuery) params.set("user", filters.userQuery);
-
-    const qs = params.toString();
-    const url = qs ? `/api/audit-logs?${qs}` : "/api/audit-logs";
-
-    try {
-      const data = await apiRequest(url, { method: "GET" });
-      const rows = Array.isArray(data) ? data : data?.logs || data?.rows || [];
-      setLogs(Array.isArray(rows) ? rows : []);
+  const loadData = useCallback(
+    async (overrides = {}) => {
       setApiError("");
-    } catch (error) {
-      setApiError(flattenApiErrors(error));
-      setLogs([]);
-    }
-  }, []);
+      const silent = overrides.silent === true;
+      if (!silent) {
+        setLogsReady(false);
+      }
+      setListLoading(true);
+
+      const filters = {
+        entityType,
+        actionType,
+        dateFrom,
+        dateTo,
+        userQuery,
+        correlationQuery,
+      };
+
+      const aPage = overrides.auditPage ?? auditPage;
+      const aPer = overrides.auditPerPage ?? auditPerPage;
+
+      const auditQs = buildPaginationQuery(aPage, aPer, auditListExtra(filters));
+
+      try {
+        const auditData = await apiRequest(`/api/audit-logs${auditQs}`, { method: "GET" });
+
+        const { rows: aRows, meta: aMeta } = normalizePaginatedList(auditData);
+
+        setLogs(aRows);
+        setAuditMeta(aMeta);
+      } catch (error) {
+        setApiError(flattenApiErrors(error));
+      } finally {
+        setLogsReady(true);
+        setListLoading(false);
+      }
+    },
+    [entityType, actionType, dateFrom, dateTo, userQuery, correlationQuery, auditPage, auditPerPage],
+  );
 
   useEffect(() => {
     if (authLoading || !currentUser || accessDenied) return;
+    loadData();
+  }, [authLoading, currentUser, accessDenied, loadData]);
 
-    let cancelled = false;
-    (async () => {
-      await loadLogs({
-        entityType: "all",
-        actionType: "all",
-        dateFrom: "",
-        dateTo: "",
-        userQuery: "",
-      });
-      if (!cancelled) setLogsReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, currentUser, accessDenied, loadLogs]);
-
-  const chips = useMemo(
-    () => [
-      {
-        key: "entityType",
-        label: "Entity",
-        value: entityType !== "all" ? entityType : "",
-        onClear: () => setEntityType("all"),
-      },
-      {
-        key: "actionType",
-        label: "Action",
-        value: actionType !== "all" ? formatActionLabel(actionType) : "",
-        onClear: () => setActionType("all"),
-      },
-      { key: "dateFrom", label: "From", value: dateFrom || "", onClear: () => setDateFrom("") },
-      { key: "dateTo", label: "To", value: dateTo || "", onClear: () => setDateTo("") },
-      { key: "userQuery", label: "User", value: userQuery || "", onClear: () => setUserQuery("") },
-    ],
-    [actionType, dateFrom, dateTo, entityType, userQuery],
+  const accessDeniedFallback = useMemo(
+    () => logs.filter((l) => l.action === "access_denied").length,
+    [logs],
   );
+  const accessDeniedCount =
+    typeof auditMeta?.access_denied_total === "number"
+      ? auditMeta.access_denied_total
+      : accessDeniedFallback;
 
   const diffLines = useMemo(() => {
     if (!selectedLog) return [];
@@ -270,10 +251,21 @@ export default function AuditLogsPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedLog]);
 
-  const showSkeleton =
-    authLoading || (!accessDenied && !!currentUser && canManageUsers(currentUser) && !logsReady);
+  const onExportCsv = useCallback(async () => {
+    setApiError("");
+    setExportingCsv(true);
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      const q = buildAuditQueryParams({ entityType, actionType, dateFrom, dateTo, userQuery, correlationQuery });
+      await downloadCsvWithAuth(`/api/audit-logs/export${q}`, `audit-logs-${stamp}.csv`);
+    } catch (error) {
+      setApiError(flattenApiErrors(error));
+    } finally {
+      setExportingCsv(false);
+    }
+  }, [entityType, actionType, dateFrom, dateTo, userQuery, correlationQuery]);
 
-  if (showSkeleton) {
+  if (authLoading || (!accessDenied && !!currentUser && canManageUsers(currentUser) && !logsReady)) {
     return <SkeletonListPage rows={8} />;
   }
 
@@ -286,289 +278,389 @@ export default function AuditLogsPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         <PageHeader
-          title="Audit Logs"
-          subtitle="Immutable trail of data changes and authentication events—restricted to management oversight."
-          breadcrumbs={<Breadcrumbs items={[{ label: "Audit Logs" }]} />}
+          title="Audit Trail"
+          subtitle="Who changed what: data changes, sign-ins, and access denied (admin)."
+          breadcrumbs={<Breadcrumbs items={[{ label: "System Administration" }, { label: "Audit Trail" }]} />}
           actions={
-            <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Link
+                href="/transaction-logs"
+                className="inline-flex h-11 items-center rounded-xl border border-stone-200 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-stone-600 transition-colors hover:border-teal-300 hover:text-teal-700"
+              >
+                Transaction logs
+              </Link>
+              <Button
+                variant="primary"
+                className="!h-11 rounded-xl px-6 text-[10px] font-bold uppercase tracking-widest"
+                onClick={onExportCsv}
+                disabled={exportingCsv}
+                loading={exportingCsv}
+              >
+                <Download size={14} className="mr-2" />
+                Export CSV
+              </Button>
+              <div className="border-l border-stone-200 pl-3">
+                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
+              </div>
+            </div>
           }
         />
 
         {accessDenied ? (
-          <Alert variant="warning" title="Access restricted" data-testid="access-denied-audit-logs">
-            You do not have permission to view this page. Only administrators can view audit logs. Contact an
-            admin if you need an export or investigation.
+          <Alert variant="warning" title="Access Denied" data-testid="access-denied-audit-logs">
+            Administrative privileges are required to view the forensic audit trail. 
+            If you require access for investigative purposes, please contact the system owner.
           </Alert>
         ) : null}
 
-        {canAccess && apiError ? (
-          <Alert variant="error" title="Could not load audit logs">
-            {apiError}
-            <button
-              type="button"
-              onClick={() => {
-                setApiError("");
-                loadLogs({ entityType, actionType, dateFrom, dateTo, userQuery });
-              }}
-              className="mt-2 text-xs font-bold underline hover:opacity-80"
-            >
-              Retry
-            </button>
-          </Alert>
-        ) : null}
-
-        {canAccess ? (
+        {canAccess && (
           <>
+            {apiError ? (
+              <Alert variant="error" title="Could not load audit logs">
+                {apiError}
+              </Alert>
+            ) : null}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <KpiCard
+                label="Rows after filters"
+                value={auditMeta?.total ?? logs.length}
+                icon={Database}
+                sub="Same rules as the table below · all pages"
+              />
+              <KpiCard
+                label="Access denied"
+                value={accessDeniedCount}
+                icon={ShieldAlert}
+                isDanger={accessDeniedCount > 5}
+                sub="Denials in that same filtered total"
+              />
+            </div>
+
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 bg-stone-50/50 px-6 py-4 sm:px-8 sm:py-5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                    <ClipboardList size={16} aria-hidden />
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                    <ListFilter size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title">Registry Filters</h2>
+                  <div className="min-w-0">
+                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Filters</h2>
+                    <p className="mt-0.5 text-[10px] font-medium text-stone-400">
+                      Filter by entity, action, actor, dates, or correlation ID.
+                    </p>
+                  </div>
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void loadData({ silent: true })}
+                  disabled={listLoading}
+                  className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 disabled:opacity-50"
+                >
+                  Refresh
+                </Button>
               </div>
-              <div className="p-6 sm:p-8">
+              <div className="p-8">
                 <form
-                  className="grid gap-6 lg:grid-cols-12"
+                  className="flex flex-col gap-6"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    setApiError("");
-                    loadLogs({ entityType, actionType, dateFrom, dateTo, userQuery });
+                    setAuditPage(1);
+                    void loadData({ auditPage: 1 });
                   }}
                 >
-                  <div className="lg:col-span-3">
-                    <Field label="Entity type">
-                       <Select
-                         value={entityType}
-                         onChange={(e) => setEntityType(e.target.value)}
-                         className="!h-12 border-stone-200"
-                       >
-                        <option value="all">All entities</option>
-                        <option value="tenants">Tenants</option>
-                        <option value="rooms">Rooms</option>
-                        <option value="contracts">Contracts</option>
-                        <option value="billing">Billing</option>
-                        <option value="payments">Payments</option>
-                        <option value="users">Users</option>
-                        <option value="bed_spaces">Bed spaces</option>
-                      </Select>
-                    </Field>
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-12 lg:gap-6">
+                    <div className="min-w-0 lg:col-span-3">
+                      <Field label="Entity">
+                        <Select
+                          value={entityType}
+                          onChange={(e) => setEntityType(e.target.value)}
+                          className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
+                        >
+                          <option value="all">All entities</option>
+                          {AUDIT_ENTITY_FILTER_KEYS.map((key) => (
+                            <option key={key} value={key}>
+                              {AUDIT_ENTITY_LABELS[key]}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    <div className="min-w-0 lg:col-span-3">
+                      <Field label="Action">
+                        <Select
+                          value={actionType}
+                          onChange={(e) => setActionType(e.target.value)}
+                          className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
+                        >
+                          <option value="all">All actions</option>
+                          {Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    <div className="min-w-0 md:col-span-2 lg:col-span-6">
+                      <Field label="Actor search">
+                        <div className="group relative">
+                          <Search
+                            className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600"
+                            aria-hidden
+                          />
+                          <Input
+                            value={userQuery}
+                            onChange={(e) => setUserQuery(e.target.value)}
+                            placeholder="Username or display name…"
+                            className="!h-12 w-full min-w-0 border-stone-200 pl-11 font-medium transition-[border-color,box-shadow] focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5"
+                          />
+                        </div>
+                      </Field>
+                    </div>
                   </div>
-                  <div className="lg:col-span-3">
-                    <Field label="Action">
-                       <Select
-                         value={actionType}
-                         onChange={(e) => setActionType(e.target.value)}
-                         className="!h-12 border-stone-200"
-                       >
-                        <option value="all">All actions</option>
-                        <option value="create">Create</option>
-                        <option value="update">Update</option>
-                        <option value="delete">Delete</option>
-                        <option value="status_change">Status change</option>
-                        <option value="login">Login</option>
-                        <option value="logout">Logout</option>
-                        <option value="access_denied">Access denied</option>
-                      </Select>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-6">
-                    <Field label="User">
-                      <div className="group relative">
-                        <Search
-                          className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600"
-                          aria-hidden
-                        />
-                        <Input
-                          value={userQuery}
-                          onChange={(e) => setUserQuery(e.target.value)}
-                          placeholder="Username or display name…"
-                          className="!h-11 border-stone-200 pl-11"
-                        />
-                      </div>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-4">
-                    <Field label="From">
-                       <Input
-                         type="date"
-                         value={dateFrom}
-                         onChange={(e) => setDateFrom(e.target.value)}
-                         className="!h-12 border-stone-200"
-                       />
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-4">
-                    <Field label="To">
-                         <Input
-                           placeholder="Filter by user or IP..."
-                           value={userQuery}
-                           onChange={(e) => setUserQuery(e.target.value)}
-                           className="pl-11 !h-12 border-stone-200"
-                         />
-                    </Field>
-                  </div>
-                  <div className="flex items-end lg:col-span-4">
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      className="w-full !h-11 rounded-xl bg-teal-600 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
+
+                  <div className="min-w-0">
+                    <Field
+                      label="Correlation ID"
+                      helpText="Optional. Filter rows that share this correlation value."
                     >
-                      Apply filters
-                    </Button>
+                      <Input
+                        value={correlationQuery}
+                        onChange={(e) => setCorrelationQuery(e.target.value)}
+                        placeholder="e.g. 8f3a1b2c-… or partial match"
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="!h-12 w-full min-w-0 border-stone-200 font-mono text-[11px] focus:border-teal-500/50"
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-stretch lg:gap-6">
+                    <div className="grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2 lg:col-span-8">
+                      <Field label="From">
+                        <Input
+                          type="date"
+                          value={dateFrom}
+                          onChange={(e) => setDateFrom(e.target.value)}
+                          className="!h-12 w-full min-w-0 border-stone-200 focus:border-teal-500/50"
+                        />
+                      </Field>
+                      <Field label="To">
+                        <Input
+                          type="date"
+                          value={dateTo}
+                          onChange={(e) => setDateTo(e.target.value)}
+                          className="!h-12 w-full min-w-0 border-stone-200 focus:border-teal-500/50"
+                        />
+                      </Field>
+                    </div>
+                    <div className="flex min-w-0 w-full flex-col justify-end lg:col-span-4">
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        className="w-full !h-12 shrink-0 shadow-sm"
+                      >
+                        Apply filters
+                      </Button>
+                    </div>
                   </div>
                 </form>
 
                 <FilterChips
                   className="mt-6"
-                  items={chips}
+                  items={[
+                    {
+                      key: "entity",
+                      label: "Entity",
+                      value: entityType !== "all" ? AUDIT_ENTITY_LABELS[entityType] || entityType : "",
+                      onClear: () => setEntityType("all"),
+                    },
+                    {
+                      key: "action",
+                      label: "Action",
+                      value: actionType !== "all" ? AUDIT_ACTION_LABELS[actionType] || actionType : "",
+                      onClear: () => setActionType("all"),
+                    },
+                    {
+                      key: "user",
+                      label: "Actor",
+                      value: userQuery,
+                      onClear: () => setUserQuery(""),
+                    },
+                    {
+                      key: "correlation",
+                      label: "Correlation",
+                      value: correlationQuery,
+                      onClear: () => setCorrelationQuery(""),
+                    },
+                    { key: "from", label: "From", value: dateFrom, onClear: () => setDateFrom("") },
+                    { key: "to", label: "To", value: dateTo, onClear: () => setDateTo("") },
+                  ]}
                   onClearAll={() => {
                     setEntityType("all");
                     setActionType("all");
                     setDateFrom("");
                     setDateTo("");
                     setUserQuery("");
-                    setApiError("");
-                    loadLogs({ entityType: "all", actionType: "all", dateFrom: "", dateTo: "", userQuery: "" });
+                    setCorrelationQuery("");
+                    setAuditPage(1);
+                    void loadData({ auditPage: 1 });
                   }}
                 />
               </div>
             </Card>
 
-            <div className="flex items-center gap-2 text-xs font-medium text-stone-500">
-              <ClipboardList className="h-3.5 w-3.5 shrink-0 text-stone-400" aria-hidden />
-              <span>{logs.length} entr{logs.length === 1 ? "y" : "ies"} loaded</span>
-            </div>
+            <Card className="mt-6 overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-sm">
+              <Table
+                embedded
+                caption="Row-level data and security events"
+                ariaLabel="Audit log table"
+                columns={[
+                  {
+                    key: "id",
+                    label: "Audit log ID",
+                    className: "w-[7.5rem]",
+                    headerClassName: "!px-4",
+                  },
+                  { key: "ts", label: "Timestamp" },
+                  { key: "user", label: "Actor" },
+                  { key: "action", label: "Action" },
+                  { key: "entity", label: "Resource" },
+                  { key: "correlation", label: correlationHeaderLabel(), className: "min-w-[7rem]" },
+                  { key: "ref", label: "Record ID", className: "text-right" },
+                ]}
+                rows={logs.map((log, idx) => {
+                  const ts = log.created_at;
+                  const userName = log.user_username || "System";
 
-            <Table
-              caption="Audit log records"
-              ariaLabel="Audit logs table"
-              columns={[
-                { key: "timestamp", label: "Timestamp" },
-                { key: "user", label: "User" },
-                { key: "action", label: "Action" },
-                { key: "entity", label: "Entity" },
-                { key: "entity_id", label: "Entity ID" },
-              ]}
-              rows={logs.map((log, idx) => {
-                const ts = log?.created_at || null;
-                const userName =
-                  log?.user_first_name && log?.user_last_name
-                    ? `${log.user_first_name} ${log.user_last_name}`
-                    : log?.user_username || "—";
-                const entity = log?.entity_name || "—";
-                const entityId = log?.entity_id ? `#${log.entity_id}` : "—";
-                const action = log?.action || null;
-
-                return (
-                  <tr
-                    key={log?.audit_log_id ?? idx}
-                    tabIndex={0}
-                    className="cursor-pointer border-t border-stone-100 transition-colors hover:bg-stone-50 focus:outline-none focus-visible:shadow-[0_0_0_3px_rgba(13,148,136,0.3)]"
-                    onClick={() => setSelectedLog(log)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedLog(log);
-                      }
-                    }}
-                  >
-                    <td className="whitespace-nowrap px-6 py-4 text-sm tabular-nums text-stone-600">
-                      {formatAuditTimestamp(ts)}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-stone-900">{userName}</td>
-                    <td className="px-6 py-4">
-                      <ActionBadge action={action} />
-                    </td>
-                    <td className="px-6 py-4 text-sm text-stone-700">{formatEntityLabel(entity)}</td>
-                    <td className="px-6 py-4 font-mono text-xs tabular-nums text-stone-500">{entityId}</td>
-                  </tr>
-                );
-              })}
-              emptyTitle="No audit entries found"
-              emptyDescription="Adjust filters, widen the date range, or apply again after new activity."
-            />
+                  return (
+                    <tr
+                      key={log.audit_log_id || idx}
+                      className="cursor-pointer border-t border-stone-100 transition-colors hover:bg-stone-50"
+                      onClick={() => setSelectedLog(log)}
+                    >
+                      <td className="px-4 py-4 align-middle">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
+                          #AUDIT-{log.audit_log_id}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-[11px] tabular-nums text-stone-600">
+                        {formatForensicTimestamp(ts)}
+                      </td>
+                      <td className="px-6 py-4 text-xs font-bold text-stone-900">{userName}</td>
+                      <td className="px-6 py-4">
+                        <StatusBadge size="sm">{log.action}</StatusBadge>
+                      </td>
+                      <td className="px-6 py-4 text-xs font-medium text-stone-500">
+                        {formatAuditEntityOrResource(log.entity_name)}
+                      </td>
+                      <td className="px-6 py-4 align-middle">
+                        <CorrelationIdCell value={log.correlation_id} />
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
+                        {formatAuditEntityIdDisplay(log.entity_id, log.action)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              />
+              <TablePagination
+                meta={auditMeta}
+                page={auditPage}
+                perPage={auditPerPage}
+                onPageChange={(p) => {
+                  setAuditPage(p);
+                  void loadData({ auditPage: p });
+                }}
+                onPerPageChange={(n) => {
+                  setAuditPage(1);
+                  setAuditPerPage(n);
+                  void loadData({ auditPage: 1, auditPerPage: n });
+                }}
+                disabled={!logsReady || listLoading}
+              />
+            </Card>
           </>
-        ) : null}
+        )}
       </motion.div>
 
-      {selectedLog ? (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="audit-detail-title"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 bg-slate-900/50"
-            aria-label="Close audit log details"
-            onClick={() => setSelectedLog(null)}
-          />
-          <div
+      {selectedLog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm bg-stone-900/20" role="dialog" aria-modal="true">
+          <button type="button" className="absolute inset-0" aria-label="Close" onClick={() => setSelectedLog(null)} />
+          <motion.div 
             ref={modalRef}
-             className="HS-card-shadow relative w-full max-w-3xl overflow-hidden rounded-3xl border border-stone-200 bg-white"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-2xl"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-stone-100 bg-stone-50/50 px-6 py-5">
+            <div className="flex items-start justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-6">
               <div>
-                <p id="audit-detail-title" className="text-sm font-bold text-stone-900">
-                  Change details
-                </p>
-                <p className="mt-1 text-xs font-medium text-stone-500">
-                  {formatAuditTimestamp(selectedLog?.created_at)}
-                  {" · "}
-                  {selectedLog?.user_first_name
-                    ? `${selectedLog.user_first_name} ${selectedLog.user_last_name}`
-                    : selectedLog?.user_username || "—"}
-                  {" · "}
-                  {selectedLog?.entity_name || "—"}
-                  {selectedLog?.entity_id ? ` #${selectedLog.entity_id}` : ""}
+                <h2 className="text-sm font-black uppercase tracking-widest text-stone-900">Event detail</h2>
+                <p className="mt-1 font-mono text-[10px] font-black tracking-tighter text-stone-400">
+                  Log #{selectedLog.audit_log_id} · {formatForensicTimestamp(selectedLog.created_at)}
                 </p>
               </div>
               <button
-                type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
                 onClick={() => setSelectedLog(null)}
-                aria-label="Close details"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
               >
-                <X className="h-4 w-4" aria-hidden />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                <ActionBadge action={selectedLog?.action} />
-                <span className="text-xs font-medium text-stone-500">
-                  {formatActionLabel(selectedLog?.action)} on {selectedLog?.entity_name || "—"}
-                </span>
+            <div className="max-h-[70vh] overflow-y-auto p-8">
+              <div className="grid gap-6 sm:grid-cols-2 mb-8">
+                  <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Actor</span>
+                      <p className="text-sm font-bold text-stone-900">{selectedLog.user_username || 'System'}</p>
+                  </div>
+                  <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Resource</span>
+                      <p className="text-sm font-bold text-stone-900">
+                        {formatAuditEntityOrResource(selectedLog.entity_name)}
+                        {formatAuditEntityIdDisplay(selectedLog.entity_id, selectedLog.action) !== "—" ? (
+                          <span className="text-stone-400 font-mono text-xs">
+                            {" "}
+                            #{formatAuditEntityIdDisplay(selectedLog.entity_id, selectedLog.action)}
+                          </span>
+                        ) : null}
+                      </p>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Correlation ID</span>
+                      <div className="rounded-xl border border-stone-100 bg-stone-50/50 px-3 py-2">
+                        <CorrelationIdCell value={selectedLog.correlation_id} preferFull />
+                      </div>
+                  </div>
               </div>
 
-              {diffLines.length ? (
-                <div className="space-y-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                    Field-level changes
-                  </p>
-                  <div className="rounded-2xl border border-stone-100 overflow-hidden bg-white shadow-sm">
+              {diffLines.length > 0 ? (
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">Field changes</h3>
+                  <div className="overflow-hidden rounded-2xl border border-stone-100 shadow-sm">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-stone-50 text-[10px] font-bold tracking-wider text-stone-500">
+                      <thead className="bg-stone-50/80 text-[10px] font-black uppercase tracking-widest text-stone-400 border-b border-stone-100">
                         <tr>
-                          <th className="px-5 py-3 border-r border-stone-100">Attribute</th>
-                          <th className="px-5 py-3 border-r border-stone-100">Original</th>
-                          <th className="px-5 py-3 text-emerald-800">Modified</th>
+                          <th className="px-5 py-3">Attribute</th>
+                          <th className="px-5 py-3">Original</th>
+                          <th className="px-5 py-3">Modified</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-stone-50">
                         {diffLines.map((line) => (
-                          <tr key={line.field} className="border-t border-stone-100 hover:bg-stone-50/50">
-                            <td className="px-5 py-4 font-semibold text-stone-900 border-r border-stone-100 bg-stone-50/20">
+                          <tr key={line.field} className="hover:bg-stone-50/30 transition-colors">
+                            <td className="px-5 py-4 font-bold text-stone-900 bg-stone-50/20 border-r border-stone-50">
                               {formatFieldLabel(line.field)}
                             </td>
-                            <td className="px-5 py-4 font-mono text-stone-500 border-r border-stone-100 line-through decoration-rose-400/50">
-                              <span className="bg-rose-50/50 px-1.5 py-0.5 rounded text-rose-900/70">{line.before === '""' ? "—" : line.before.replace(/"/g, "")}</span>
+                            <td className="px-5 py-4">
+                                <span className="inline-block rounded px-2 py-0.5 bg-rose-50/50 text-rose-900/70 line-through decoration-rose-400/50 font-mono text-[10px]">
+                                    {line.before === '""' ? "—" : line.before.replace(/"/g, "")}
+                                </span>
                             </td>
-                            <td className="px-5 py-4 font-mono font-bold text-emerald-800">
-                              <span className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100/50">{line.after === '""' ? "—" : line.after.replace(/"/g, "")}</span>
+                            <td className="px-5 py-4">
+                                <span className="inline-block rounded px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-100/50 font-bold font-mono text-[10px]">
+                                    {line.after === '""' ? "—" : line.after.replace(/"/g, "")}
+                                </span>
                             </td>
                           </tr>
                         ))}
@@ -577,46 +669,39 @@ export default function AuditLogsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-stone-200 p-8 text-center bg-stone-50/30">
-                  <p className="text-sm font-semibold text-stone-900">No field changes recorded</p>
-                  <p className="mt-1 text-xs font-medium text-stone-500">
-                    Auth event or non-attribute change detected.
-                  </p>
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-stone-200 bg-stone-50/30 py-12 text-center">
+                    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100 text-stone-400">
+                        <Activity size={24} />
+                    </div>
+                    <p className="text-sm font-bold text-stone-900">No field changes recorded</p>
+                    <p className="mt-1 text-xs font-medium text-stone-500">No before/after values for this event (for example login or access denied).</p>
                 </div>
               )}
 
-              <details className="mt-8 group">
-                <summary className="flex cursor-pointer items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-400 transition-colors hover:text-stone-600">
+              <details className="mt-12 group">
+                <summary className="flex cursor-pointer items-center gap-2 text-[10px] font-black uppercase tracking-widest text-stone-400 transition-colors hover:text-stone-600">
                   <div className="transition-transform group-open:rotate-90">▶</div>
-                  Technical Data (Raw JSON)
+                  Raw JSON
                 </summary>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Old State</p>
-                    <pre className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-stone-100 bg-stone-50 p-3 font-mono text-[10px] text-stone-500">
-                      {JSON.stringify(
-                        safeParseJson(selectedLog?.old_values_json) ?? selectedLog?.old_values_json ?? null,
-                        null,
-                        2,
-                      )}
+                <div className="mt-6 grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Before</p>
+                    <pre className="max-h-60 overflow-y-auto rounded-2xl bg-stone-900 p-4 font-mono text-[10px] leading-relaxed text-stone-300 shadow-inner">
+                      {JSON.stringify(safeParseJson(selectedLog.old_values_json), null, 2)}
                     </pre>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-300">New State</p>
-                    <pre className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-stone-100 bg-stone-50 p-3 font-mono text-[10px] text-stone-500">
-                      {JSON.stringify(
-                        safeParseJson(selectedLog?.new_values_json) ?? selectedLog?.new_values_json ?? null,
-                        null,
-                        2,
-                      )}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-300">After</p>
+                    <pre className="max-h-60 overflow-y-auto rounded-2xl bg-stone-900 p-4 font-mono text-[10px] leading-relaxed text-stone-300 shadow-inner">
+                      {JSON.stringify(safeParseJson(selectedLog.new_values_json), null, 2)}
                     </pre>
                   </div>
                 </div>
               </details>
             </div>
-          </div>
+          </motion.div>
         </div>
-      ) : null}
+      )}
     </AppMain>
   );
 }

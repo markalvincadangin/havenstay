@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { Phone, ShieldAlert, ArrowLeft, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -19,6 +20,7 @@ import PageHeader from "../../_components/ui/PageHeader";
 import Spinner from "../../_components/ui/Spinner";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
+import { primaryLinkCtaClass, secondaryOutlineLinkClass } from "../../_components/ui/LinkTokens";
 
 const PH_MOBILE_REGEX = /^(09\d{9}|(\+639)\d{9})$/;
 
@@ -98,7 +100,7 @@ export default function NewTenantPage() {
                subtitle="Enter accurate tenant information for contracts and billing."
                breadcrumbs={
                   <Breadcrumbs
-                     items={[{ label: "Tenant Registry", href: "/tenants" }, { label: "Register tenant" }]}
+                     items={[{ label: "Tenant Directory", href: "/tenants" }, { label: "Register Tenant" }]}
                   />
                }
                actions={
@@ -107,8 +109,8 @@ export default function NewTenantPage() {
                         type="button"
                         onClick={() => router.push("/tenants")}
                         className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                        aria-label="Back to Tenant Registry"
-                        title="Back to Tenant Registry"
+                        aria-label="Back to Tenant Directory"
+                        title="Back to Tenant Directory"
                      >
                         <ArrowLeft size={18} aria-hidden />
                      </button>
@@ -124,12 +126,12 @@ export default function NewTenantPage() {
                <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                   <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
-                           <RefreshCw size={16} aria-hidden />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                           <RefreshCw size={14} aria-hidden />
                         </div>
-                        <h2 className="hs-strip-title">Basic Information</h2>
+                        <h2 className="hs-strip-title text-sm font-black uppercase tracking-widest text-stone-400">Basic Information</h2>
                      </div>
-                     <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Required where marked</span>
+                     <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Directory Core</span>
                   </div>
 
                   <div className="p-8 space-y-8">
@@ -180,7 +182,8 @@ export default function NewTenantPage() {
                            <Input
                               disabled={readOnly}
                               type="email"
-                              className="!h-11 border-stone-200"
+                              placeholder="juan@example.ph"
+                              className="!h-11 border-stone-200 focus:border-teal-500/50"
                               {...register("email")}
                            />
                         </Field>
@@ -232,18 +235,18 @@ export default function NewTenantPage() {
 
                {apiError && <Alert variant="error" title="Registration Failed">{apiError}</Alert>}
 
-               <div className="flex items-center justify-end gap-3 pt-6">
-                  <Button type="button" variant="secondary" onClick={() => router.push("/tenants")} className="!h-11 rounded-xl px-8 text-[10px] font-bold uppercase tracking-widest">
+               <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end">
+                  <Link href="/tenants" className={secondaryOutlineLinkClass + " px-8"}>
                      Cancel
-                  </Button>
+                  </Link>
                   <Button
                      type="submit"
                      variant="primary"
                      loading={isSubmitting}
                      disabled={readOnly || isSubmitting}
-                     className="!h-11 rounded-xl bg-teal-600 px-12 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
+                     className={primaryLinkCtaClass + " px-12 border-0 shadow-lg shadow-teal-900/10"}
                   >
-                     Register tenant
+                     Register Tenant
                   </Button>
                </div>
             </form>

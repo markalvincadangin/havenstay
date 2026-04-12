@@ -122,6 +122,38 @@ class BillingPaymentManagementTest extends TestCase
     }
 
     /**
+     * TC-REPORT-005: Tenant ledger stable order — debit before credit when both share the same calendar date (RPT-01).
+     */
+    public function test_tenant_ledger_same_day_orders_debit_before_credit(): void
+    {
+        $billing = $this->createBillingRecord(6000.00);
+        $billing->load('contract');
+        $tenantId = (int) $billing->contract->tenant_id;
+
+        $this->actingAs($this->adminUser)->postJson('/api/payments', [
+            'billing_id' => $billing->billing_id,
+            'amount_paid' => 2000,
+            'payment_date' => '2026-05-01',
+            'payment_method' => 'cash',
+        ])->assertCreated();
+
+        $response = $this->actingAs($this->viewerUser)->getJson(
+            "/api/reports/tenant-ledger?tenant_id={$tenantId}"
+        );
+
+        $response->assertOk();
+        $entries = $response->json('entries');
+        $this->assertCount(2, $entries);
+        $this->assertSame('debit', $entries[0]['type']);
+        $this->assertSame('credit', $entries[1]['type']);
+        $normalize = static fn ($d) => substr((string) $d, 0, 10);
+        $this->assertSame('2026-05-01', $normalize($entries[0]['date']));
+        $this->assertSame('2026-05-01', $normalize($entries[1]['date']));
+        $this->assertEqualsWithDelta(6000.0, (float) $entries[0]['running_balance'], 0.01);
+        $this->assertEqualsWithDelta(4000.0, (float) $entries[1]['running_balance'], 0.01);
+    }
+
+    /**
      * TC-PAYMENT-003: Invalid payment amount rolls back
      */
     public function test_invalid_payment_amount_rolls_back(): void
@@ -149,6 +181,33 @@ class BillingPaymentManagementTest extends TestCase
             'status' => 'rolled_back',
             'reference_id' => (string) $billing->billing_id,
         ]);
+    }
+
+    public function test_non_cash_payment_requires_reference_number(): void
+    {
+        $billing = $this->createBillingRecord(5000.00);
+
+        $empty = $this->actingAs($this->adminUser)->postJson('/api/payments', [
+            'billing_id' => $billing->billing_id,
+            'amount_paid' => 1000,
+            'payment_date' => '2026-05-08',
+            'payment_method' => 'gcash',
+            'reference_number' => '',
+        ]);
+
+        $empty->assertUnprocessable()
+            ->assertJsonValidationErrors(['reference_number']);
+
+        $whitespace = $this->actingAs($this->adminUser)->postJson('/api/payments', [
+            'billing_id' => $billing->billing_id,
+            'amount_paid' => 1000,
+            'payment_date' => '2026-05-08',
+            'payment_method' => 'gcash',
+            'reference_number' => '   ',
+        ]);
+
+        $whitespace->assertUnprocessable()
+            ->assertJsonValidationErrors(['reference_number']);
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Billing;
 use App\Models\Payment;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -23,15 +24,17 @@ class PaymentService
     public static function record(User $actor, array $data): Billing
     {
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'payment_posting',
             $actor->user_id,
             'billing',
             (string) $data['billing_id']
         );
+        $txLogId = $started['tx_log_id'];
 
         // CCR-008: Set audit context so database triggers can capture the actor
         AuditService::setAuditUserContext($actor->user_id);
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
@@ -78,32 +81,36 @@ class PaymentService
             TransactionService::logRolledBack($txLogId, $e->getMessage());
 
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 
     /**
      * Void a payment and reverse the billing effects.
      *
-     * FR-024..FR-027, CCR-006, CCR-007, CCR-008
+     * FR-024..FR-026, CCR-006, CCR-007, CCR-008
      *
      * @throws ValidationException
      */
-    public static function void(User $actor, Payment $payment): Billing
+    public static function void(User $actor, Payment $payment, ?string $reason = null): Billing
     {
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'void_payment',
             $actor->user_id,
             'payments',
             (string) $payment->payment_id
         );
+        $txLogId = $started['tx_log_id'];
 
         // CCR-008: Set audit context so trigger trg_billing_au captures acting user
         AuditService::setAuditUserContext($actor->user_id);
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             // CCR-006: Explicit transaction
-            $result = DB::transaction(function () use ($actor, $payment): Billing {
+            $result = DB::transaction(function () use ($actor, $payment, $reason): Billing {
                 $billing = Billing::where('billing_id', $payment->billing_id)
                     ->lockForUpdate()
                     ->firstOrFail();
@@ -118,7 +125,7 @@ class PaymentService
                 $payment->update([
                     'voided_at' => now(),
                     'voided_by' => $actor->user_id,
-                    'void_reason' => 'User requested void',
+                    'void_reason' => $reason ?: 'User requested void (Standard Protocol)',
                 ]);
 
                 // CCR-003: UPDATE — billing status recalculation
@@ -140,16 +147,18 @@ class PaymentService
             TransactionService::logRolledBack($txLogId, $e->getMessage());
 
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 
     /**
-     * List payment history with filters.
+     * List payment history with filters (query builder for pagination).
      *
-     * @param  array{billing_id?: int, contract_id?: int, tenant_id?: int}  $filters
-     * @return Collection<Payment>
+     * @param  array{billing_id?: int, contract_id?: int, tenant_id?: int, q?: string, payment_from?: string, payment_to?: string, posting_status?: string}  $filters
+     * @return Builder<Payment>
      */
-    public static function listHistory(array $filters = [])
+    public static function listHistoryQuery(array $filters = []): Builder
     {
         $query = Payment::query()
             ->select('payments.*')
@@ -171,6 +180,49 @@ class PaymentService
             $query->where('contracts.tenant_id', (int) $filters['tenant_id']);
         }
 
-        return $query->get();
+        if (! empty($filters['payment_from'])) {
+            $query->where('payments.payment_date', '>=', $filters['payment_from'].' 00:00:00');
+        }
+
+        if (! empty($filters['payment_to'])) {
+            $query->where('payments.payment_date', '<=', $filters['payment_to'].' 23:59:59');
+        }
+
+        if (! empty($filters['posting_status'])) {
+            if ($filters['posting_status'] === 'posted') {
+                $query->whereNull('payments.voided_at');
+            } elseif ($filters['posting_status'] === 'voided') {
+                $query->whereNotNull('payments.voided_at');
+            }
+        }
+
+        if (! empty($filters['q'])) {
+            $needle = trim($filters['q']);
+            $query->where(function ($w) use ($needle): void {
+                $w->where('payments.payment_id', 'like', "%{$needle}%")
+                    ->orWhere('payments.reference_number', 'like', "%{$needle}%")
+                    ->orWhereHas('billing.contract.tenant', function ($t) use ($needle): void {
+                        $t->where('first_name', 'like', "%{$needle}%")
+                            ->orWhere('last_name', 'like', "%{$needle}%")
+                            ->orWhere('contact_number', 'like', "%{$needle}%");
+                    });
+                if (ctype_digit($needle)) {
+                    $w->orWhere('payments.payment_id', (int) $needle);
+                }
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * List payment history with filters.
+     *
+     * @param  array{billing_id?: int, contract_id?: int, tenant_id?: int}  $filters
+     * @return Collection<Payment>
+     */
+    public static function listHistory(array $filters = [])
+    {
+        return self::listHistoryQuery($filters)->get();
     }
 }

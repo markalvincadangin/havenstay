@@ -21,4 +21,12 @@ class SetAuditContext
 
         return $next($request);
     }
+
+    /**
+     * Defense in depth: clear DB session vars after the response is sent.
+     */
+    public function terminate(Request $request, Response $response): void
+    {
+        AuditService::clearCorrelationContext();
+    }
 }

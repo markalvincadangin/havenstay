@@ -18,20 +18,22 @@ class RoomService
      */
     public static function create(array $data): Room
     {
-        // Set audit context for triggers
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-
         $roomData = collect($data)->except(['bed_spaces'])->toArray();
 
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'room_registration',
             Auth::id() ?? 0,
             'rooms',
             $data['room_code'] ?? 'pending'
         );
+        $txLogId = $started['tx_log_id'];
+
+        // Set audit context for triggers
+        if (Auth::check()) {
+            AuditService::setAuditUserContext(Auth::id());
+        }
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
@@ -73,6 +75,8 @@ class RoomService
         } catch (\Exception $e) {
             TransactionService::logRolledBack($txLogId, $e->getMessage());
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 
@@ -82,18 +86,20 @@ class RoomService
      */
     public static function update(Room $room, array $data): Room
     {
-        // Set audit context for triggers
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'room_configuration_update',
             Auth::id() ?? 0,
             'rooms',
             (string) $room->room_id
         );
+        $txLogId = $started['tx_log_id'];
+
+        // Set audit context for triggers
+        if (Auth::check()) {
+            AuditService::setAuditUserContext(Auth::id());
+        }
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
@@ -163,6 +169,8 @@ class RoomService
         } catch (\Exception $e) {
             TransactionService::logRolledBack($txLogId, $e->getMessage());
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 

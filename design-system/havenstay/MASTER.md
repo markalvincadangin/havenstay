@@ -1,6 +1,6 @@
 # HavenStay Boarding House Management System (BHMS)
 
-## Design System — Master Specification — v4.3 (SRS/SDD–aligned)
+## Design System — Master Specification — v4.7.4 (SRS/SDD–aligned)
 
 > **What this document is:** The **visual, interaction, and component** specification for the HavenStay **frontend**. It implements the user-facing intent of **[docs/SRS.md](../../docs/SRS.md)** (especially **Section 2** Overall Description, **Section 3.1** User Interface) and stays consistent with the system context in **[docs/SDD.md](../../docs/SDD.md)** (Sections **1–3**, **Design goals**, module breakdown). It does **not** replace the SRS or SDD for functional or backend behavior.
 
@@ -20,7 +20,7 @@ Earlier drafts used **“Command Center”** and **“cockpit”** as informal *
 | **Product tone**  | **Clear, calm, and trustworthy**—staff can complete daily tasks without hunting; copy uses **boarding house / tenant / lease** language (see **Section 8**). |
 
 
-**Implementation:** `frontend/src/app/globals.css` (CSS variables), `frontend/src/app/layout.js` (fonts), UI modules in **Section 19** (`_components/ui/` under `app/` plus shared `components/ui/`).
+**Implementation:** `frontend/src/app/globals.css` (CSS variables), `frontend/src/app/layout.js` (fonts), UI modules in **Section 19** (`frontend/src/app/_components/ui/`).
 
 **Reuse:** Prefer **documented primitives** over one-off Tailwind strings so spacing, type, and color stay aligned across modules.
 
@@ -101,7 +101,7 @@ Palette aligns with **Tailwind stone** + **teal** and with `**:root` variables**
 | **Table column headers**           | DM Sans                               | `text-[10px] font-bold uppercase tracking-widest text-stone-400`                                                                                             |
 | **Compact strip labels** (filters) | DM Sans                               | Same 10px bold uppercase; optional `tracking-[0.2em]` **only** on narrow strips—do not mix a third tracking scale on the same tier                           |
 | **Breadcrumb row**                 | DM Sans                               | `text-[10px] font-bold uppercase tracking-wide` + **`[word-spacing:0.12em]`** (implemented on `Breadcrumbs` nav)—looser than `tracking-widest`             |
-| **Registry / mono IDs**            | DM Mono                               | `font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400` — prefixes: `#TENANT-{id}`, `#ROOM-{id}`, `#CONTRACT-{id}`, `#BS-{bed_space_id}` |
+| **Registry / mono IDs**            | DM Mono                               | `font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400` — prefixes: `#TENANT-{id}`, `#ROOM-{id}`, `#CONTRACT-{id}`, `#USER-{id}`, `#AUDIT-{id}`, `#TX-{id}`, `#BS-{bed_space_id}` |
 | **Money & numeric columns**        | DM Mono                               | `font-mono tabular-nums` — use utility `text-tabular` where helpful                                                                                          |
 | **Search UI Pattern**              | DM Sans + Icons                       | `Input` with `icon={Search}` — automated **group-focus** teal coloration for primary search wells                                                         |
 | **Empty State copy**               | DM Sans                               | `text-sm font-bold text-stone-900` (title) + `text-xs text-stone-500` (guidance)                                                                           |
@@ -109,10 +109,9 @@ Palette aligns with **Tailwind stone** + **teal** and with `**:root` variables**
 
 ### 3.1 Heading casing & optical spacing
 
-- **Do not** set multi-word **page H1** or **card strip** titles in all-lowercase (e.g. avoid `basic information`). Use **title case** for **registry card / form section** headings—capitalize principal words: *Basic Information*, *Bed Layout*, *Contact Details*, *Registry Filters*, *Emergency Contact*, *Lease Agreements*.
-- **Page H1** when it is a **short command or product line** (Section 21): follow the examples there (*Register tenant*, *Operations*, *Room Registry*). Mixed case is intentional; still apply **`hs-page-title`** so word spacing stays readable.
-- **Letter-spacing:** `tracking-tighter` is **reserved** for mono IDs and similar—not for `PageHeader` H1. Strip titles use **`hs-strip-title`** (mild negative tracking + **positive `word-spacing`**).
-- **Implementation:** `frontend/src/app/globals.css` — **`.hs-page-title`**, **`.hs-page-subtitle`**, **`.hs-strip-title`**; `PageHeader.js` composes the page title + subtitle utilities.
+- **Registry Card Strip Titles**: Must use **All Caps** with the `uppercase` utility and `tracking-widest` for professional operational density (e.g., `REGISTRY FILTERS`, `BASIC INFORMATION`). This distinguishes management cards from page-level content.
+- **Page Titles (H1)**: Use unified title-case with standardized word spacing. Use the **`.hs-page-title`** utility to maintain readability across different character widths.
+- **Implementation**: Spacing and tracking for both tiers are defined in `frontend/src/app/globals.css`.
 
 ---
 
@@ -187,11 +186,11 @@ Tinted nested block: `rounded-xl border border-[var(--color-primary)]/10 bg-[var
 
 **Variants:** `primary` | `secondary` | `danger` | `ghost` | `dangerGhost` · legacy `outline` → `secondary`.
 
-**Sizes:** `sm` `h-8` · `md` `h-10` · `lg` `h-12`. For **registry-style primary CTAs** (tall, uppercase), pass `**className`** to reach `h-11 rounded-xl text-xs font-black uppercase tracking-widest` **or** use `**primaryLinkCtaClass`** for **link-styled** primary actions (`ui/primaryLinkClasses.js`).
+**Sizes:** `sm` `h-8` · `md` `h-10` · `lg` `h-12`. For **registry-style primary CTAs** (tall, uppercase), pass `**className`** to reach `h-11 rounded-xl text-xs font-black uppercase tracking-widest` **or** use `**primaryLinkCtaClass`** from **`LinkTokens.js`** for **link-styled** primary actions.
 
 **Destructive:** Always confirm modal; use `danger` / `dangerGhost`.
 
-### 5.6 Primary & secondary link CTAs (`ui/primaryLinkClasses.js`)
+### 5.6 Primary & secondary link CTAs (`app/_components/ui/LinkTokens.js`)
 
 - `**primaryLinkCtaClass`:** filled teal link button (`h-10` baseline)—use for “Register …”, “Record payment”, etc.
 - `**secondaryOutlineLinkClass`:** bordered neutral—use for “Update details” when rendered as `<Link>`.
@@ -216,8 +215,54 @@ Keep **one** filled primary per major screen region (header vs sticky footer exc
 - **Embedded in a registry card** (`p-0` body): pass `**embedded`** — shell becomes `min-w-0 overflow-x-auto` only (no double border).
 - **Thead:** `bg-stone-50/50 border-b border-stone-100`; **th:** matches Section 3 table header row.
 - **Rows:** `border-t border-stone-100`; interactive rows `hover:bg-stone-50 cursor-pointer`.
+- **Registry Action Pattern**: 
+  - Last column must be right-aligned with fixed width.
+  - Action item: `h-8 w-8`, `rounded-lg`, `border-stone-200`, `bg-white`, `text-stone-400`.
+  - Hover well: transitions to `border-teal-200 bg-teal-50 text-teal-600` on row hover.
+  - Implementation: Use `e.stopPropagation()` on the action event to prevent triggering parent row-click handlers.
 - **Accessibility:** Always pass meaningful `**caption`** + `**ariaLabel**`.
 - **Animation:** `framer-motion` stagger on tbody—respect `useReducedMotion`.
+
+#### 5.8.1 Table column labels (registry standard)
+
+**Authority:** Column semantics follow **`db/havenstay_schema.sql`** and **`docs/SRS.md`**; labels are **user-facing** (Title Case, plain language), not raw SQL names.
+
+| Rule | Guidance |
+| ---- | -------- |
+| **Stable vocabulary** | Reuse the same header for the same concept everywhere (e.g. always **Tenant**, not “Resident” on one screen and “Tenant details” on another). |
+| **Tenants in tables** | Header **Tenant** for people (`tenants.tenant_id`). Display names use **Last, First** via `formatTenantDirectoryName()` in `frontend/src/lib/formatters.js`. |
+| **Primary keys** | Prefer **`<Entity> ID`** when multiple entities appear in one table (**Contract ID**, **Payment ID**, **Billing ID**). Short **ID** is OK when the table has a single subject (e.g. tenant directory → **Tenant ID**). |
+| **Registry ID cells** | In the **ID** column body, always use the mono **prefix + number** form (**`#TENANT-{id}`**, **`#CONTRACT-{id}`**, **`#BILL-{id}`**, **`#ROOM-{id}`**, **`#USER-{id}`**, **`#AUDIT-{audit_log_id}`**, **`#TX-{tx_log_id}`**, **`PAY-{id}`** for payments)—never a bare integer in that cell. Same typography as **§3** (“Registry / mono IDs”). |
+| **Assignment** | **Room / bed space** when the row is anchored to `contracts.bed_space_id` (room + `bed_spaces.bed_label`). **Room** when only `rooms.room_code` is shown. |
+| **Dates** | **Move-in** → `contracts.move_in_date` · **Billing period** → `billing.billing_period_from` / `billing_period_to` · **Payment date** → `payments.payment_date` · **Due** → `billing.due_date` when shown alone. |
+| **Money** | **Monthly rate** → `monthly_rate` · **Amount paid** → `payments.amount_paid` · **Balance** / **Outstanding balance** → computed receivable (not stored columns). |
+| **Status** | Header **Status**; cell values use `StatusBadge` + enums from `frontend/src/lib/constants.js` (aligned to schema ENUMs). |
+| **Actions column** | Header text **`""` (empty)** for icon-only affordance (chevron / row open). Do **not** use “Actions”, “Control”, or similar unless the column contains labeled buttons. |
+
+**Default column sets (list pages):**
+
+| Registry | Column headers (left → right) |
+| -------- | ----------------------------- |
+| **Tenants** | Tenant ID, Name, Contact, Room, Status, (open) |
+| **Contracts** | Contract ID, Tenant, Move-in, Room / bed space, Monthly rate, Status, (open) |
+| **Billing** | Billing ID, Tenant, Billing period, Balance, Status, (open) |
+| **Payments** | Payment ID, Payment date, Tenant, Amount paid, Payment method, Status, (open) |
+| **Users** | User ID, Name, Username, Email, Role, Status, (open) |
+
+Embedded widgets (e.g. dashboard) may use shorter tables (**Tenant** + **Balance**) but must reuse the same words for the same fields.
+
+#### 5.8.2 Audit trail & transaction logs (`/audit-logs`, `/transaction-logs`)
+
+- **Routes** — **Audit Trail** and **System Workflows** (route `/transaction-logs`; **MASTER §21** H1) are **separate pages** (same admin nav area). Do not embed the transaction table inside the audit page; use navigation (header link + sidebar) to **System Workflows** when needed.
+- **Filter card** — Same strip as **§5.8.1**: strip title **Filters** (registry standard), neutral icon well, **`justify-between`** strip row with optional **Refresh** (ghost, `!h-8`, uppercase microcopy), **`!h-12`** controls, **`FilterChips`** with `mt-6`. **Audit** may use **Apply filters** (form submit) in addition to live reload; **System Workflows** uses debounced search. **Audit** filters include optional **Correlation ID** (partial UUID / `correlation_id`); **System Workflows** search (`q`) matches name, reference, initiator, or correlation server-side.
+- **Tables** — **`embedded`** inside a registry **`Card`** (`!p-0`). **Audit trail** columns: **Audit log ID** (`#AUDIT-{id}`), **Timestamp**, **Actor**, **Action**, **Resource** (table name or permission target — use **`formatAuditEntityOrResource()`** in `constants.js` for labels), **Correlation** (**`CorrelationIdCell`**), **Record ID** (row id or **—** when not applicable). **Transaction logs** columns: **Transaction log ID** (`#TX-{id}`), **Started at**, **Transaction**, **Initiated by**, **Status**, **Correlation**, **Reference**.
+
+#### 5.8.3 Report tables (`/reports/*`)
+
+- **Filter card strip title** — **`Filters`** (registry standard across list and report pages). Legacy copy **Filter ledger** must not appear in the UI.
+- **`Table` + `Card`** — Use **`embedded={true}`** on `Table` only when it sits inside a **registry `Card`** with **`!p-0`** so the table does not double the outer border.
+- **Vocabulary** — Reuse **§5.8.1** labels: **Billing ID**, **Billing period**, **Payment date**, **Amount paid**, **Payment method**, **Tenant**, **Monthly rate**, **Contract ID**, **Due**. Avoid one-off synonyms (**Bill #**, **Paid on**, **Ref #**) in column headers.
+- **IDs in cells** — **`#BILL-{id}`**, **`#CONTRACT-{id}`**, **`#ROOM-{room_id}`**; payments **`PAY-{id}`** with the same zero-padding as the Payments registry when the column is numeric-heavy.
 
 ### 5.9 `Breadcrumbs` (`ui/Breadcrumbs.js`)
 
@@ -241,7 +286,7 @@ Shows signed-in identity in header actions on operational pages.
 
 ### 5.14 `StatusBadge` & status semantics
 
-**File:** `frontend/src/components/ui/StatusBadge.js` (shared across app routes).
+**File:** `frontend/src/app/_components/ui/StatusBadge.jsx` (shared across app routes).
 
 Map domain values to **predictable** colors (Tailwind utility pattern):
 
@@ -294,18 +339,24 @@ Avoid generic SaaS jargon. Prefer **property / boarding house / tenant / lease /
 | Dashboards (jargon)          | **Operations** / **Overview** (subtitle can say “Today at a glance”) |
 
 
-### 8.1 Registry naming
+---
 
-- **Tenant Registry**, **Room Registry**, **Contract Registry**, **Billing records**, **Payment log**, **User directory** (Admin), **Audit trail**.
-- Filter card title: **Registry filters** or **Search & filters**.
+## 8. Labeling & Human-First Language
 
-### 8.2 Form section titles (title case)
+Avoid technical "SaaSspeak" or robotic terminology (e.g., "Protocol", "Receivable", "Portfolio"). Use clear, empathetic, and professional language suitable for boarding house operations.
 
-Use **title case** on the card strip: **Basic Information**, **Contact Details**, **Emergency Contact**, **Room & Bed Assignment**, **Lease Terms**, **Billing & Utilities**, **Notes**, **Bed Layout**, **Description**, **Tenant Status**, **Registry Filters**.
+### 8.1 Registry & Page Titles
 
-### 8.3 Data labels (title case in UI)
+- **Tenant List**, **Room List**, **Contract List**, **Billing**, **Payments**, **Users** (Admin), **Activity Log**.
+- Filter card title: **Search & filters**.
 
-**Monthly Rate**, **Lease Period**, **Room Code**, **Bed Label**, **Registry ID**, **Payment Reference**, **Amount Paid**, **Balance**, **Tenant Name**, **Contact Details**.
+### 8.2 Section Titles (Simple & Direct)
+
+Use **title case** on the card strip: **Basic Information**, **Contact Details**, **Emergency Contact**, **Room Assignment**, **Lease Terms**, **Billing Details**, **Important Notes**, **Room Layout**, **Room Status**.
+
+### 8.3 Data Labels (Friendly & Clear)
+
+**Rent Rate**, **Stay Period**, **Room No.**, **Bed**, **ID**, **Reference No.**, **Amount Paid**, **Unpaid Balance**, **Tenant Name**, **Contact Info**, **Due Date**.
 
 ---
 
@@ -410,7 +461,7 @@ Sections **2–6**, **8**, **10**, **12–14**, and **19–21** apply to **every
 
 | Area                | Primary patterns         | Notes                                                             |
 | ------------------- | ------------------------ | ----------------------------------------------------------------- |
-| **Dashboard**       | KPI grid + hub links     | Subtitle: e.g. “Today at a glance—occupancy, billing, and tasks.” |
+| **Dashboard**       | KPI grid + hub links     | Main view: KPI grid, Quick Links, and embedded operational tables. |
 | **Tenants**         | List + filters + table   | Register / Update tenants                                       |
 | **Rooms**           | Grid or table + filters  | Rooms & bed spaces                                                |
 | **Contracts**       | List + filters + table   | Lease agreements anchored to bed spaces                           |
@@ -454,8 +505,9 @@ Paths are relative to the **frontend** package root (`frontend/`).
 | `PageHeader`                                          | `src/app/_components/ui/PageHeader.js`                          | Title, subtitle, breadcrumbs, actions                                 |
 | `Card`                                                | `src/app/_components/ui/Card.js`                                | Default surface; override classes for **registry card** (Section 5.1) |
 | `Section`                                             | `src/app/_components/ui/Card.js`                                | Tinted inner panel                                                    |
+| `KpiCard`                                             | `src/app/_components/ui/KpiCard.js`                             | Quantitative summary surface (Value, Trend, Progress)                   |
 | `Button`                                              | `src/app/_components/ui/Button.js`                              | All `<button>` actions                                                |
-| `primaryLinkCtaClass`, `secondaryOutlineLinkClass`    | `src/app/_components/ui/primaryLinkClasses.js`                  | `<Link>` CTAs                                                         |
+| `primaryLinkCtaClass`, `secondaryOutlineLinkClass`    | `src/app/_components/ui/LinkTokens.js`                         | `<Link>` CTA utility classes                                          |
 | `Field`, `Input`, `Select`, `Textarea`                | `src/app/_components/ui/Fields.js`                              | Form controls                                                         |
 | `Table`                                               | `src/app/_components/ui/Table.js`                               | Registry + embedded tables (`embedded` prop)                          |
 | `Breadcrumbs`                                         | `src/app/_components/ui/Breadcrumbs.js`                         | Trail                                                                 |
@@ -464,7 +516,7 @@ Paths are relative to the **frontend** package root (`frontend/`).
 | `Spinner`                                             | `src/app/_components/ui/Spinner.js`                             | Inline loading                                                        |
 | `Skeleton`, `SkeletonDetailPage`, `DashboardSkeleton` | `src/app/_components/ui/Skeleton.js`, `DashboardSkeleton.js`    | Layout loading                                                        |
 | `UserRoleBadge`                                       | `src/app/_components/ui/UserRoleBadge.js`                       | Role capsule                                                          |
-| `StatusBadge`                                         | `src/components/ui/StatusBadge.js`                              | Status / enum pill                                                    |
+| `StatusBadge`                                         | `src/app/_components/ui/StatusBadge.jsx`                        | Status / enum pill                                                    |
 | `Icons`                                               | `src/app/_components/ui/Icons.js`                               | Shared SVG icons                                                      |
 | `AppFrame`, `Sidebar`, `MobileNav`                    | `src/app/_components/AppFrame.js`, `Sidebar.js`, `MobileNav.js` | App chrome                                                            |
 | `KeyboardHelpModal`                                   | `src/app/_components/ui/KeyboardHelpModal.js`                   | Shortcut help                                                         |
@@ -500,21 +552,22 @@ Use as defaults; adjust only if the screen has a narrower job.
 
 | Route / area     | Title (H1)                       | Subtitle (guidance)                                                 |
 | ---------------- | -------------------------------- | ------------------------------------------------------------------- |
-| Dashboard        | Operations                       | Monitor daily activities, occupancy updates, and pending administrative tasks. |
-| Tenant list     | Tenant Registry                  | Manage profile data, contact details, and historical lease statuses.           |
+| Dashboard        | Dashboard                        | Monitor daily activities, occupancy updates, and pending administrative tasks. |
+| Tenant list     | Tenant Directory                 | Manage profile data, contact details, and historical lease statuses.           |
 | Tenant detail    | *(Tenant name)*                  | Profile details — contact, lease, and billing context.                         |
 | Tenant new/edit  | Register tenant / Update details | Enter accurate information for tenant records to ensure billing and contract accuracy. |
-| Rooms list       | Room Registry                    | Review room inventory, capacity limits, and current rate configurations.       |
+| Rooms list       | Room Inventory                  | Review room capacity limits and current rate configurations.                   |
 | Room detail      | *(Room code)*                    | Room profile — beds, status, and assignments.                                  |
-| Contracts list   | Contract Registry                | Chronological ledger of active and historical lease agreements.                |
-| Contract detail  | *(Registry ID or short title)*   | Lease terms, billing, and payment history.                                     |
+| Contracts list   | Contract Ledger                 | Chronological history of active and historical lease agreements.               |
+| Contract detail  | *(Contract ID or short title)*   | Lease terms, billing, and payment history.                                     |
 | Billing list     | Billing                          | Monitor account balances and track monthly billing cycles across all contracts. |
 | Billing detail   | Billing *(# id)*                 | Line items, payments, and status for this cycle.                               |
 | Payments list    | Payments                         | Chronological ledger of payments, reference codes, and contract links.         |
 | Reports hub      | Reports                          | Operational exports and summaries.                                             |
 | Report sub-pages | *(Report name)*                  | Filter, review, and export—columns match the CSV.                              |
-| Users            | User directory                   | Staff accounts and roles (Admin only).                                         |
-| Audit logs       | Audit trail                      | Who changed what, and when.                                                    |
+| Users            | User Directory                   | Staff accounts and roles (Admin only).                                         |
+| Audit logs       | Audit Trail                      | Who changed what: data changes, sign-ins, and access denied (admin).          |
+| Transaction logs (`/transaction-logs`) | Transaction logs | Workflow runs and database transaction outcomes (started, committed, rolled back, or failed). |
 | Login            | Welcome back                     | Sign in to manage rooms, tenants, and billing.                                 |
 
 
@@ -522,10 +575,41 @@ Use as defaults; adjust only if the screen has a narrower job.
 
 ---
 
+---
+
+## 23. Analytical Reports Pattern
+
+Analytical views (Reports, Performance Summaries) focus on **quantitative fidelity**. They must follow a standardized vertical stack to ensure consistency across the BHMS.
+
+### 23.1 The Reporting Stack
+
+1.  **PageHeader**: Matches §18.2; includes **"Export CSV"** (Primary Teal) in `actions`.
+2.  **Summary Layer (KPI Grid)**: Immediate numerical feedback via a responsive row of **Data Summary Cards** (§24).
+3.  **Active filter strip**: **Registry Card (§5.1)** with strip title **Filters** (same as **§5.8.3**). Contains controls and **`FilterChips`**.
+4.  **Observer Table**: Full-width card with **Embedded Table (§5.8)**.
+
+### 23.2 Generated Lifecycle
+
+Reports must indicate data freshness. Display the "Generated" timestamp in the PageHeader subtitle or top-right action well:
+- **Format:** `text-[10px] font-mono uppercase tracking-widest text-stone-400 cursor-default`.
+- **Logic:** `Generated {timestamp} • {record_count} records`.
+
+---
+
+## 24. Data Summary Card (KPI Card)
+
+The `KpiCard` is the authoritative component for presenting high-level metrics. It replaces all local "Metric" or "Tile" implementations.
+
+- **Value Font:** Always `DM Mono` (`tabular-nums`) for currency, counts, and percentages.
+- **Color Semantics:** Use `isDanger` for negative trends (overdue, vacancy) and teal-600 for positive status (revenue, collections).
+- **Responsive:** Default to `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` for major report summaries.
+
+---
+
 ## 22. Reducing long code & inconsistency
 
 1. **Prefer imports:** `PageHeader`, `Card`, `Table`, `Field`/`Input`/`Select`, `Button`, `Alert`, `FilterChips`, `Breadcrumbs`, `UserRoleBadge`.
-2. **Repeatable class recipes** (primary CTA, registry card shell) → keep in **one** `const` per file or extend `primaryLinkClasses.js` if link-based.
+2. **Repeatable class recipes** (primary CTA, registry card shell) → keep in **one** `const` per file or import from **`LinkTokens.js`** for `<Link>` CTAs.
 3. **Do not** fork `Table` header styles in page-level CSS—use the shared component.
 4. **Registry ID format:** always full prefix pattern (**Section 3**) for scanability.
 5. **Colors:** prefer `globals.css` variables inside primitives; use **stone/teal** utilities on **registry cards** and page chrome to match this spec visually.
@@ -535,8 +619,15 @@ Use as defaults; adjust only if the screen has a narrower job.
 ## Document history
 
 
-| Version | Summary                                                                                                                                               |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Version | Summary                                                                                |
+| ------- | -------------------------------------------------------------------------------------- |
+| v4.7.4  | **§5.5–§5.6** / **§19** / **§22** / footer: link CTAs documented as **`LinkTokens.js`** (replaces stale `primaryLinkClasses.js`); remove obsolete **`frontend/src/components/ui/`** path; **§18.2** page title table — **Transaction logs** naming. Canonical DDL comment: **CCR-001 11 tables** (aligned to `docs/SDD.md` §4.2). |
+| v4.7.3  | **§5.8.2** / **§18.2**: separate Audit trail vs **Transaction logs** routes; **Filters** strip standard; **§26** copy — trail typography + run detail (no “forensic” UX labels); `pages/transaction_logs.md` rewritten to match app + schema. |
+| v4.7.2  | Correlation **filters** (audit `correlation`, transaction `q`); **`CorrelationIdCell`** chip + a11y copy feedback; column header tooltips. |
+| v4.7.1  | **§5.8.2** Audit & transaction tables: **Correlation** column (`correlation_id`), **`CorrelationIdCell`** primitive. |
+| v4.3.3  | **§26.3** Step-by-Step Execution View; added `transaction_logs.md` reference; synchronized workflow state tokens. |
+| v4.3.2  | **§26** Audit & Compliance Patterns; **Change Comparison View** reusable pattern; synchronized audit severity tokens. |
+| v4.3.1  | **§25** User Management & Security Patterns; **Access Control Toggle** and **User Audit Log** component definitions; updated §21 User Directory labels. |
 | v4.3    | **§5.16** `EmptyState` primitive; **§5.7** `Input` icon/prefix decorators; **§6** Interactive lift hover transform; grid responsiveness for empty states |
 | v4.2    | **§3.1** heading casing (title case strip titles); **`hs-page-title` / `hs-page-subtitle` / `hs-strip-title`** in `globals.css`; PageHeader + Breadcrumbs optical spacing; **§8.2** title-case examples |
 | v4.1    | BHMS-first title; SRS/SDD traceability; **Registry card** naming; design-goals table; **Section 12** form column = PageHeader + cards + actions (`max-w-4xl` parity) |
@@ -544,7 +635,43 @@ Use as defaults; adjust only if the screen has a narrower job.
 | v3.2    | Registry matrix, universal coverage, label tracking                                                                                                   |
 | ≤ v3.0  | Early “command center” visual metaphor, forms, tables, parity matrix                                                                                  |
 
+---
+
+## 25. User Management & Security Patterns
+
+Administration pages (Users, Roles, Audit) prioritize **defensive UX** to prevent accidental misconfiguration.
+
+### 25.1 Access Control Toggle
+A high-visibility checkbox pattern used for deactivating accounts or sensitive permissions.
+- **Visuals**: Contained in a `Card` section with `bg-stone-50/50`.
+- **Label**: Bold weight, stone-700.
+- **Safety**: Descriptive sub-text explaining the consequence of deactivation (e.g., "This account will no longer be able to sign in").
+
+### 25.2 User Audit Log
+An embedded summary table showing the last 5-10 actions performed by a specific user.
+- **Component**: `Table` with `embedded={true}`.
+- **Columns**: Timestamp (Mono), Action (Badge), Entity Reference.
+- **Filtering**: Automatically hard-coded to the active `user_id` in profile views.
 
 ---
 
-*Aligned to: **HavenStay BHMS** — `[docs/SRS.md](../../docs/SRS.md)`, `[docs/SDD.md](../../docs/SDD.md)`; implementation: `globals.css` (**`hs-page-title`**, **`hs-strip-title`**), `layout.js`, `frontend/src/app/_components/ui/`*, `frontend/src/components/ui/*`. The SRS remains authoritative for functional requirements; **UI copy, tone, and components** are specified in this MASTER (**Sections 3.1, 8, and 21**). There is no separate `docs/UIUX_DESIGN_SPEC.md` in the repository today—if one is added later, resolve overlaps in favor of SRS for requirements and this MASTER for visual implementation.*
+## 26. Audit & Compliance Patterns
+
+Security-sensitive trails (Audit Trail, Transaction logs) use **read-only** lists and **immutable** presentation: no editing log rows in the UI; timestamps and IDs stay scannable and aligned.
+
+### 26.1 Field changes (audit modal)
+A 3-column diff table for `old_values_json` vs `new_values_json` (labeled **Field changes** in the product).
+- **Attribute**: Bold stone-900 (e.g., "Monthly Rate").
+- **Original**: `line-through decoration-rose-400/50` in `bg-rose-50/50` (Negative state).
+- **Modified**: `font-bold text-emerald-800` in `bg-emerald-50` (Positive/Active state).
+
+### 26.2 Trail typography (audit & transaction logs)
+- **Timestamps**: `tabular-nums` for vertical alignment in chronological lists.
+- **Registry IDs**: Mono prefixes per **§3** (`#AUDIT-{id}`, `#TX-{id}`, etc.) — never bare integers in ID columns.
+
+### 26.3 Run detail (transaction log modal)
+Snapshot for one `transaction_logs` row: **Started** / **Completed**, **Reference**, **Correlation ID**, **Details (JSON)** from `details_json`. No “inspector” or “forensic” user-facing labels — keep copy operational (**§8**).
+
+---
+
+*Aligned to: **HavenStay BHMS** — `[docs/SRS.md](../../docs/SRS.md)`, `[docs/SDD.md](../../docs/SDD.md)`, `[pages/users.md](pages/users.md)`, `[pages/audit_logs.md](pages/audit_logs.md)`, `[pages/transaction_logs.md](pages/transaction_logs.md)`* — implementation: `globals.css` (**`hs-page-title`**, **`hs-strip-title`**), `layout.js`, `frontend/src/app/_components/ui/`. The SRS remains authoritative for functional requirements; **UI copy, tone, and components** are specified in this MASTER (**Section 8 and 21**). There is no separate `docs/UIUX_DESIGN_SPEC.md` in the repository today—if one is added later, resolve overlaps in favor of SRS for requirements and this MASTER for visual implementation.*

@@ -98,6 +98,94 @@ class ReportsExportTest extends TestCase
         $response->assertOk();
     }
 
+    public function test_occupancy_report_room_type_filter_returns_only_matching_rows(): void
+    {
+        Room::create([
+            'room_code' => 'RT_SOLO',
+            'room_type' => 'solo',
+            'capacity' => 1,
+            'monthly_rate' => 4000,
+            'status' => 'available',
+        ]);
+
+        Room::create([
+            'room_code' => 'RT_SHARED',
+            'room_type' => 'shared',
+            'capacity' => 2,
+            'monthly_rate' => 3000,
+            'status' => 'available',
+        ]);
+
+        $soloOnly = $this->actingAs($this->viewerUser)
+            ->getJson('/api/reports/occupancy?room_type=solo&page=1&per_page=25')
+            ->assertOk();
+
+        foreach ($soloOnly->json('rows', []) as $row) {
+            $this->assertSame('solo', $row['room_type']);
+        }
+
+        $sharedOnly = $this->actingAs($this->viewerUser)
+            ->getJson('/api/reports/occupancy?room_type=shared&page=1&per_page=25')
+            ->assertOk();
+
+        foreach ($sharedOnly->json('rows', []) as $row) {
+            $this->assertSame('shared', $row['room_type']);
+        }
+    }
+
+    public function test_outstanding_balances_summary_includes_past_due_metrics(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Past',
+            'last_name' => 'Due',
+            'contact_number' => '09179999999',
+            'status' => 'active',
+        ]));
+
+        $room = Room::create([
+            'room_code' => 'R900',
+            'room_type' => 'solo',
+            'capacity' => 1,
+            'monthly_rate' => 4000,
+            'status' => 'available',
+        ]);
+
+        $bed = BedSpace::create([
+            'room_id' => $room->room_id,
+            'bed_label' => 'A',
+            'status' => 'occupied',
+        ]);
+
+        $contract = Contract::create([
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $this->adminUser->user_id,
+            'move_in_date' => '2026-01-01',
+            'deposit_amount' => 0,
+            'status' => 'active',
+        ]);
+
+        $this->createBillingRecord($contract->contract_id, '2026-01-01', '2026-01-31', '2020-01-15', 5000, 'unpaid');
+
+        $response = $this->actingAs($this->viewerUser)->getJson('/api/reports/outstanding-balances');
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'summary' => [
+                    'account_count',
+                    'total_outstanding',
+                    'past_due_count',
+                    'past_due_amount',
+                    'oldest_past_due_days',
+                ],
+            ]);
+
+        $summary = $response->json('summary');
+        $this->assertGreaterThanOrEqual(1, (int) $summary['past_due_count']);
+        $this->assertGreaterThan(0, (float) $summary['past_due_amount']);
+        $this->assertGreaterThan(0, (int) $summary['oldest_past_due_days']);
+    }
+
     /**
      * TC-REPORT-002: Billing summary
      */

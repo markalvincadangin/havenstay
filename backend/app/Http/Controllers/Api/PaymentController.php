@@ -7,8 +7,10 @@ use App\Models\Payment;
 use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\PaymentService;
+use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class PaymentController extends Controller
 {
@@ -23,9 +25,35 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Unauthorized to view payment history.'], 403);
         }
 
-        $payments = PaymentService::listHistory($request->only(['tenant_id', 'contract_id', 'billing_id']));
+        $validated = $request->validate(array_merge([
+            'tenant_id' => ['nullable', 'integer'],
+            'contract_id' => ['nullable', 'integer'],
+            'billing_id' => ['nullable', 'integer'],
+            'q' => ['nullable', 'string', 'max:200'],
+            'payment_from' => ['nullable', 'date'],
+            'payment_to' => ['nullable', 'date'],
+            'posting_status' => ['nullable', 'string', 'in:posted,voided'],
+        ], PaginationResponse::queryRules()));
 
-        return response()->json($payments);
+        $pageParams = PaginationResponse::normalizePageParams($validated);
+
+        $filters = array_filter(
+            [
+                'tenant_id' => $validated['tenant_id'] ?? null,
+                'contract_id' => $validated['contract_id'] ?? null,
+                'billing_id' => $validated['billing_id'] ?? null,
+                'q' => isset($validated['q']) ? trim((string) $validated['q']) : '',
+                'payment_from' => $validated['payment_from'] ?? '',
+                'payment_to' => $validated['payment_to'] ?? '',
+                'posting_status' => $validated['posting_status'] ?? '',
+            ],
+            fn ($v) => $v !== null && $v !== ''
+        );
+
+        $paginator = PaymentService::listHistoryQuery($filters)
+            ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+
+        return PaginationResponse::fromPaginator($paginator);
     }
 
     /**
@@ -60,12 +88,23 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Unauthorized to record payments.'], 403);
         }
 
+        $refRaw = $request->input('reference_number');
+        $trimmedRef = is_string($refRaw) ? trim($refRaw) : '';
+        $request->merge([
+            'reference_number' => $trimmedRef === '' ? null : $trimmedRef,
+        ]);
+
         $validated = $request->validate([
             'billing_id' => ['required', 'integer'],
             'amount_paid' => ['required', 'numeric'],
             'payment_date' => ['required', 'date'],
             'payment_method' => ['sometimes', 'in:cash,gcash,bank_transfer,other'],
-            'reference_number' => ['nullable', 'string', 'max:100'],
+            'reference_number' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::requiredIf(fn () => $request->input('payment_method', 'cash') !== 'cash'),
+            ],
             'remarks' => ['nullable', 'string'],
         ]);
 
@@ -88,7 +127,8 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Unauthorized to void payments.'], 403);
         }
 
-        PaymentService::void($request->user(), $payment);
+        $reason = $request->input('void_reason');
+        PaymentService::void($request->user(), $payment, $reason);
 
         return response()->json([
             'message' => 'Payment voided successfully.',

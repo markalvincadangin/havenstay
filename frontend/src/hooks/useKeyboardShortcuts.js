@@ -2,9 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { G_KEY_ROUTES } from "../lib/keyboardNav";
 
 /**
- * useKeyboardShortcuts - Standardized navigation shortcuts (G+key).
+ * useKeyboardShortcuts — G+letter navigation, help (?), and app shortcuts.
+ * Avoids Ctrl+P (print) and Ctrl+R (browser reload); see `appKeyboardShortcuts.js`.
+ *
  * @param {Function} onHelp - Callback triggered when '?' is pressed.
  */
 export function useKeyboardShortcuts(onHelp) {
@@ -20,6 +23,20 @@ export function useKeyboardShortcuts(onHelp) {
       if (isInput) return;
 
       const key = e.key.toLowerCase();
+
+      // Alt+Shift+P → new payment (not Ctrl+P — reserved for Print)
+      if (e.altKey && e.shiftKey && key === "p") {
+        e.preventDefault();
+        router.push("/payments/new");
+        return;
+      }
+
+      // Alt+Shift+R → soft refresh (not Ctrl+R — browser reload)
+      if (e.altKey && e.shiftKey && key === "r") {
+        e.preventDefault();
+        router.refresh();
+        return;
+      }
 
       // Help shortcut (?)
       if (e.key === "?" && onHelp) {
@@ -38,21 +55,9 @@ export function useKeyboardShortcuts(onHelp) {
       }
 
       if (gPressed.current) {
-        const routes = {
-          d: "/dashboard",
-          t: "/tenants",
-          r: "/rooms",
-          c: "/contracts",
-          b: "/billing",
-          p: "/payments",
-          l: "/audit-logs",
-          u: "/users",
-          o: "/reports",
-        };
-
-        if (routes[key]) {
+        if (G_KEY_ROUTES[key]) {
           e.preventDefault();
-          router.push(routes[key]);
+          router.push(G_KEY_ROUTES[key]);
           gPressed.current = false;
           if (timer.current) clearTimeout(timer.current);
         } else {

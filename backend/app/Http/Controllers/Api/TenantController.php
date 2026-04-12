@@ -7,19 +7,30 @@ use App\Models\Tenant;
 use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\TenantService;
+use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class TenantController extends Controller
 {
     /**
-     * FR-008: List all tenants
+     * FR-008: List tenants (paginated). Optional filters: `q`, `status` (same semantics as {@see search()}).
      */
     public function index(Request $request): JsonResponse
     {
-        $tenants = TenantService::allRich();
+        $validated = $request->validate(array_merge([
+            'q' => ['nullable', 'string', 'max:200'],
+            'status' => ['nullable', 'string', 'max:32'],
+        ], PaginationResponse::queryRules()));
 
-        return response()->json($tenants);
+        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $q = $validated['q'] ?? '';
+        $status = $validated['status'] ?? '';
+
+        $paginator = TenantService::searchRichBuilder($q, $status)
+            ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+
+        return PaginationResponse::fromPaginator($paginator);
     }
 
     /**
@@ -150,14 +161,18 @@ class TenantController extends Controller
      */
     public function search(Request $request): JsonResponse
     {
-        $query = $request->query('q', '');
-        $status = $request->query('status', '');
+        $validated = $request->validate(array_merge([
+            'q' => ['nullable', 'string', 'max:200'],
+            'status' => ['nullable', 'string', 'max:32'],
+        ], PaginationResponse::queryRules()));
 
-        $tenants = TenantService::searchRich($query, $status);
+        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $q = $validated['q'] ?? '';
+        $status = $validated['status'] ?? '';
 
-        return response()->json([
-            'tenants' => $tenants,
-            'count' => count($tenants),
-        ]);
+        $paginator = TenantService::searchRichBuilder($q, $status)
+            ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+
+        return PaginationResponse::fromPaginator($paginator);
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Contract;
 use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\ContractService;
+use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -25,19 +26,43 @@ class ContractController extends Controller
             ], 403);
         }
 
+        $validated = $request->validate(array_merge([
+            'tenant_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'string', 'max:32'],
+            'q' => ['nullable', 'string', 'max:200'],
+        ], PaginationResponse::queryRules()));
+
+        $pageParams = PaginationResponse::normalizePageParams($validated);
+
         $query = Contract::with(['tenant', 'room', 'bedSpace', 'creator', 'latestBilling']);
 
-        if ($request->filled('tenant_id')) {
-            $query->where('tenant_id', (int) $request->query('tenant_id'));
+        if (! empty($validated['tenant_id'])) {
+            $query->where('tenant_id', (int) $validated['tenant_id']);
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->query('status'));
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        $contracts = $query->orderByDesc('contract_id')->get();
+        if (! empty($validated['q'])) {
+            $needle = trim($validated['q']);
+            $query->where(function ($w) use ($needle): void {
+                $w->where('contracts.contract_id', 'like', "%{$needle}%")
+                    ->orWhereHas('tenant', function ($t) use ($needle): void {
+                        $t->where('first_name', 'like', "%{$needle}%")
+                            ->orWhere('last_name', 'like', "%{$needle}%")
+                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$needle}%"]);
+                    })
+                    ->orWhereHas('room', function ($r) use ($needle): void {
+                        $r->where('room_code', 'like', "%{$needle}%");
+                    });
+            });
+        }
 
-        return response()->json($contracts);
+        $paginator = $query->orderByDesc('contract_id')
+            ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+
+        return PaginationResponse::fromPaginator($paginator);
     }
 
     /**

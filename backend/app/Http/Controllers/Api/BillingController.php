@@ -7,6 +7,7 @@ use App\Models\Billing;
 use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\BillingService;
+use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -28,9 +29,37 @@ class BillingController extends Controller
         // User PK is user_id (schema); triggers need @app_user_id before billing UPDATEs.
         AuditService::setAuditUserContext($request->user()->user_id);
 
-        $billing = BillingService::list($request->only(['contract_id', 'tenant_id']));
+        $validated = $request->validate(array_merge([
+            'contract_id' => ['nullable', 'integer'],
+            'tenant_id' => ['nullable', 'integer'],
+            'q' => ['nullable', 'string', 'max:200'],
+            'status' => ['nullable', 'string', 'in:unpaid,partial,paid,overdue'],
+            'past_due' => ['nullable', 'boolean'],
+        ], PaginationResponse::queryRules()));
 
-        return response()->json($billing);
+        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $filters = array_filter([
+            'contract_id' => $validated['contract_id'] ?? null,
+            'tenant_id' => $validated['tenant_id'] ?? null,
+            'q' => isset($validated['q']) ? trim((string) $validated['q']) : '',
+        ], fn ($v) => $v !== null && $v !== '');
+
+        if (! empty($validated['past_due'])) {
+            $filters['past_due'] = true;
+        } elseif (! empty($validated['status'])) {
+            $filters['status'] = $validated['status'];
+        }
+
+        $paginator = BillingService::listQuery($filters)
+            ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+
+        $paginator->getCollection()->transform(function ($billing) {
+            BillingService::autoUpdateStatus($billing);
+
+            return $billing;
+        });
+
+        return PaginationResponse::fromPaginator($paginator);
     }
 
     /**

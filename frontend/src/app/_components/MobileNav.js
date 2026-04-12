@@ -7,29 +7,14 @@ import { useState } from "react";
 import Image from "next/image";
 import { canManageUsers } from "../../lib/auth";
 import { matchesPath } from "../../lib/formatters";
-
-const OPERATIONS_NAV = [
-  { href: "/dashboard", label: "Operations" },
-  { href: "/tenants", label: "Tenants" },
-  { href: "/rooms", label: "Rooms" },
-  { href: "/contracts", label: "Contracts" },
-  { href: "/billing", label: "Billing" },
-  { href: "/payments", label: "Payments" },
-  { href: "/reports", label: "Reports" },
-];
-
-const ADMIN_NAV = [
-  { href: "/users", label: "Users" },
-  { href: "/audit-logs", label: "Audit Logs" },
-  { href: "/transaction-logs", label: "Transaction Logs" },
-];
+import { ADMIN_NAV_ITEMS, OPERATIONS_NAV_ITEMS } from "../../lib/navItems";
 
 
 
 export default function MobileNav({ user, onLogout, pathname }) {
   const [open, setOpen] = useState(false);
   const isAdmin = canManageUsers(user);
-  const allNav = isAdmin ? [...OPERATIONS_NAV, ...ADMIN_NAV] : OPERATIONS_NAV;
+  const allNav = isAdmin ? [...OPERATIONS_NAV_ITEMS, ...ADMIN_NAV_ITEMS] : OPERATIONS_NAV_ITEMS;
 
   return (
     <>

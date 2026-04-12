@@ -7,7 +7,6 @@ import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   AlertTriangle,
-  X,
   ArrowLeft,
   Edit2,
   User,
@@ -17,14 +16,22 @@ import {
   Receipt,
   History,
   MapPin,
+  ShieldCheck,
+  Wallet,
+  Clock,
 } from "lucide-react";
 
 import { apiRequest } from "../../../lib/api";
 import { canManageContracts } from "../../../lib/auth";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { flattenApiErrors } from "../../../lib/errors";
-import { formatDateRange, formatDateString, formatPHP } from "../../../lib/formatters";
-import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
+import {
+  formatDateRange,
+  formatDateString,
+  formatPHP,
+  formatTenantDirectoryName,
+} from "../../../lib/formatters";
+import Spinner from "../../_components/ui/Spinner";
 import Alert from "../../_components/ui/Alert";
 import { AppMain } from "../../_components/ui/AppShell";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
@@ -33,8 +40,9 @@ import { Card } from "../../_components/ui/Card";
 import { Field, Input, Textarea } from "../../_components/ui/Fields";
 import PageHeader from "../../_components/ui/PageHeader";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
-import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { StatusBadge } from "../../_components/ui/StatusBadge";
 import { Table } from "../../_components/ui/Table";
+import { secondaryOutlineLinkClass } from "../../_components/ui/LinkTokens";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -49,10 +57,10 @@ function DetailRow({ label, value, icon: Icon, mono = false }) {
         <div className="text-stone-300">
           <Icon size={14} />
         </div>
-        <span className="text-xs font-semibold text-stone-500">{label}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">{label}</span>
       </div>
       <span
-        className={`max-w-[220px] text-right text-sm leading-snug text-stone-900 ${mono ? "font-mono tabular-nums" : ""}`}
+        className={`max-w-[220px] text-right text-sm font-semibold text-stone-900 ${mono ? "font-mono tabular-nums" : ""}`}
       >
         {value ?? "—"}
       </span>
@@ -67,8 +75,8 @@ function MetricItem({ label, value, icon: Icon }) {
         <Icon size={18} />
       </div>
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400 [word-spacing:0.08em]">{label}</p>
-        <p className="text-sm font-bold text-stone-900 tabular-nums">{value}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 leading-none mb-1">{label}</p>
+        <p className="text-sm font-black text-stone-900 tabular-nums leading-none">{value}</p>
       </div>
     </div>
   );
@@ -113,65 +121,56 @@ function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
     >
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/50"
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
         aria-label="Close move-out dialog"
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-[480px] rounded-2xl border border-stone-200 bg-white p-8 shadow-lg">
-        <div className="mb-4 flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-50">
-            <AlertTriangle className="size-5 text-amber-600" aria-hidden />
+      <div className="relative w-full max-w-[480px] rounded-2xl border border-stone-200 bg-white p-8 shadow-2xl">
+        <div className="mb-6 flex items-start gap-4">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 shadow-sm shadow-amber-900/10">
+            <AlertTriangle className="size-6 text-amber-600" aria-hidden />
           </div>
           <div>
-            <h2 id="moveout-modal-title" className="text-base font-bold text-stone-900">
+            <h2 id="moveout-modal-title" className="text-xl font-black tracking-tight text-stone-900">
               Process Move-out
             </h2>
-            <p className="mt-0.5 text-sm text-stone-500">Confirm the move-out details below.</p>
+            <p className="mt-0.5 text-sm text-stone-500">Record final completion of this agreement.</p>
           </div>
-          <button
-            type="button"
-            className="ml-auto inline-flex size-8 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-stone-100"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <X className="size-4" />
-          </button>
         </div>
 
-        <div className="mb-5 rounded-xl border border-stone-200 bg-stone-50/50 px-4 py-3 text-sm text-stone-800">
-          <p>
-            <span className="font-semibold text-stone-600">Tenant:</span>{" "}
-            {tenant ? `${tenant.first_name} ${tenant.last_name}` : "—"}
-          </p>
-          <p className="mt-1">
-            <span className="font-semibold text-stone-600">Room:</span>{" "}
-            {room ? room.room_code : "—"}
-          </p>
-          <p className="mt-1">
-            <span className="font-semibold text-stone-600">Move-in:</span>{" "}
-            {formatDateString(contract?.move_in_date)}
-          </p>
+        <div className="mb-6 rounded-2xl border border-stone-100 bg-stone-50/50 p-5 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Resident</span>
+            <span className="text-sm font-black text-stone-900">{tenant ? formatTenantDirectoryName(tenant) : "—"}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Unit</span>
+            <span className="text-sm font-black text-stone-900">{room ? room.room_code : "—"}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Inception</span>
+            <span className="text-sm font-mono text-stone-600">{formatDateString(contract?.move_in_date)}</span>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit(onConfirm)} className="space-y-4">
+        <form onSubmit={handleSubmit(onConfirm)} className="space-y-6">
           <Field label="Actual Move-out Date" required error={errors.actual_move_out?.message}>
             <Input
               type="date"
               hasError={Boolean(errors.actual_move_out)}
-              aria-describedby={errors.actual_move_out ? "moveout-date-error" : undefined}
-              className="border-stone-200"
+              className="!h-11 border-stone-200"
               {...register("actual_move_out", {
                 required: "Actual move-out date is required.",
               })}
             />
           </Field>
 
-          <Field label="Final Settlement Notes">
-            <Textarea rows={3} className="border-stone-200" {...register("notes")} />
+          <Field label="Completion Notes">
+            <Textarea rows={3} placeholder="Security deposit status, room condition, etc." className="border-stone-200" {...register("notes")} />
           </Field>
 
-          <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-4">
             <Button
               id={cancelBtnId}
               type="button"
@@ -185,11 +184,11 @@ function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
             <Button
               type="submit"
               variant="danger"
-              className="!h-11 rounded-xl px-6 text-[10px] font-black uppercase tracking-widest"
+              className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/10"
               loading={isSubmitting}
               disabled={isSubmitting}
             >
-              Confirm Move-out
+              Finalize Move-out
             </Button>
           </div>
         </form>
@@ -261,6 +260,7 @@ export default function ContractDetailsPage() {
       await loadContract();
       setShowMoveOutModal(false);
       setSuccessMessage("Move-out processed successfully.");
+      router.refresh();
     } catch (error) {
       setApiError(flattenApiErrors(error));
       setShowMoveOutModal(false);
@@ -272,7 +272,7 @@ export default function ContractDetailsPage() {
   if (authLoading || loading) {
     return (
       <AppMain>
-        <SkeletonDetailPage />
+        <Spinner label="Loading lease profile…" />
       </AppMain>
     );
   }
@@ -281,7 +281,7 @@ export default function ContractDetailsPage() {
   const room = contract?.room;
   const bedSpace = contract?.bed_space || contract?.bedSpace;
   const isActive = contract?.status === "active";
-  const tenantDisplay = tenant ? `${tenant.first_name} ${tenant.last_name}` : "Agreement";
+  const tenantDisplay = tenant ? formatTenantDirectoryName(tenant) : "Agreement";
 
   return (
     <AppMain>
@@ -300,29 +300,30 @@ export default function ContractDetailsPage() {
         className="space-y-6"
       >
         <PageHeader
-          title={contract ? `Contract #${contract.contract_id}` : `Contract #${contractId}`}
+          title={contract ? `Agreement Portfolio` : `Lease Profile`}
           subtitle={
             contract ? (
-              <>
-                <span className="block text-sm font-medium text-stone-500">
-                  Lease terms, billing, and payment history.
-                </span>
-                <span className="mt-1 flex flex-wrap items-center gap-2">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
                     #CONTRACT-{contract.contract_id}
                   </span>
+                  <span className="text-stone-300">·</span>
                   <StatusBadge size="sm">{contract.status}</StatusBadge>
-                </span>
-              </>
+                </div>
+                <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
+                  Lease terms, billing, and payment history.
+                </p>
+              </div>
             ) : (
-              "Retrieving record…"
+              "Retrieving registry data…"
             )
           }
           breadcrumbs={
             <Breadcrumbs
               items={[
-                { label: "Contract Registry", href: "/contracts" },
-                { label: "Lease profile" },
+                { label: "Contract Ledger", href: "/contracts" },
+                { label: `Agreement ${contractId}` },
               ]}
             />
           }
@@ -332,17 +333,17 @@ export default function ContractDetailsPage() {
                 type="button"
                 onClick={() => router.push("/contracts")}
                 className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Contract Registry"
+                aria-label="Back to Contract Ledger"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
               {canManageContracts(currentUser) && isActive && (
                 <Link
                   href={`/contracts/${contractId}/edit`}
-                  className="inline-flex h-11 items-center justify-center rounded-xl bg-teal-600 px-6 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-teal-900/10 transition-all hover:bg-teal-700 active:scale-95"
+                  className={secondaryOutlineLinkClass + " px-6"}
                 >
-                  <Edit2 size={16} className="mr-2" />
-                  Update Details
+                  <Edit2 size={16} aria-hidden />
+                  Update details
                 </Link>
               )}
               <div className="border-l border-stone-200 pl-3">
@@ -355,37 +356,29 @@ export default function ContractDetailsPage() {
           }
         />
 
-        {apiError ? (
-          <Alert variant="error" title="Could not complete action">
-            {apiError}
-          </Alert>
-        ) : null}
-        {successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
+        {apiError && <Alert variant="error" title="Action Failed">{apiError}</Alert>}
+        {successMessage && <Alert variant="success">{successMessage}</Alert>}
 
         {contract ? (
           <div className="grid gap-6 lg:grid-cols-12">
             <aside className="space-y-6 lg:col-span-4">
               <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                <div className="flex flex-col items-center border-b border-stone-100 bg-stone-50/50 px-8 py-6 text-center">
-                  <div className="mb-3 flex size-16 items-center justify-center rounded-2xl border border-stone-200 bg-white text-teal-600 shadow-sm">
-                    <FileCheck size={28} aria-hidden />
+                <div className="flex flex-col items-center border-b border-stone-100 bg-stone-50/50 px-8 py-8 text-center">
+                  <div className="mb-4 flex size-16 items-center justify-center rounded-2xl border border-stone-200 bg-white text-teal-600 shadow-sm shadow-teal-900/5">
+                    <ShieldCheck size={32} aria-hidden />
                   </div>
-                  <h2 className="text-xl font-black tracking-tight text-stone-900 [word-spacing:0.06em]">
-                    #{contract.contract_id}
+                  <h2 className="text-2xl font-black tracking-tight text-stone-900">
+                    Agreement Profile
                   </h2>
                   <div className="mt-2">
                     <StatusBadge size="sm">{contract.status}</StatusBadge>
                   </div>
                 </div>
-                <div className="flex justify-center border-b border-stone-100 bg-stone-50/30 px-4 py-3">
-                  <span className="text-xs font-bold tracking-tight text-stone-500 [word-spacing:0.05em]">
-                    Summary Overview
-                  </span>
-                </div>
-                <div className="space-y-2 p-8">
-                  <MetricItem label="Tenant Name" value={tenantDisplay} icon={User} />
+                
+                <div className="space-y-2 p-8 pt-6">
+                  <MetricItem label="Resident" value={tenantDisplay} icon={User} />
                   <MetricItem
-                    label="Room & Bed"
+                    label="Assigned Unit"
                     value={
                       room
                         ? `${room.room_code}${bedSpace?.bed_label ? ` · ${bedSpace.bed_label}` : ""}`
@@ -394,31 +387,27 @@ export default function ContractDetailsPage() {
                     icon={DoorOpen}
                   />
                   <MetricItem
-                    label="Lease Period"
-                    value={formatDateRange(
-                      contract.move_in_date,
-                      contract.expected_move_out_date
-                    )}
-                    icon={Calendar}
+                    label="Contract Yield"
+                    value={formatPHP(contract.monthly_rate)}
+                    icon={Wallet}
                   />
                   <MetricItem
-                    label="Monthly Rate"
-                    value={formatPHP(contract.monthly_rate)}
-                    icon={Receipt}
+                    label="Move-in Date"
+                    value={formatDateString(contract.move_in_date)}
+                    icon={Clock}
                   />
                 </div>
               </Card>
 
               {canManageContracts(currentUser) && isActive ? (
-                <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm">
-                  <h3 className="text-xs font-bold tracking-tight text-stone-600 [word-spacing:0.05em]">Lifecycle</h3>
-                  <p className="mt-2 text-sm text-stone-600">
-                    Record the actual move-out date to complete this agreement and release the bed
-                    space.
+                <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-amber-50/20 border-amber-100">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-700">Agreement Lifecycle</h3>
+                  <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed">
+                    Once the resident completes their stay, process the move-out to release the bed inventory and finalize terms.
                   </p>
                   <Button
                     variant="danger"
-                    className="mt-4 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest"
+                    className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/5"
                     onClick={() => setShowMoveOutModal(true)}
                   >
                     Process Move-out
@@ -431,23 +420,23 @@ export default function ContractDetailsPage() {
               <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                 <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                      <User size={16} aria-hidden />
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                      <User size={14} aria-hidden />
                     </div>
-                    <h2 className="hs-strip-title">Tenant & Assignment</h2>
+                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Resident & Assignment</h2>
                   </div>
                 </div>
                 <div className="p-8">
                   <div className="grid gap-x-12 gap-y-1 md:grid-cols-2">
                     <DetailRow
-                      label="Tenant Name"
+                      label="Primary Tenant"
                       value={
                         tenant ? (
                           <Link
                             href={`/tenants/${tenant.tenant_id}`}
-                            className="font-semibold text-teal-700 hover:underline"
+                            className="font-bold text-teal-700 hover:underline"
                           >
-                            {tenant.first_name} {tenant.last_name}
+                            {formatTenantDirectoryName(tenant)}
                           </Link>
                         ) : (
                           "—"
@@ -456,18 +445,18 @@ export default function ContractDetailsPage() {
                       icon={User}
                     />
                     <DetailRow
-                      label="Phone Number"
+                      label="Contact Number"
                       value={tenant?.contact_number}
                       icon={User}
                       mono
                     />
                     <DetailRow
-                      label="Room Code"
+                      label="Inventory Room"
                       value={
                         room ? (
                           <Link
                             href={`/rooms/${room.room_id}`}
-                            className="font-semibold text-teal-700 hover:underline"
+                            className="font-bold text-teal-700 hover:underline"
                           >
                             {room.room_code}
                           </Link>
@@ -482,72 +471,55 @@ export default function ContractDetailsPage() {
                 </div>
               </Card>
 
-              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                    <Receipt size={16} aria-hidden />
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                  <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                      <Wallet size={14} aria-hidden />
+                    </div>
+                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Financial Terms</h2>
                   </div>
-                  <h2 className="hs-strip-title">Financial Terms</h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid gap-x-12 gap-y-1 md:grid-cols-2">
-                    <DetailRow
-                      label="Deposit Amount"
-                      value={formatPHP(contract.deposit_amount)}
-                      icon={FileCheck}
-                      mono
-                    />
-                    <DetailRow
-                      label="Monthly Rate"
-                      value={formatPHP(contract.monthly_rate)}
-                      icon={Receipt}
-                      mono
-                    />
+                  <div className="p-8 space-y-1">
+                    <DetailRow label="Deposit Amount" value={formatPHP(contract.deposit_amount)} icon={FileCheck} mono />
+                    <DetailRow label="Monthly Rate" value={formatPHP(contract.monthly_rate)} icon={Receipt} mono />
                   </div>
-                </div>
-              </Card>
+                </Card>
 
-              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-amber-50 text-amber-800">
-                    <Calendar size={16} aria-hidden />
+                <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                  <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                      <Calendar size={14} aria-hidden />
+                    </div>
+                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Contract Dates</h2>
                   </div>
-                  <h2 className="hs-strip-title">Contract Dates</h2>
-                </div>
-                <div className="p-8">
-                  <div className="grid gap-x-12 gap-y-1 md:grid-cols-2">
-                    <DetailRow
-                      label="Move-in Date"
-                      value={formatDateString(contract.move_in_date)}
-                      icon={Calendar}
-                    />
-                    <DetailRow
-                      label="Expected Move-out"
-                      value={
-                        contract.expected_move_out_date
-                          ? formatDateString(contract.expected_move_out_date)
-                          : "—"
-                      }
-                      icon={Calendar}
-                    />
-                    {contract.actual_move_out_date ? (
-                      <DetailRow
-                        label="Actual Move-out"
-                        value={formatDateString(contract.actual_move_out_date)}
-                        icon={Calendar}
-                      />
-                    ) : null}
+                  <div className="p-8 space-y-1">
+                    <DetailRow label="Inception" value={formatDateString(contract.move_in_date)} icon={Calendar} />
+                    <DetailRow label="Expected Out" value={contract.expected_move_out_date ? formatDateString(contract.expected_move_out_date) : "Open Ended"} icon={Calendar} />
                   </div>
-                </div>
-              </Card>
+                </Card>
+              </div>
+
+              {contract.actual_move_out_date && (
+                <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm border-stone-900/5 bg-stone-50/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-200 text-stone-600">
+                      <Clock size={12} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">History: Closed Agreement</span>
+                  </div>
+                  <p className="text-sm font-bold text-stone-900">
+                    Agreement finalized and closed on {formatDateString(contract.actual_move_out_date)}.
+                  </p>
+                </Card>
+              )}
 
               <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                 <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <h2 className="hs-strip-title">Agreement Notes</h2>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Agreement Notes</h2>
                 </div>
                 <div className="p-8">
-                  <p className="text-sm leading-relaxed text-stone-600">
-                    {contract.notes || "No notes on file."}
+                  <p className="text-sm font-medium leading-relaxed text-stone-600 italic">
+                    {contract.notes || "No additional agreement notes on file."}
                   </p>
                 </div>
               </Card>
@@ -557,16 +529,16 @@ export default function ContractDetailsPage() {
                   <div className="flex size-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
                     <History size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title">Payment History</h2>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Payment History Ledger</h2>
                 </div>
                 <div className="p-0">
                   <Table
                     embedded
                     caption="Payments posted against this contract"
                     columns={[
-                      { key: "payment_date", label: "Payment Date" },
-                      { key: "amount", label: "Amount" },
-                      { key: "period", label: "Period" },
+                      { key: "payment_date", label: "Date" },
+                      { key: "amount", label: "Amount", className: "text-right" },
+                      { key: "period", label: "Billing Term" },
                       { key: "status", label: "Status" },
                       { key: "reference", label: "Reference" },
                     ]}
@@ -575,44 +547,53 @@ export default function ContractDetailsPage() {
                         key={p.payment_id}
                         className="border-t border-stone-100 transition-colors hover:bg-stone-50"
                       >
-                        <td className="px-6 py-4 text-sm text-stone-900">
+                        <td className="px-6 py-4 text-sm font-bold text-stone-900">
                           {formatDateString(p.payment_date)}
                         </td>
-                        <td className="px-6 py-4 text-right font-mono text-sm tabular-nums text-stone-900">
-                          {formatPHP(p.amount_paid)}
+                        <td className="px-6 py-4 text-right">
+                          <span className="font-mono text-sm font-bold tabular-nums text-emerald-700">
+                            {formatPHP(p.amount_paid)}
+                          </span>
                         </td>
-                        <td className="px-6 py-4 text-xs text-stone-600">
+                        <td className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-stone-400">
                           {formatDateRange(
                             p.billing_period_from || p.billing?.billing_period_from,
                             p.billing_period_to || p.billing?.billing_period_to
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <StatusBadge size="xs">{p.status}</StatusBadge>
+                          <StatusBadge size="xs">
+                            {p.voided_at ? "voided" : (p.status || "posted")}
+                          </StatusBadge>
                         </td>
-                        <td className="px-6 py-4 font-mono text-sm text-stone-500">
-                          {p.payment_reference_number || "—"}
+                        <td className="px-6 py-4">
+                           <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
+                            #PAY-{p.payment_id}
+                          </span>
                         </td>
                       </tr>
                     ))}
-                    emptyTitle="No payments recorded"
-                    emptyDescription="No payments have been posted for this contract."
+                    emptyTitle="Ledger Empty"
+                    emptyDescription="No payment records have been posted for this agreement."
                   />
                 </div>
               </Card>
             </main>
           </div>
         ) : (
-          <Alert variant="warning" title="Record not found">
-            The requested contract was not found.
-          </Alert>
+          <div className="rounded-2xl border border-stone-200 bg-white p-12">
+             <Alert variant="warning" title="Contract not found">The requested lease agreement record could not be located.</Alert>
+          </div>
         )}
 
-        {!canManageContracts(currentUser) ? (
-          <Alert variant="info" title="Read-only role">
-            Move-out and edits require Admin or Staff.
-          </Alert>
-        ) : null}
+        {!canManageContracts(currentUser) && (
+          <div className="mt-8 flex items-center gap-3 rounded-2xl bg-stone-50 p-6 text-stone-500">
+            <ShieldCheck size={20} className="text-stone-300" />
+            <p className="text-xs font-bold uppercase tracking-widest leading-relaxed">
+              Administrative actions (Void/Move-out) require professional-level clearance.
+            </p>
+          </div>
+        )}
       </motion.div>
     </AppMain>
   );

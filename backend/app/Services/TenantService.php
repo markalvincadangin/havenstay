@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Tenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class TenantService
@@ -15,12 +17,18 @@ class TenantService
     public static function create(array $data): Tenant
     {
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'tenant_registration',
             auth()->id() ?? 0,
             'tenants',
             $data['last_name'] ?? 'pending'
         );
+        $txLogId = $started['tx_log_id'];
+
+        if (Auth::check()) {
+            AuditService::setAuditUserContext(Auth::id());
+        }
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             $tenant = Tenant::create($data);
@@ -35,6 +43,8 @@ class TenantService
         } catch (\Exception $e) {
             TransactionService::logFailed($txLogId, $e->getMessage());
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 
@@ -45,12 +55,18 @@ class TenantService
     public static function update(Tenant $tenant, array $data): Tenant
     {
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'tenant_profile_update',
             auth()->id() ?? 0,
             'tenants',
             (string) $tenant->tenant_id
         );
+        $txLogId = $started['tx_log_id'];
+
+        if (Auth::check()) {
+            AuditService::setAuditUserContext(Auth::id());
+        }
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             $tenant->update($data);
@@ -65,6 +81,8 @@ class TenantService
         } catch (\Exception $e) {
             TransactionService::logFailed($txLogId, $e->getMessage());
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 
@@ -102,7 +120,12 @@ class TenantService
      * Search tenants with richness
      * Leveraging optimized views: vw_active_contracts, vw_billing_summary
      */
-    public static function searchRich(string $query = '', string $status = ''): Collection
+    /**
+     * Search tenants with richness (query builder for pagination).
+     *
+     * @return Builder<Tenant>
+     */
+    public static function searchRichBuilder(string $query = '', string $status = ''): Builder
     {
         // CCR-003: SELECT query with joins
         // CCR-005: Multi-table JOIN via views
@@ -129,6 +152,9 @@ class TenantService
                     ->orWhere('tenants.last_name', 'LIKE', "%{$query}%")
                     ->orWhere('tenants.contact_number', 'LIKE', "%{$query}%")
                     ->orWhere('tenants.email', 'LIKE', "%{$query}%");
+                if (ctype_digit($query)) {
+                    $builder->orWhere('tenants.tenant_id', (int) $query);
+                }
             });
         }
 
@@ -136,7 +162,12 @@ class TenantService
             $q->where('tenants.status', $status);
         }
 
-        return $q->get();
+        return $q;
+    }
+
+    public static function searchRich(string $query = '', string $status = ''): Collection
+    {
+        return self::searchRichBuilder($query, $status)->get();
     }
 
     /**

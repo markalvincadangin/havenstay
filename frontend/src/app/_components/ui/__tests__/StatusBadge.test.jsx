@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { StatusBadge } from "./StatusBadge";
+import { StatusBadge } from "../StatusBadge";
 
 describe("StatusBadge", () => {
   it("renders human-readable label for moved_out", () => {
@@ -9,9 +9,9 @@ describe("StatusBadge", () => {
     expect(screen.getByText("Moved Out")).toBeInTheDocument();
   });
 
-  it("renders Partial for partial billing status", () => {
+  it("renders Partial Payment for partial billing status", () => {
     render(<StatusBadge>partial</StatusBadge>);
-    expect(screen.getByText("Partial")).toBeInTheDocument();
+    expect(screen.getByText("Partial Payment")).toBeInTheDocument();
   });
 
   it("renders Unavailable for room unavailable status", () => {

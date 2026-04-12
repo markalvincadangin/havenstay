@@ -24,6 +24,7 @@ Default profile for rapid development and functional testing.
 Profile used for release validation and performance audits.
 - **Database**: MySQL 8.4+ (Authoritative Schema)
 - **Hardening**: `APP_DEBUG=false`, optimized caches.
+- **Local MySQL + `migrate:fresh` fails with error 1419 (binlog / triggers):** see [**MYSQL_LOCAL_MIGRATIONS.md**](MYSQL_LOCAL_MIGRATIONS.md).
 
 ---
 

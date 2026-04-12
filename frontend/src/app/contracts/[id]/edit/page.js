@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Calendar, RefreshCw, Wallet } from "lucide-react";
+import { ArrowLeft, Calendar, RefreshCw, Wallet, ShieldCheck } from "lucide-react";
 
 import { apiRequest } from "../../../../lib/api";
 import { canManageContracts } from "../../../../lib/auth";
@@ -21,6 +21,8 @@ import PageHeader from "../../../_components/ui/PageHeader";
 import Spinner from "../../../_components/ui/Spinner";
 import UserRoleBadge from "../../../_components/ui/UserRoleBadge";
 import Breadcrumbs from "../../../_components/ui/Breadcrumbs";
+import { CONTRACT_STATUS_LABELS } from "../../../../lib/constants";
+import { formatTenantDirectoryName } from "../../../../lib/formatters";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -125,13 +127,13 @@ export default function EditContractPage() {
   if (authLoading || loading) {
     return (
       <AppMain>
-        <Spinner label="Loading agreement editor…" />
+        <Spinner label="Accessing agreement record…" />
       </AppMain>
     );
   }
 
   const readOnly = !canManageContracts(currentUser);
-  const recordTitle = contract ? `Contract #${contract.contract_id}` : "Contract";
+  const recordLabel = contract ? `#CONTRACT-${contract.contract_id}` : "Agreement";
 
   const bedLabel =
     contract?.bed_space?.bed_label || contract?.bedSpace?.bed_label || "—";
@@ -145,18 +147,18 @@ export default function EditContractPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         <PageHeader
-          title="Update details"
+          title="Update Details"
           subtitle={
             contract
-              ? `Edit lease fields for contract #CONTRACT-${contract.contract_id}.`
-              : "Edit contract record."
+              ? `Edit operational lease fields for active agreement ${recordLabel}.`
+              : "Edit contract registry record."
           }
           breadcrumbs={
             <Breadcrumbs
               items={[
-                { label: "Contract Registry", href: "/contracts" },
-                { label: recordTitle, href: `/contracts/${contractId}` },
-                { label: "Update" },
+                { label: "Contract Ledger", href: "/contracts" },
+                { label: recordLabel, href: `/contracts/${contractId}` },
+                { label: "Update Terms" },
               ]}
             />
           }
@@ -166,8 +168,7 @@ export default function EditContractPage() {
                 type="button"
                 onClick={() => router.push(`/contracts/${contractId}`)}
                 className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to contract profile"
-                title="Back to profile"
+                aria-label="Back to Agreement Profile"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
@@ -179,17 +180,17 @@ export default function EditContractPage() {
         />
 
         <div className="space-y-6">
-        {readOnly ? (
-          <Alert variant="warning" title="Restricted access">
-            You do not have permission to edit contracts.
+        {readOnly && (
+          <Alert variant="warning" title="Restricted Access">
+            You do not have administrative clearance to update agreement terms.
           </Alert>
-        ) : null}
+        )}
 
-        {apiError ? (
-          <Alert variant="error" title="Could not save changes">
+        {apiError && (
+          <Alert variant="error" title="Submission Error">
             {apiError}
           </Alert>
-        ) : null}
+        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
@@ -198,23 +199,21 @@ export default function EditContractPage() {
                 <div className="flex size-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600 shadow-sm">
                   <RefreshCw size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title">Registry Reference</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Basic Information</h2>
               </div>
-              <p className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
-                #CONTRACT-{contractId}
+              <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-teal-600">
+                {recordLabel}
               </p>
             </div>
             <div className="grid gap-6 p-8 sm:grid-cols-2">
-              <Field label="Tenant (read-only)">
-                <div className="flex h-11 items-center rounded-xl border border-stone-200 bg-stone-50 px-4 text-sm font-semibold text-stone-800">
-                  {contract?.tenant
-                    ? `${contract.tenant.last_name}, ${contract.tenant.first_name}`
-                    : "—"}
+              <Field label="Linked Resident (read-only)">
+                <div className="flex h-11 items-center rounded-xl border border-stone-100 bg-stone-50/50 px-4 text-sm font-bold text-stone-700">
+                  {contract?.tenant ? formatTenantDirectoryName(contract.tenant) : "—"}
                 </div>
               </Field>
-              <Field label="Room & bed (read-only)">
-                <div className="flex h-11 items-center rounded-xl border border-stone-200 bg-stone-50 px-4 text-sm font-semibold text-stone-800">
-                  {contract?.room?.room_code ? `${contract.room.room_code} / ${bedLabel}` : "—"}
+              <Field label="Inventory Assignment (read-only)">
+                <div className="flex h-11 items-center rounded-xl border border-stone-100 bg-stone-50/50 px-4 text-sm font-bold text-stone-700">
+                  {contract?.room?.room_code ? `${contract.room.room_code} · ${bedLabel}` : "—"}
                 </div>
               </Field>
             </div>
@@ -225,33 +224,35 @@ export default function EditContractPage() {
               <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm">
                 <Calendar size={16} aria-hidden />
               </div>
-              <h2 className="hs-strip-title">Lease Dates & Status</h2>
+              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Lease Terms</h2>
             </div>
             <div className="space-y-8 p-8">
               <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Move-in (read-only)">
+                <Field label="Inception Date (read-only)">
                   <Input
                     disabled
-                    className="!h-11 border-stone-200 bg-stone-50"
+                    className="!h-11 border-stone-100 bg-stone-50/50 font-bold"
                     value={contract?.move_in_date?.split("T")[0] || ""}
                     readOnly
                   />
                 </Field>
-                <Field label="Administrative status" error={errors.status?.message}>
+                <Field label="Operational Status" error={errors.status?.message}>
                   <Select
                     disabled={readOnly}
-                    className="!h-11 border-stone-200 font-semibold"
+                    className="!h-11 border-stone-200 font-black text-teal-700 uppercase tracking-widest text-[10px]"
                     hasError={Boolean(errors.status)}
                     {...register("status")}
                   >
-                    <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="terminated">Terminated</option>
+                    {Object.entries(CONTRACT_STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
               </div>
               <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Expected move-out" error={errors.expected_move_out?.message}>
+                <Field label="Expected Move-Out" error={errors.expected_move_out?.message}>
                   <Input
                     type="date"
                     disabled={readOnly}
@@ -261,14 +262,14 @@ export default function EditContractPage() {
                       validate: (value) => {
                         if (!value) return true;
                         if (contract?.move_in_date && new Date(value) <= new Date(contract.move_in_date)) {
-                          return "Must be after move-in date.";
+                          return "Must be after inception date.";
                         }
                         return true;
                       },
                     })}
                   />
                 </Field>
-                <Field label="Actual move-out" error={errors.actual_move_out?.message}>
+                <Field label="Actual Move-Out" error={errors.actual_move_out?.message}>
                   <Input
                     type="date"
                     disabled={readOnly}
@@ -283,37 +284,34 @@ export default function EditContractPage() {
 
           <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
             <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shadow-sm">
                 <Wallet size={16} aria-hidden />
               </div>
-              <h2 className="hs-strip-title">Financial Terms</h2>
+              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Financial Terms</h2>
             </div>
             <div className="grid gap-6 p-8 sm:grid-cols-2">
-              <Field label="Monthly rate" required error={errors.monthly_rate?.message}>
+              <Field label="Lease Monthly Rate" required error={errors.monthly_rate?.message}>
                 <Input
                   type="number"
                   step="0.01"
                   disabled={readOnly}
-                  className="!h-11 border-stone-200 tabular-nums"
+                  className="!h-11 border-stone-200 font-mono font-bold tabular-nums"
                   hasError={Boolean(errors.monthly_rate)}
                   {...register("monthly_rate", {
-                    required: "Monthly rate is required.",
+                    required: "Entry required.",
                     min: { value: 500, message: "Min ₱500" },
-                    max: { value: 100000, message: "Max ₱100,000" },
                   })}
                 />
               </Field>
-              <Field label="Deposit amount" required error={errors.deposit_amount?.message}>
+              <Field label="Security Deposit" required error={errors.deposit_amount?.message}>
                 <Input
                   type="number"
                   step="0.01"
                   disabled={readOnly}
-                  className="!h-11 border-stone-200 tabular-nums"
+                  className="!h-11 border-stone-200 font-mono font-bold tabular-nums"
                   hasError={Boolean(errors.deposit_amount)}
                   {...register("deposit_amount", {
-                    required: "Deposit is required.",
-                    min: { value: 0, message: "Min ₱0" },
-                    max: { value: 500000, message: "Max ₱500,000" },
+                    required: "Entry required.",
                   })}
                 />
               </Field>
@@ -322,13 +320,14 @@ export default function EditContractPage() {
 
           <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
             <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <h2 className="hs-strip-title">Notes</h2>
+              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Notes</h2>
             </div>
             <div className="p-8">
-              <Field label="Agreement notes">
+              <Field label="Internal Protocol Notes">
                 <Textarea
                   rows={3}
                   disabled={readOnly}
+                  placeholder="Lease notes, specific conditions, etc."
                   className="border-stone-200"
                   {...register("notes", {
                     maxLength: { value: 1000, message: "Max 1,000 characters" },
@@ -343,7 +342,7 @@ export default function EditContractPage() {
               type="button"
               variant="secondary"
               onClick={() => router.push(`/contracts/${contractId}`)}
-              className="!h-11 rounded-xl px-8 text-[10px] font-bold uppercase tracking-widest"
+              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
             >
               Cancel
             </Button>
@@ -352,12 +351,19 @@ export default function EditContractPage() {
               variant="primary"
               loading={isSubmitting}
               disabled={readOnly || isSubmitting}
-              className="!h-11 min-w-[160px] rounded-xl bg-teal-600 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
+              className="!h-12 min-w-[180px] rounded-xl bg-teal-600 text-[10px] font-black uppercase tracking-widest shadow-xl shadow-teal-900/20 hover:bg-teal-700 active:scale-95"
             >
-              Save changes
+              Save Changes
             </Button>
           </div>
         </form>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl bg-stone-50 p-6 text-stone-500">
+          <ShieldCheck size={20} className="text-stone-300" />
+          <p className="text-[10px] font-bold uppercase tracking-widest leading-relaxed">
+            Modifying active agreement terms will be recorded in the audit trail. Financial changes may affect upcoming billing cycles.
+          </p>
         </div>
       </motion.div>
     </AppMain>

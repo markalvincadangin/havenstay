@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Calendar, CreditCard, FileText, Receipt } from "lucide-react";
+import { ArrowLeft, Calendar, CreditCard, FileText, Receipt, User, Building2, History } from "lucide-react";
+
 import { apiRequest } from "../../../lib/api";
 import { canManageBilling, canViewBilling } from "../../../lib/auth";
 import { flattenApiErrors } from "../../../lib/errors";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { formatDateString, formatPHP } from "../../../lib/formatters";
+import { isPastDueReceivable } from "../../../lib/billingReceivables";
 import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
 import Alert from "../../_components/ui/Alert";
 import { AppMain } from "../../_components/ui/AppShell";
@@ -18,8 +20,9 @@ import Button from "../../_components/ui/Button";
 import { Card } from "../../_components/ui/Card";
 import PageHeader from "../../_components/ui/PageHeader";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
-import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { StatusBadge } from "../../_components/ui/StatusBadge";
 import { Table } from "../../_components/ui/Table";
+import { BILLING_ITEM_TYPE_LABELS } from "../../../lib/constants";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -27,24 +30,15 @@ const pageVariants = {
   transition: { duration: 0.2, ease: "easeOut" },
 };
 
-function SummaryField({ label, children }) {
+/** Metric item — standard registry detail atom. */
+function MetricItem({ label, children, icon: Icon }) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-stone-400">{label}</div>
-      <div className="text-sm font-semibold text-stone-900">{children ?? "—"}</div>
-    </div>
-  );
-}
-
-function FinancialRow({ label, value, valueClass = "", isTotal = false }) {
-  return (
-    <div
-      className={`flex items-center justify-between py-2.5 text-sm ${
-        isTotal ? "mt-1 border-t-2 border-stone-200 pt-3 text-base font-bold" : "border-b border-stone-50 last:border-0"
-      }`}
-    >
-      <span className="font-medium text-stone-500">{label}</span>
-      <span className={`font-mono tabular-nums font-semibold text-stone-900 ${valueClass}`}>{value}</span>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon size={12} className="text-stone-400" />}
+        <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">{label}</span>
+      </div>
+      <div className="text-sm font-bold text-stone-900">{children ?? "—"}</div>
     </div>
   );
 }
@@ -72,7 +66,7 @@ export default function BillingDetailsPage() {
 
     const fetchData = async () => {
       if (!canViewBilling(currentUser)) {
-        setApiError("You do not have permission to view billing.");
+        setApiError("Administrative clearance required to view statement details.");
         setLoading(false);
         return;
       }
@@ -98,56 +92,37 @@ export default function BillingDetailsPage() {
   }
 
   const tenant = billing?.contract?.tenant;
-  const tenantName = tenant ? `${tenant.first_name} ${tenant.last_name}`.trim() : null;
+  const tenantName = tenant ? `${tenant.last_name || ""}, ${tenant.first_name || ""}`.trim() : null;
   const room = billing?.contract?.room;
-  const roomCode = room?.room_code ? `Room ${room.room_code}` : "—";
+  const roomCode = room?.room_code || "—";
   const roomId = room?.room_id;
   const totalAmount = Number(billing?.total_amount || 0);
   const totalPaid = Number(billing?.total_paid || 0);
   const balance = Number(billing?.balance || 0);
   const lineItems = billing?.line_items || [];
-
-  const renderBalance = () => {
-    if (balance < 0) {
-      return (
-        <span className="inline-flex items-center gap-2 font-mono tabular-nums text-emerald-800">
-          <span>{formatPHP(Math.abs(balance))}</span>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
-            Credit
-          </span>
-        </span>
-      );
-    }
-    if (balance === 0) {
-      return <span className="font-mono tabular-nums text-stone-500">{formatPHP(0)}</span>;
-    }
-    return <span className="font-mono tabular-nums font-bold text-teal-700">{formatPHP(balance)}</span>;
-  };
-
   const payments = billing?.payments || [];
 
   return (
     <AppMain>
       <motion.div
-        className="mx-auto mt-8 w-full max-w-4xl space-y-6"
+        className="mx-auto mt-8 w-full max-w-5xl space-y-6"
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         <PageHeader
-          title={`Billing #${billingId || ""}`}
-          subtitle="Line items, payments, and status for this billing cycle."
+          title={`Statement #${billingId || ""}`}
+          subtitle="Authoritative cycle statement and collection history."
           breadcrumbs={
-            <Breadcrumbs items={[{ label: "Billing", href: "/billing" }, { label: `Billing #${billingId || ""}` }]} />
+            <Breadcrumbs items={[{ label: "Billing", href: "/billing" }, { label: `Bill #${billingId || ""}` }]} />
           }
           actions={
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <>
               <button
                 type="button"
                 onClick={() => router.push("/billing")}
                 className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to billing"
-                title="Back to billing"
+                aria-label="Back to registry"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
@@ -156,196 +131,207 @@ export default function BillingDetailsPage() {
                   type="button"
                   variant="primary"
                   onClick={() => router.push(`/payments/new?billing_id=${billing.billing_id}`)}
-                  className="!h-11 rounded-xl bg-teal-600 px-6 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
+                  className="!h-11 rounded-xl bg-teal-600 px-4 sm:px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
                 >
-                  Pay
+                  <span className="hidden sm:inline">Process Reception</span>
+                  <span className="sm:hidden">Pay</span>
                 </Button>
               ) : null}
-              <div className="border-l border-stone-200 pl-3">
-                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-              </div>
-            </div>
+              <div className="hidden sm:block border-l border-stone-200 h-6 mx-1" />
+              <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
+            </>
           }
         />
 
-        {apiError ? (
-          <Alert variant="error" title="Could not load billing">
-            {apiError}
-          </Alert>
-        ) : null}
-
-        {!billing && !apiError ? (
-          <Alert variant="warning" title="No billing record">
-            The requested billing record was not found.
-          </Alert>
-        ) : null}
+        {apiError && <Alert variant="error" title="Could not load billing">{apiError}</Alert>}
 
         {billing ? (
-          <>
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                  <Receipt size={16} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title">Cycle Overview</h2>
-              </div>
-              <div className="space-y-6 p-8">
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <SummaryField label="Billing ID">
-                    <span className="font-mono text-stone-700">#{billing.billing_id}</span>
-                  </SummaryField>
-                  <SummaryField label="Status">
-                    <StatusBadge>{billing.status}</StatusBadge>
-                  </SummaryField>
-                  <SummaryField label="Tenant">
-                    {tenant?.tenant_id ? (
-                      <Link href={`/tenants/${tenant.tenant_id}`} className="text-teal-700 underline decoration-teal-700/30 hover:decoration-teal-700">
-                        {tenantName || "—"}
-                      </Link>
-                    ) : (
-                      tenantName || "—"
-                    )}
-                  </SummaryField>
-                  <SummaryField label="Room">
-                    {roomId ? (
-                      <Link href={`/rooms/${roomId}`} className="text-teal-700 underline decoration-teal-700/30 hover:decoration-teal-700">
-                        {roomCode}
-                      </Link>
-                    ) : (
-                      roomCode
-                    )}
-                  </SummaryField>
-                  <SummaryField label="Billing period">
-                    <span className="inline-flex items-center gap-2 text-stone-700">
-                      <Calendar className="h-3.5 w-3.5 text-stone-400" aria-hidden />
-                      {formatDateString(billing.billing_period_from)} – {formatDateString(billing.billing_period_to)}
-                    </span>
-                  </SummaryField>
-                  <SummaryField label="Due date">{formatDateString(billing.due_date)}</SummaryField>
-                </div>
-
-                <div className="rounded-xl border border-stone-100 bg-stone-50/50 px-5 py-4">
-                  <FinancialRow label="Total amount" value={formatPHP(totalAmount)} />
-                  <FinancialRow label="Amount paid" value={formatPHP(totalPaid)} valueClass="text-emerald-800" />
-                  <FinancialRow label="Balance" value={renderBalance()} isTotal />
-                </div>
-              </div>
-            </Card>
-
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                  <FileText size={16} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title">Line Items</h2>
-              </div>
-              <div className="p-0">
-                <Table
-                  embedded
-                  caption={`Line items for billing #${billingId}`}
-                  columns={[
-                    { key: "desc", label: "Description" },
-                    { key: "amount", label: "Amount", className: "text-right" },
-                  ]}
-                  rows={lineItems.map((item) => (
-                    <tr
-                      key={item.billing_line_item_id}
-                      className="border-t border-stone-100 transition-colors hover:bg-stone-50"
-                    >
-                      <td className="px-6 py-4 text-sm text-stone-900">
-                        {item.item_description || item.description || "—"}
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-sm tabular-nums text-stone-900">
-                        {formatPHP(item.amount)}
-                      </td>
-                    </tr>
-                  ))}
-                  emptyTitle="No line items"
-                  emptyDescription="This billing record has no line items yet."
-                />
-                {lineItems.length > 0 ? (
-                  <div className="flex items-center justify-between border-t-2 border-stone-200 bg-stone-50/80 px-6 py-4">
-                    <span className="text-sm font-bold text-stone-900">Total</span>
-                    <span className="font-mono text-base font-bold text-teal-800">{formatPHP(totalAmount)}</span>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-6">
+              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                    <Receipt size={16} aria-hidden />
                   </div>
-                ) : null}
-              </div>
-            </Card>
-
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                  <CreditCard size={16} aria-hidden />
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Billing Summary</h2>
                 </div>
-                <h2 className="hs-strip-title">Payment History</h2>
-              </div>
-              <div className="p-0">
-                <Table
-                  embedded
-                  caption={`Payment history for billing #${billingId}`}
-                  columns={[
-                    { key: "date", label: "Payment date" },
-                    { key: "amount", label: "Amount", className: "text-right" },
-                    { key: "ref", label: "Reference" },
-                    { key: "status", label: "Status" },
-                    { key: "actions", label: "" },
-                  ]}
-                  rows={payments.map((payment) => (
-                    <tr
-                      key={payment.payment_id}
-                      className="border-t border-stone-100 transition-colors hover:bg-stone-50"
-                    >
-                      <td className="px-6 py-4 text-sm text-stone-900">
-                        {formatDateString(payment.payment_date)}
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-sm tabular-nums text-emerald-800">
-                        {formatPHP(payment.amount_paid)}
-                      </td>
-                      <td className="px-6 py-4 font-mono text-xs text-stone-500">
-                        {payment.reference_number || payment.payment_reference_number || "—"}
-                      </td>
-                      <td className="px-6 py-4">
-                        <StatusBadge>{payment.status || "posted"}</StatusBadge>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link
-                          href={`/payments/${payment.payment_id}`}
-                          className="text-xs font-bold uppercase tracking-wide text-teal-700 hover:underline"
-                        >
-                          View
+                <div className="p-8">
+                  <div className="grid gap-8 sm:grid-cols-2">
+                    <MetricItem label="Resident" icon={User}>
+                      {tenant?.tenant_id ? (
+                        <Link href={`/tenants/${tenant.tenant_id}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
+                          {tenantName || "—"}
                         </Link>
-                      </td>
-                    </tr>
-                  ))}
-                  emptyTitle="No payments recorded"
-                  emptyDescription={
-                    canPostPayments
-                      ? "Post a payment to reduce the balance for this cycle."
-                      : "Viewer role cannot record payments."
-                  }
-                />
-                {payments.length === 0 && canPostPayments && balance > 0 ? (
-                  <div className="border-t border-stone-100 px-6 py-5 text-center">
+                      ) : (
+                        tenantName || "—"
+                      )}
+                    </MetricItem>
+                    <MetricItem label="Room Allocation" icon={Building2}>
+                      {roomId ? (
+                        <Link href={`/rooms/${roomId}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
+                          Room {roomCode}
+                        </Link>
+                      ) : (
+                        `Room ${roomCode}`
+                      )}
+                    </MetricItem>
+                    <MetricItem label="Billing Cycle" icon={Calendar}>
+                      <span className="text-stone-600">
+                        {formatDateString(billing.billing_period_from)} – {formatDateString(billing.billing_period_to)}
+                      </span>
+                    </MetricItem>
+                    <MetricItem label="Status Protocol">
+                      <StatusBadge>{billing.status}</StatusBadge>
+                    </MetricItem>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-50 text-stone-600">
+                    <FileText size={16} aria-hidden />
+                  </div>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Charges & Fees</h2>
+                </div>
+                <div className="p-0">
+                  <Table
+                    embedded
+                    caption={`Line items for statement #${billingId}`}
+                    columns={[
+                      { key: "type", label: "Type" },
+                      { key: "desc", label: "Description" },
+                      { key: "amount", label: "Yield", className: "text-right" },
+                    ]}
+                    rows={lineItems.map((item) => (
+                      <tr key={item.billing_line_item_id} className="border-t border-stone-100 group transition-colors hover:bg-stone-50">
+                        <td className="px-8 py-4 text-xs font-bold uppercase tracking-widest text-stone-400">
+                          {BILLING_ITEM_TYPE_LABELS[item.item_type] || item.item_type || "—"}
+                        </td>
+                        <td className="px-8 py-4 text-sm font-medium text-stone-900">{item.item_description || "—"}</td>
+                        <td className="px-8 py-4 text-right font-mono text-sm font-black tabular-nums text-stone-500 group-hover:text-stone-900">
+                          {formatPHP(item.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                    emptyTitle="Ledger Empty"
+                    emptyDescription="No line items found for this cycle."
+                  />
+                  {lineItems.length > 0 && (
+                    <div className="flex items-center justify-between border-t border-stone-200 bg-stone-50/50 px-8 py-4">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Aggregate Yield</span>
+                      <span className="font-mono text-base font-black text-stone-900">{formatPHP(totalAmount)}</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                    <History size={16} aria-hidden />
+                  </div>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Payment History</h2>
+                </div>
+                <div className="p-0">
+                  <Table
+                    embedded
+                    caption={`History for statement #${billingId}`}
+                    columns={[
+                      { key: "date", label: "Reception Date" },
+                      { key: "amount", label: "Posted", className: "text-right" },
+                      { key: "ref", label: "Reference" },
+                      { key: "status", label: "Post Status" },
+                      { key: "actions", label: "" },
+                    ]}
+                    rows={payments.map((payment) => (
+                      <tr key={payment.payment_id} className="border-t border-stone-100 group transition-colors hover:bg-stone-50">
+                        <td className="px-8 py-4 text-xs font-bold text-stone-900">{formatDateString(payment.payment_date)}</td>
+                        <td className="px-8 py-4 text-right font-mono text-sm font-black tabular-nums text-emerald-700">
+                          {formatPHP(payment.amount_paid)}
+                        </td>
+                        <td className="px-8 py-4">
+                           <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
+                             {payment.reference_number || "—"}
+                           </span>
+                        </td>
+                        <td className="px-8 py-4"><StatusBadge>{payment.status || "posted"}</StatusBadge></td>
+                        <td className="px-8 py-4 text-right">
+                          <Link href={`/payments/${payment.payment_id}`} className="text-[10px] font-black uppercase tracking-widest text-teal-700 hover:text-teal-900">
+                            Details
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                    emptyTitle="No Collections"
+                    emptyDescription="No posted payments for this cycle."
+                  />
+                </div>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-stone-200 bg-stone-900 p-8 shadow-xl">
+                 <div className="flex items-center gap-2 mb-6">
+                    <CreditCard size={16} className="text-teal-400" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Statement Yield</span>
+                 </div>
+                 
+                 <div className="space-y-4">
+                    <div className="flex justify-between items-baseline border-b border-stone-800 pb-4">
+                       <span className="text-stone-500 tracking-widest uppercase font-black text-[10px]">Total Amount</span>
+                       <span className="font-mono text-sm font-bold text-stone-300">{formatPHP(totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline border-b border-stone-800 pb-4">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Posted Funds</span>
+                       <span className="font-mono text-sm font-bold text-emerald-400">{formatPHP(totalPaid)}</span>
+                    </div>
+                    <div className="pt-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-teal-500 block mb-1">Outstanding Receivable</span>
+                       <div className="flex items-baseline justify-between">
+                          <span className={`${balance > 0 ? "text-teal-400" : "text-emerald-400"} font-mono text-3xl font-black tabular-nums`}>
+                            {formatPHP(Math.max(balance, 0))}
+                          </span>
+                          {balance < 0 && (
+                            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                               Credit
+                            </span>
+                          )}
+                       </div>
+                    </div>
+                 </div>
+
+                 {canPostPayments && balance > 0 && (
                     <Button
                       type="button"
                       variant="primary"
                       onClick={() => router.push(`/payments/new?billing_id=${billing.billing_id}`)}
-                      className="!h-11 rounded-xl bg-teal-600 px-8 text-[10px] font-black uppercase tracking-widest"
+                      className="mt-8 w-full !h-12 rounded-xl bg-teal-600 text-[11px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/50 hover:bg-teal-500 active:scale-95"
                     >
-                      Pay
+                      Record Payment
                     </Button>
-                  </div>
-                ) : null}
+                 )}
               </div>
-            </Card>
 
-            {!canPostPayments ? (
-              <Alert variant="info" title="Read-only mode">
-                Viewer accounts can review this billing record but cannot record payments.
-              </Alert>
-            ) : null}
-          </>
-        ) : null}
+              <div className="rounded-2xl border border-stone-100 bg-stone-50/50 p-6 space-y-4">
+                 <div className="flex items-center gap-2 text-stone-400">
+                    <Calendar size={14} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Important Note</span>
+                 </div>
+                 <MetricItem label="Payment Deadline">
+                    <span className={isPastDueReceivable(billing) ? "text-red-700" : "text-stone-900"}>
+                       {formatDateString(billing.due_date)}
+                    </span>
+                 </MetricItem>
+                 <p className="text-[11px] leading-relaxed text-stone-500 font-medium">
+                   This statement is an authoritative record of monthly accounts. Any discrepancies must be voided and re-posted through administrative protocols.
+                 </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Alert variant="warning" title="Bill Not Found">The requested billing record could not be found.</Alert>
+        )}
       </motion.div>
     </AppMain>
   );

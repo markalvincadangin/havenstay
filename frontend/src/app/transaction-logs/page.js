@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { Activity, Search, X, CheckCircle2, XCircle, Clock, ClipboardList, RefreshCw } from "lucide-react";
+import { Activity, Search, X, Terminal, ListFilter } from "lucide-react";
 import { apiRequest } from "../../lib/api";
 import { canManageUsers } from "../../lib/auth";
 import { flattenApiErrors } from "../../lib/errors";
@@ -19,6 +20,16 @@ import PageHeader from "../_components/ui/PageHeader";
 import { SkeletonListPage } from "../_components/ui/Skeleton";
 import UserRoleBadge from "../_components/ui/UserRoleBadge";
 import { Table } from "../_components/ui/Table";
+import { StatusBadge } from "../_components/ui/StatusBadge";
+import { KpiCard } from "../_components/ui/KpiCard";
+import { CorrelationIdCell } from "../_components/ui/CorrelationIdCell";
+import { AUDIT_ENTITY_LABELS, TX_LOG_STATUS_LABELS } from "../../lib/constants";
+import {
+  buildPaginationQuery,
+  normalizePaginatedList,
+  readStoredPerPage,
+} from "../../lib/pagination";
+import TablePagination from "../_components/ui/TablePagination";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -26,33 +37,18 @@ const pageVariants = {
   transition: { duration: 0.2, ease: "easeOut" },
 };
 
-function formatStatus(status) {
-  switch (status) {
-    case "committed": return { label: "Committed", color: "text-emerald-700 bg-emerald-50 border-emerald-100", Icon: CheckCircle2 };
-    case "failed": return { label: "Failed", color: "text-rose-700 bg-rose-50 border-rose-100", Icon: XCircle };
-    case "rolled_back": return { label: "Rolled Back", color: "text-amber-700 bg-amber-50 border-amber-100", Icon: XCircle };
-    default: return { label: "In Progress", color: "text-stone-700 bg-stone-50 border-stone-100", Icon: Clock };
-  }
-}
-
 function formatTxName(name) {
   if (!name) return "—";
-  // Remove technical prefixes like 'sp_' or 'trg_' if any
   const clean = name.replace(/^(sp_|trg_)/, "");
   return clean.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const ENTITY_LABELS = {
-  tenants: "Tenant Registry",
-  rooms: "Room Management",
-  contracts: "Contract History",
-  billing: "Financial Billing",
-  payments: "Payment Records",
-  users: "User Access",
-};
-
 function formatEntity(entity) {
-  return ENTITY_LABELS[entity] || entity?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "—";
+  return (
+    AUDIT_ENTITY_LABELS[entity] ||
+    entity?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
+    "—"
+  );
 }
 
 function formatDuration(start, end) {
@@ -65,19 +61,37 @@ function formatDuration(start, end) {
   return `${(diff / 1000).toFixed(2)}s`;
 }
 
-function formatTimestamp(ts) {
+function formatLogTimestamp(ts) {
   if (!ts) return "—";
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-PH", {
     month: "short",
-    day: "2-digit",
+    day: "numeric",
     year: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
   });
+}
+
+function safeParseJson(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function correlationColumnLabel() {
+  return (
+    <span title="Optional. May match rows on Audit Trail from the same workflow run.">
+      Correlation
+    </span>
+  );
 }
 
 export default function TransactionLogsPage() {
@@ -85,62 +99,59 @@ export default function TransactionLogsPage() {
   const shouldReduceMotion = useReducedMotion();
 
   const [logs, setLogs] = useState([]);
+  const [listMeta, setListMeta] = useState(null);
   const [loading, setLoading] = useState(true);
+  /** Draft filters (edit in the form; table uses applied* until Apply). */
   const [filterQuery, setFilterQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [isMounted, setIsMounted] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  /** Committed filters — same pattern as Audit Trail (Apply filters). */
+  const [appliedQuery, setAppliedQuery] = useState("");
+  const [appliedStatus, setAppliedStatus] = useState("all");
+  const [appliedFrom, setAppliedFrom] = useState("");
+  const [appliedTo, setAppliedTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
   const [selectedLog, setSelectedLog] = useState(null);
   const modalRef = useFocusTrap(!!selectedLog);
 
   const canAccess = useMemo(() => canManageUsers(currentUser), [currentUser]);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
   const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiRequest("/api/transaction-logs");
-      setLogs(Array.isArray(data) ? data : []);
+      const extra = {};
+      if (appliedQuery) extra.q = appliedQuery;
+      if (appliedStatus !== "all") extra.status = appliedStatus;
+      if (appliedFrom) extra.from = appliedFrom;
+      if (appliedTo) extra.to = appliedTo;
+      const qs = buildPaginationQuery(page, perPage, extra);
+      const data = await apiRequest(`/api/transaction-logs${qs}`);
+      const { rows, meta } = normalizePaginatedList(data);
+      setLogs(rows);
+      setListMeta(meta);
     } catch (err) {
       console.error("Failed to load transaction logs:", flattenApiErrors(err));
       setLogs([]);
+      setListMeta(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, perPage, appliedQuery, appliedStatus, appliedFrom, appliedTo]);
 
   useEffect(() => {
-    if (!authLoading && currentUser && canAccess && isMounted) {
+    if (!authLoading && currentUser && canAccess) {
       loadLogs();
     }
-  }, [authLoading, currentUser, canAccess, loadLogs, isMounted]);
+  }, [authLoading, currentUser, canAccess, loadLogs]);
 
-  const filteredLogs = useMemo(() => {
-    let result = logs;
-    
-    if (statusFilter !== "all") {
-      result = result.filter(l => l.status === statusFilter);
-    }
+  const totalMatching = listMeta?.total ?? logs.length;
 
-    if (filterQuery) {
-      const q = filterQuery.toLowerCase();
-      result = result.filter(l => 
-        (l.tx_name || "").toLowerCase().includes(q) || 
-        (l.user_username || "").toLowerCase().includes(q) ||
-        (l.reference_id || "").toLowerCase().includes(q) ||
-        (l.reference_entity || "").toLowerCase().includes(q)
-      );
-    }
-    
-    return result;
-  }, [logs, filterQuery, statusFilter]);
+  const filteredLogs = logs;
 
-  const showSkeleton = authLoading || (currentUser && canAccess && loading && !logs.length);
-
-  if (showSkeleton) {
+  if (authLoading || (currentUser && canAccess && loading && !logs.length)) {
     return <SkeletonListPage rows={10} />;
   }
 
@@ -153,227 +164,369 @@ export default function TransactionLogsPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         <PageHeader
-          title="Transaction Logs"
-          subtitle="Real-time monitoring of atomic business processes and state transitions."
-          breadcrumbs={<Breadcrumbs items={[{ label: "Monitoring", href: "/transaction-logs" }, { label: "Process History" }]} />}
-          actions={<UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />}
+          title="Transaction logs"
+          subtitle="Workflow runs and database transaction outcomes (started, committed, rolled back, or failed)."
+          breadcrumbs={<Breadcrumbs items={[{ label: "System Administration" }, { label: "Transaction logs" }]} />}
+          actions={
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Link
+                href="/audit-logs"
+                className="inline-flex h-11 items-center rounded-xl border border-stone-200 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-stone-600 transition-colors hover:border-teal-300 hover:text-teal-700"
+              >
+                Audit Trail
+              </Link>
+              <div className="border-l border-stone-200 pl-3">
+                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
+              </div>
+            </div>
+          }
         />
 
         {!canAccess ? (
-          <Alert variant="warning" title="Restricted access" data-testid="access-denied-transaction-logs">
-            You do not have permission to view this page. Only administrators can view system transaction logs.
+          <Alert variant="warning" title="Access denied" data-testid="access-denied-transaction-logs">
+            Only administrators can view transaction logs. Contact an admin if you need access.
           </Alert>
         ) : (
           <>
+            <div className="grid max-w-md gap-4">
+              <KpiCard
+                label="Runs after filters"
+                value={totalMatching}
+                icon={Terminal}
+                sub="Same rules as the table below · all pages"
+              />
+            </div>
+
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 bg-stone-50/50 px-6 py-4 sm:px-8 sm:py-5">
-                 <div className="flex items-center gap-2.5">
-                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                     <ClipboardList size={16} aria-hidden />
-                   </div>
-                   <h2 className="hs-strip-title">Registry Filters</h2>
-                 </div>
-                <div className="flex items-center gap-4">
-                    <Button 
-                      variant="outline" 
-                      onClick={loadLogs} 
-                      disabled={loading}
-                      className="!h-9 text-[10px] font-black uppercase tracking-widest px-4 border-stone-200"
-                    >
-                      {loading ? <RefreshCw className="w-3 h-3 mr-2 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-2" />}
-                      Refresh History
-                    </Button>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 bg-stone-50/50 px-6 py-4 sm:px-8 sm:py-5">
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                    <ListFilter size={14} aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Filters</h2>
+                    <p className="mt-0.5 text-[10px] font-medium text-stone-400">
+                      Search by process name, user, reference, or correlation ID. Use Apply filters to update the table.
+                    </p>
+                  </div>
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={loadLogs}
+                  disabled={loading}
+                  className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 disabled:opacity-50"
+                >
+                  Refresh
+                </Button>
               </div>
-              <div className="p-6 sm:p-8">
-                <div className="grid gap-6 lg:grid-cols-12">
-                   <div className="lg:col-span-8">
-                      <Field label="Search Processes">
-                         <Input 
-                           icon={Search}
-                           placeholder="Filter by process, user, or reference ID..."
-                           value={filterQuery}
-                           onChange={(e) => setFilterQuery(e.target.value)}
-                           className="!h-12 border-stone-200 transition-[border-color,box-shadow] focus:ring-4 focus:ring-teal-500/5"
-                         />
+              <div className="p-8">
+                <form
+                  className="flex flex-col gap-6"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setPage(1);
+                    setAppliedQuery(filterQuery.trim());
+                    setAppliedStatus(statusFilter);
+                    setAppliedFrom(dateFrom);
+                    setAppliedTo(dateTo);
+                  }}
+                >
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-12 lg:gap-6">
+                    <div className="min-w-0 lg:col-span-8">
+                      <Field
+                        label="Search"
+                        helpText="Process name, user, billing or contract reference, or correlation UUID."
+                      >
+                        <div className="group relative">
+                          <Search
+                            className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600"
+                            aria-hidden
+                          />
+                          <Input
+                            placeholder="Process, user, reference, or UUID…"
+                            value={filterQuery}
+                            onChange={(e) => setFilterQuery(e.target.value)}
+                            className="!h-12 w-full min-w-0 border-stone-200 pl-11 font-medium transition-[border-color,box-shadow] focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5"
+                          />
+                        </div>
                       </Field>
-                   </div>
-                   <div className="lg:col-span-4">
-                     <Field label="Status">
-                        <Select 
-                          value={statusFilter} 
+                    </div>
+                    <div className="min-w-0 lg:col-span-4">
+                      <Field label="Status">
+                        <Select
+                          value={statusFilter}
                           onChange={(e) => setStatusFilter(e.target.value)}
-                          className="!h-12 border-stone-200"
+                          className="!h-12 w-full min-w-0 border-stone-200 font-bold focus:border-teal-500/50"
                         >
-                          <option value="all">All Statuses</option>
-                          <option value="started">In Progress</option>
-                          <option value="committed">Committed</option>
-                          <option value="failed">Failed</option>
-                          <option value="rolled_back">Rolled Back</option>
+                          <option value="all">All statuses</option>
+                          {Object.entries(TX_LOG_STATUS_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
                         </Select>
-                     </Field>
-                   </div>
-                </div>
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-stretch lg:gap-6">
+                    <div className="grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2 lg:col-span-8">
+                      <Field label="From">
+                        <Input
+                          type="date"
+                          value={dateFrom}
+                          onChange={(e) => setDateFrom(e.target.value)}
+                          className="!h-12 w-full min-w-0 border-stone-200 focus:border-teal-500/50"
+                        />
+                      </Field>
+                      <Field label="To">
+                        <Input
+                          type="date"
+                          value={dateTo}
+                          onChange={(e) => setDateTo(e.target.value)}
+                          className="!h-12 w-full min-w-0 border-stone-200 focus:border-teal-500/50"
+                        />
+                      </Field>
+                    </div>
+                    <div className="flex min-w-0 w-full flex-col justify-end lg:col-span-4">
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        className="w-full !h-12 shrink-0 shadow-sm"
+                      >
+                        Apply filters
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+
+                <FilterChips
+                  className="mt-6"
+                  items={[
+                    {
+                      key: "q",
+                      label: "Search",
+                      value: appliedQuery,
+                      onClear: () => {
+                        setPage(1);
+                        setFilterQuery("");
+                        setAppliedQuery("");
+                      },
+                    },
+                    {
+                      key: "status",
+                      label: "Status",
+                      value: appliedStatus !== "all" ? TX_LOG_STATUS_LABELS[appliedStatus] || appliedStatus : "",
+                      onClear: () => {
+                        setPage(1);
+                        setStatusFilter("all");
+                        setAppliedStatus("all");
+                      },
+                    },
+                    {
+                      key: "from",
+                      label: "From",
+                      value: appliedFrom,
+                      onClear: () => {
+                        setPage(1);
+                        setDateFrom("");
+                        setAppliedFrom("");
+                      },
+                    },
+                    {
+                      key: "to",
+                      label: "To",
+                      value: appliedTo,
+                      onClear: () => {
+                        setPage(1);
+                        setDateTo("");
+                        setAppliedTo("");
+                      },
+                    },
+                  ]}
+                  onClearAll={() => {
+                    setPage(1);
+                    setFilterQuery("");
+                    setStatusFilter("all");
+                    setDateFrom("");
+                    setDateTo("");
+                    setAppliedQuery("");
+                    setAppliedStatus("all");
+                    setAppliedFrom("");
+                    setAppliedTo("");
+                  }}
+                />
               </div>
             </Card>
 
-            <FilterChips 
-              items={[
-                { key: "q", label: "Search", value: filterQuery, onClear: () => setFilterQuery("") },
-                { key: "status", label: "Status", value: statusFilter !== "all" ? statusFilter : "", onClear: () => setStatusFilter("all") }
-              ]}
-              onClearAll={() => {
-                setFilterQuery("");
-                setStatusFilter("all");
-              }}
-            />
-
-        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-stone-400">
-          <Activity className="h-3 w-3 shrink-0 text-stone-300" aria-hidden />
-          <span>{filteredLogs.length} process entries monitored</span>
-        </div>
-
-        <Table
-          columns={[
-            { key: "started", label: "Started" },
-            { key: "process", label: "Business Process" },
-            { key: "user", label: "Initiated By" },
-            { key: "ref", label: "Reference" },
-            { key: "status", label: "Status" },
-          ]}
-          rows={filteredLogs.map((log) => {
-            const statusInfo = formatStatus(log.status);
-            const StatusIcon = statusInfo.Icon;
-            
-            return (
-              <tr 
-                key={log.tx_log_id} 
-                className="group cursor-pointer border-t border-stone-100 transition-colors hover:bg-stone-50 active:bg-stone-100"
-                onClick={() => setSelectedLog(log)}
-              >
-                    <td className="px-6 py-4 text-xs tabular-nums text-stone-500 whitespace-nowrap">
-                      {isMounted ? formatTimestamp(log.started_at) : "—"}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Activity size={14} className="text-teal-500" />
-                        <span className="text-sm font-semibold text-stone-900">{formatTxName(log.tx_name)}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-stone-600">
-                      {log.user_username || "System"}
-                    </td>
-                    <td className="px-6 py-4 text-xs font-mono text-stone-400">
-                      <span className="font-sans font-bold text-stone-500 mr-1">{formatEntity(log.reference_entity)}</span>
-                      <span className="text-stone-300">#</span>{log.reference_id}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight border ${statusInfo.color}`}>
-                        <StatusIcon size={12} strokeWidth={2.5} />
-                        {statusInfo.label}
+            <Card className="mt-6 overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-sm">
+              <Table
+                embedded
+                caption="Process runs"
+                ariaLabel="System workflows table"
+                columns={[
+                  {
+                    key: "id",
+                    label: "Transaction log ID",
+                    className: "w-[8.5rem]",
+                    headerClassName: "!px-4",
+                  },
+                  { key: "ts", label: "Started at" },
+                  { key: "tx", label: "Transaction" },
+                  { key: "user", label: "Initiated by" },
+                  { key: "status", label: "Status" },
+                  { key: "correlation", label: correlationColumnLabel(), className: "min-w-[7rem]" },
+                  { key: "ref", label: "Reference", className: "text-right" },
+                ]}
+                rows={filteredLogs.map((log) => (
+                  <tr
+                    key={log.tx_log_id}
+                    className="cursor-pointer border-t border-stone-100 transition-colors hover:bg-stone-50"
+                    onClick={() => setSelectedLog(log)}
+                  >
+                    <td className="px-4 py-4 align-middle">
+                      <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
+                        #TX-{log.tx_log_id}
                       </span>
                     </td>
+                    <td className="px-6 py-4 font-mono text-[11px] tabular-nums text-stone-600">
+                      {formatLogTimestamp(log.started_at)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-xs font-bold text-stone-900">{formatTxName(log.tx_name)}</span>
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-stone-500">
+                      {log.user_username || "System"}
+                    </td>
+                    <td className="px-6 py-4">
+                      <StatusBadge size="sm">{log.status}</StatusBadge>
+                    </td>
+                    <td className="px-6 py-4 align-middle">
+                      <CorrelationIdCell value={log.correlation_id} />
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-[10px] tracking-tighter text-stone-400">
+                      {`${log.reference_entity ?? ""} ${log.reference_id != null ? `#${log.reference_id}` : ""}`.trim() ||
+                        "—"}
+                    </td>
                   </tr>
-                );
-              })}
-              emptyTitle="No transaction logs found"
-              emptyDescription={filterQuery || statusFilter !== 'all' ? "Try adjusting your filters or search terms." : "Processes will appear here once business transactions are initiated."}
-            />
+                ))}
+                emptyTitle="No transaction logs found"
+                emptyDescription={
+                  appliedQuery || appliedStatus !== "all" || appliedFrom || appliedTo
+                    ? "No rows match the current filters."
+                    : "Runs appear here when staff use billing, contracts, payments, and related actions."
+                }
+              />
+              <TablePagination
+                meta={listMeta}
+                page={page}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={(n) => {
+                  setPage(1);
+                  setPerPage(n);
+                }}
+                disabled={loading}
+              />
+            </Card>
           </>
         )}
       </motion.div>
 
       {selectedLog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 backdrop-blur-sm bg-stone-900/20" role="dialog" aria-modal="true">
+          <button type="button" className="absolute inset-0" aria-label="Close" onClick={() => setSelectedLog(null)} />
           <motion.div 
             ref={modalRef}
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="HS-card-shadow bg-white rounded-3xl w-full max-w-2xl overflow-hidden border border-stone-200"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-2xl"
           >
-            <div className="px-8 py-6 border-b border-stone-100 flex items-start justify-between bg-stone-50/50">
+            <div className="flex items-start justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-6">
               <div>
-                <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest">Process Inspector</h3>
+                <h2 className="text-sm font-black uppercase tracking-widest text-stone-900">Run detail</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wider tabular-nums">Log ID: TX-{selectedLog.tx_log_id} · {isMounted ? formatTimestamp(selectedLog.started_at) : "—"}</p>
-                  {selectedLog.completed_at && (
-                    <span className="inline-flex h-1 w-1 rounded-full bg-stone-300" />
-                  )}
-                  {selectedLog.completed_at && (
-                    <p className="text-[10px] font-bold text-teal-600 uppercase tracking-widest">Duration: {formatDuration(selectedLog.started_at, selectedLog.completed_at)}</p>
-                  )}
+                    <p className="font-mono text-[10px] font-black tracking-tighter text-stone-400 uppercase">
+                        Log #{selectedLog.tx_log_id} · {formatLogTimestamp(selectedLog.started_at)}
+                    </p>
+                    {selectedLog.completed_at && (
+                        <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold ${selectedLog.status === 'failed' ? 'bg-rose-50 text-rose-600' : 'bg-teal-50 text-teal-600'}`}>
+                            {formatDuration(selectedLog.started_at, selectedLog.completed_at)}
+                        </span>
+                    )}
                 </div>
               </div>
-              <button 
-                onClick={() => setSelectedLog(null)} 
-                className="p-2.5 hover:bg-stone-200 rounded-xl transition-all duration-200 group"
-                aria-label="Close details"
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
               >
-                <X size={20} className="text-stone-400 group-hover:text-stone-900" />
+                <X size={18} />
               </button>
             </div>
-            
-            <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto HS-scrollbar">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div>
-                    <p className="text-[10px] font-bold tracking-widest text-stone-400 mb-2 uppercase">Business Process</p>
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600">
-                         <Activity size={20} />
+
+            <div className="max-h-[70vh] overflow-y-auto p-8">
+              <div className="grid gap-8 sm:grid-cols-2 mb-10">
+                  <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Process</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+                            <Activity size={20} />
+                        </div>
+                        <p className="text-lg font-black text-stone-900 leading-tight">{formatTxName(selectedLog.tx_name)}</p>
                       </div>
-                      <p className="text-xl font-black text-slate-900 leading-tight">{formatTxName(selectedLog.tx_name)}</p>
-                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold tracking-widest text-stone-400 mb-2 uppercase">Execution Status</p>
-                    {(() => {
-                      const s = formatStatus(selectedLog.status);
-                      const StatusIcon = s.Icon;
-                      return (
-                        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border ${s.color}`}>
-                          <StatusIcon size={14} strokeWidth={3} />
-                          {s.label}
+                  <div className="space-y-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Status</span>
+                      <div>
+                        <StatusBadge>{selectedLog.status}</StatusBadge>
+                      </div>
+                  </div>
+              </div>
+
+              <div className="space-y-4 mb-10">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">Times &amp; reference</h3>
+                <div className="rounded-2xl border border-stone-100 bg-stone-50/50 p-6 space-y-4 shadow-inner">
+                    <div className="flex justify-between items-center text-xs">
+                        <span className="text-stone-400 font-bold uppercase tracking-wider">Started</span>
+                        <span className="text-stone-900 font-mono font-bold tabular-nums">{formatLogTimestamp(selectedLog.started_at)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                        <span className="text-stone-400 font-bold uppercase tracking-wider">Completed</span>
+                        <span className="text-stone-900 font-mono font-bold tabular-nums">{formatLogTimestamp(selectedLog.completed_at)}</span>
+                    </div>
+                    <div className="pt-4 border-t border-stone-200/50 flex justify-between items-center text-xs">
+                        <span className="text-stone-400 font-bold uppercase tracking-wider">Reference</span>
+                        <span className="text-teal-700 font-black px-2 py-1 bg-teal-100/50 rounded-lg text-[9px] tracking-widest uppercase">
+                            {formatEntity(selectedLog.reference_entity)} #{selectedLog.reference_id}
                         </span>
-                      );
-                    })()}
-                  </div>
-               </div>
+                    </div>
+                    <div className="pt-4 border-t border-stone-200/50 space-y-2">
+                        <span className="text-stone-400 font-bold uppercase tracking-wider text-xs">Correlation ID</span>
+                        <div className="rounded-xl border border-stone-100 bg-white px-3 py-2">
+                          <CorrelationIdCell value={selectedLog.correlation_id} preferFull />
+                        </div>
+                    </div>
+                </div>
+              </div>
 
-               <div className="space-y-4">
-                  <p className="text-[10px] font-bold tracking-widest text-stone-400 uppercase">Contextual Meta</p>
-                  <div className="rounded-2xl border border-stone-100 bg-stone-50/50 p-6 space-y-4">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-stone-500 font-bold uppercase text-[10px] tracking-wider">Started At</span>
-                      <span className="text-stone-900 font-mono font-bold bg-white px-2 py-1 rounded border border-stone-100">{isMounted ? formatTimestamp(selectedLog.started_at) : "—"}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-stone-500 font-bold uppercase text-[10px] tracking-wider">Completed At</span>
-                      <span className="text-stone-900 font-mono font-bold bg-white px-2 py-1 rounded border border-stone-100">{isMounted ? formatTimestamp(selectedLog.completed_at) : "—"}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-stone-500 font-bold uppercase text-[10px] tracking-wider">Reference Entity</span>
-                      <span className="text-teal-700 font-black px-2 py-1 bg-teal-50 rounded border border-teal-100 uppercase text-[9px] tracking-widest">{formatEntity(selectedLog.reference_entity)} #{selectedLog.reference_id}</span>
-                    </div>
-                  </div>
-               </div>
-
-               <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-bold tracking-widest text-stone-400 uppercase">Input / Output State</p>
-                    <span className="text-[10px] font-bold text-stone-300">application/json</span>
-                  </div>
-                  <div className="relative group">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000"></div>
-                    <pre className="relative p-6 bg-slate-900 rounded-2xl font-mono text-[11px] leading-relaxed text-emerald-400 overflow-x-auto border border-white/5 HS-scrollbar">
-                      {selectedLog.details_json ? JSON.stringify(JSON.parse(selectedLog.details_json), null, 2) : "// No state data recorded for this phase"}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">Details (JSON)</h3>
+                    <span className="bg-stone-100 px-2 py-0.5 rounded text-[9px] font-bold text-stone-400 uppercase tracking-widest font-mono">application/json</span>
+                </div>
+                <div className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-teal-500 to-emerald-500 rounded-2xl blur opacity-10 group-hover:opacity-20 transition duration-500"></div>
+                    <pre className="relative max-h-80 overflow-y-auto rounded-2xl bg-stone-900 p-6 font-mono text-[11px] leading-relaxed text-emerald-400 shadow-2xl border border-white/5 HS-scrollbar">
+                      {selectedLog.details_json ? JSON.stringify(safeParseJson(selectedLog.details_json), null, 2) : "// No details recorded"}
                     </pre>
-                  </div>
-               </div>
+                </div>
+              </div>
             </div>
 
-            <div className="px-8 py-6 bg-stone-50/50 border-t border-stone-100 flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => setSelectedLog(null)} className="rounded-xl !h-11 px-6 font-black text-[10px] uppercase tracking-widest">
-                Close Inspector
+            <div className="px-8 py-6 bg-stone-50/50 border-t border-stone-100 flex justify-end">
+              <Button variant="secondary" onClick={() => setSelectedLog(null)} className="rounded-xl !h-11 px-8 font-black text-[10px] uppercase tracking-widest border-stone-200">
+                Close
               </Button>
             </div>
           </motion.div>

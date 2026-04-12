@@ -57,3 +57,37 @@ export function matchesPath(current, target) {
   if (target === "/dashboard") return current === "/dashboard";
   return current.startsWith(target);
 }
+
+/**
+ * Directory / registry style: "Last, First" (family name first, then given).
+ * Matches table sort order (last name, then first) without string-concat bugs.
+ */
+export function formatTenantDirectoryName(tenant) {
+  if (!tenant) return "—";
+  const first = String(tenant.first_name ?? "").trim();
+  const last = String(tenant.last_name ?? "").trim();
+  if (last && first) return `${last}, ${first}`;
+  if (last) return last;
+  if (first) return first;
+  return "—";
+}
+
+/** Two-letter initials for avatars (first + last char when both exist). */
+export function getTenantInitials(tenant) {
+  if (!tenant) return "?";
+  const f = String(tenant.first_name ?? "").trim();
+  const l = String(tenant.last_name ?? "").trim();
+  if (f && l) return (f[0] + l[0]).toUpperCase();
+  const single = f || l;
+  if (single.length >= 2) return single.slice(0, 2).toUpperCase();
+  return single.toUpperCase() || "?";
+}
+
+/** Sort key: last name, then first (do not concatenate for sort). */
+export function compareTenantDirectoryName(a, b) {
+  const ln = (t) => String(t?.last_name ?? "").trim();
+  const fn = (t) => String(t?.first_name ?? "").trim();
+  const last = ln(a).localeCompare(ln(b), undefined, { sensitivity: "base", numeric: true });
+  if (last !== 0) return last;
+  return fn(a).localeCompare(fn(b), undefined, { sensitivity: "base", numeric: true });
+}

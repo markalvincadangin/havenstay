@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
 use App\Models\Contract;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -24,12 +26,18 @@ class BillingService
         self::validateCreateInput($data);
 
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'billing_generation',
             auth()->id() ?? 0,
             'contracts',
             (string) $data['contract_id']
         );
+        $txLogId = $started['tx_log_id'];
+
+        if (Auth::check()) {
+            AuditService::setAuditUserContext(Auth::id());
+        }
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
@@ -65,18 +73,19 @@ class BillingService
         } catch (\Exception $e) {
             TransactionService::logRolledBack($txLogId, $e->getMessage());
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 
     /**
-     * List billing records with filters.
+     * List billing records with filters (query builder for pagination).
      *
-     * @param  array{contract_id?: int, tenant_id?: int}  $filters
-     * @return Collection<Billing>
+     * @param  array{contract_id?: int, tenant_id?: int, q?: string, status?: string, past_due?: bool}  $filters
+     * @return Builder<Billing>
      */
-    public static function list(array $filters = []): Collection
+    public static function listQuery(array $filters = []): Builder
     {
-        // CCR-003: SELECT query with filters
         $query = Billing::with(['contract.tenant', 'contract.room', 'lineItems', 'payments']);
 
         if (! empty($filters['contract_id'])) {
@@ -89,7 +98,49 @@ class BillingService
             });
         }
 
-        $billings = $query->orderByDesc('billing_id')->get();
+        if (! empty($filters['past_due'])) {
+            $query->whereDate('due_date', '<', now()->toDateString())
+                ->whereRaw(
+                    '((
+                        SELECT COALESCE(SUM(billing_line_items.amount), 0) FROM billing_line_items WHERE billing_line_items.billing_id = billing.billing_id
+                    ) - (
+                        SELECT COALESCE(SUM(payments.amount_paid), 0) FROM payments WHERE payments.billing_id = billing.billing_id AND payments.voided_at IS NULL
+                    )) > 0'
+                );
+        } elseif (! empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
+        if (! empty($filters['q'])) {
+            $needle = trim($filters['q']);
+            $query->where(function ($w) use ($needle): void {
+                $w->where('billing_id', 'like', "%{$needle}%")
+                    ->orWhereHas('contract.tenant', function ($t) use ($needle): void {
+                        $t->where('first_name', 'like', "%{$needle}%")
+                            ->orWhere('last_name', 'like', "%{$needle}%")
+                            ->orWhere('contact_number', 'like', "%{$needle}%");
+                    });
+                if (ctype_digit($needle)) {
+                    $w->orWhere('billing_id', (int) $needle)
+                        ->orWhereHas('contract', function ($c) use ($needle): void {
+                            $c->where('tenant_id', (int) $needle);
+                        });
+                }
+            });
+        }
+
+        return $query->orderByDesc('billing_id');
+    }
+
+    /**
+     * List billing records with filters.
+     *
+     * @param  array{contract_id?: int, tenant_id?: int}  $filters
+     * @return Collection<Billing>
+     */
+    public static function list(array $filters = []): Collection
+    {
+        $billings = self::listQuery($filters)->get();
 
         // BR-008: Status must track calendar (e.g. unpaid → overdue after due_date) even when no payment posted.
         foreach ($billings as $billing) {

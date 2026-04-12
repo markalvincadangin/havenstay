@@ -17,8 +17,17 @@ import { Field, Select } from "../../_components/ui/Fields";
 import PageHeader from "../../_components/ui/PageHeader";
 import { SkeletonListPage } from "../../_components/ui/Skeleton";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import { KpiCard } from "../../_components/ui/KpiCard";
 import { Table } from "../../_components/ui/Table";
-import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { StatusBadge } from "../../_components/ui/StatusBadge";
+import TablePagination from "../../_components/ui/TablePagination";
+import { ROOM_TYPE_LABELS } from "../../../lib/constants";
+import {
+  buildReportListQuery,
+  normalizeReportRows,
+  readStoredPerPage,
+} from "../../../lib/pagination";
+import { BarChart3, Home, Users, CheckCircle, Search } from "lucide-react";
 
 export default function OccupancyReportPage() {
   const { user: currentUser, authLoading } = useAuthGuard();
@@ -27,12 +36,21 @@ export default function OccupancyReportPage() {
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const [report, setReport] = useState({ summary: null, rows: [] });
+  const [tableMeta, setTableMeta] = useState(null);
   const [roomTypeFilter, setRoomTypeFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
   const loadReport = useCallback(async () => {
-    const data = await apiRequest("/api/reports/occupancy", { method: "GET" });
+    const extra = {};
+    if (roomTypeFilter !== "all") {
+      extra.room_type = roomTypeFilter;
+    }
+    const qs = buildReportListQuery(page, perPage, extra);
+    const data = await apiRequest(`/api/reports/occupancy${qs}`, { method: "GET" });
     setReport(data);
-  }, []);
+    setTableMeta(normalizeReportRows(data, "rows").meta);
+  }, [page, perPage, roomTypeFilter]);
 
   useEffect(() => {
     if (authLoading || !currentUser) return;
@@ -52,8 +70,8 @@ export default function OccupancyReportPage() {
           setApiUnavailable(true);
           setApiError("");
           setReport({ summary: null, rows: [] });
+          setTableMeta(null);
         } else {
-          setApiUnavailable(false);
           setApiError(flattenApiErrors(error));
         }
       } finally {
@@ -64,18 +82,20 @@ export default function OccupancyReportPage() {
     fetchReport();
   }, [authLoading, currentUser, loadReport]);
 
-  const rows = report.rows.filter((row) => {
-    if (roomTypeFilter === "all") return true;
-    return row.room_type === roomTypeFilter;
-  });
+  const { rows } = normalizeReportRows(report, "rows");
 
   const onExport = async () => {
     if (apiUnavailable) return;
     setApiError("");
     setExporting(true);
     try {
+      const p = new URLSearchParams();
+      if (roomTypeFilter !== "all") {
+        p.set("room_type", roomTypeFilter);
+      }
+      const exportQs = p.toString() ? `?${p.toString()}` : "";
       const stamp = new Date().toISOString().slice(0, 10);
-      await downloadCsvWithAuth("/api/reports/occupancy/export", `occupancy-report-${stamp}.csv`);
+      await downloadCsvWithAuth(`/api/reports/occupancy/export${exportQs}`, `occupancy-report-${stamp}.csv`);
     } catch (error) {
       setApiError(flattenApiErrors(error));
     } finally {
@@ -87,115 +107,171 @@ export default function OccupancyReportPage() {
     return <SkeletonListPage rows={8} />;
   }
 
+  const totalRecords = tableMeta?.total ?? rows.length;
+  const timestampLabel = `Generated ${formatReportTimestamp()} • ${totalRecords} records`;
+
   return (
     <AppMain>
-      <div className="report-page">
       <PageHeader
         title="Occupancy Report"
-        subtitle="Review room utilization and vacancy distribution."
+        subtitle={timestampLabel}
         breadcrumbs={<Breadcrumbs items={[{ label: "Reports", href: "/reports" }, { label: "Occupancy" }]} />}
         actions={(
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-            <Button type="button" onClick={onExport} loading={exporting} disabled={exporting || apiUnavailable}>
-              {exporting ? "Downloading..." : "Export CSV"}
+            <Button
+              type="button"
+              variant="primary"
+              onClick={onExport}
+              loading={exporting}
+              disabled={exporting || apiUnavailable}
+              className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
+            >
+              Export CSV
             </Button>
           </div>
         )}
       />
 
-      <p className="mt-2 text-xs italic text-[var(--color-text-secondary)] print:block">
-        Generated {formatReportTimestamp()}
-      </p>
-
-      {/* Summary Tiles - Moved outside card per layout standard */}
-      <Card className="mt-8 border-none bg-stone-100/50 shadow-inner">
-        <div className="grid gap-4 sm:grid-cols-4">
-          <SummaryTile label="Total Rooms" value={report.summary?.total_rooms} />
-          <SummaryTile label="Total Beds" value={report.summary?.total_beds} />
-          <SummaryTile label="Occupied Beds" value={report.summary?.occupied_beds} />
-          <SummaryTile label="Vacant Beds" value={report.summary?.vacant_beds} />
-        </div>
-      </Card>
-
-      <Card className="mt-8">
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Field label="Room Type Filter">
-            <Select value={roomTypeFilter} onChange={(event) => setRoomTypeFilter(event.target.value)} disabled={apiUnavailable}>
-              <option value="all">All Types</option>
-              <option value="solo">Solo</option>
-              <option value="shared">Shared</option>
-            </Select>
-          </Field>
-          <div className="flex items-end">
-            <Button type="button" variant="secondary" onClick={loadReport} disabled={apiUnavailable}>
-              Refresh
-            </Button>
-          </div>
-        </div>
-        <FilterChips
-          items={[
-            {
-              key: "room_type",
-              label: "Room Type",
-              value: roomTypeFilter !== "all" ? roomTypeFilter : "",
-              onClear: () => setRoomTypeFilter("all"),
-            },
-          ]}
-          onClearAll={() => setRoomTypeFilter("all")}
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Rooms" value={report.summary?.total_rooms ?? "—"} icon={Home} />
+        <KpiCard label="Total Beds" value={report.summary?.total_beds ?? "—"} icon={BarChart3} />
+        <KpiCard label="Occupied Beds" value={report.summary?.occupied_beds ?? "—"} icon={Users} />
+        <KpiCard
+          label="Occupancy Rate"
+          value={report.summary?.total_beds ? `${Math.round((report.summary.occupied_beds / report.summary.total_beds) * 100)}%` : "0%"}
+          progress={report.summary?.total_beds ? (report.summary.occupied_beds / report.summary.total_beds) * 100 : 0}
+          icon={CheckCircle}
         />
+      </div>
 
-        {apiUnavailable ? (
-          <Alert variant="info" className="mt-4" title="Backend report endpoint unavailable">
-            Occupancy report data is not yet available from the API.
-          </Alert>
-        ) : null}
-        {apiError ? <Alert variant="error" className="mt-4" title="Report error">{apiError}</Alert> : null}
+      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
+        <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm border border-teal-100/50">
+              <Search size={14} />
+            </div>
+            <h3 className="hs-strip-title uppercase tracking-widest text-xs font-black text-stone-900">Filters</h3>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => loadReport()}
+            disabled={apiUnavailable}
+            className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600"
+          >
+            Refresh
+          </Button>
+        </div>
+
+        <div className="p-8">
+          <div className="grid gap-6 sm:grid-cols-4">
+            <Field label="Filter by Room Type">
+              <Select
+                value={roomTypeFilter}
+                onChange={(event) => {
+                  setRoomTypeFilter(event.target.value);
+                  setPage(1);
+                }}
+                disabled={apiUnavailable}
+                className="!h-11"
+              >
+                <option value="all">All Room Types</option>
+                {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          {roomTypeFilter !== "all" && (
+            <div className="mt-6">
+              <FilterChips
+                items={[
+                  {
+                    key: "room_type",
+                    label: "Room type",
+                    value: roomTypeFilter !== "all" ? roomTypeFilter : "",
+                    onClear: () => {
+                      setRoomTypeFilter("all");
+                      setPage(1);
+                    },
+                  },
+                ]}
+                onClearAll={() => {
+                  setRoomTypeFilter("all");
+                  setPage(1);
+                }}
+              />
+            </div>
+          )}
+
+          {apiUnavailable ? (
+            <Alert variant="info" className="mt-6" title="Report unavailable">
+              The occupancy report endpoint did not respond. Check API configuration and try again.
+            </Alert>
+          ) : null}
+          {apiError ? <Alert variant="error" className="mt-6" title="Sync Issue">{apiError}</Alert> : null}
+        </div>
       </Card>
 
-      <div className="mt-8">
+      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
         <Table
-          caption="Occupancy report table"
-        ariaLabel="Occupancy report results"
-        columns={[
-          { key: "room", label: "Room" },
-          { key: "type", label: "Type" },
-          { key: "beds", label: "Total Beds" },
-          { key: "occupied", label: "Occupied" },
-          { key: "vacant", label: "Vacant" },
-          { key: "rate", label: "Occupancy %" },
-        ]}
-        rows={rows.map((row) => (
-          <tr key={row.room_id} className="border-t border-[var(--color-border)] hover:bg-[var(--surface-muted)] transition-colors duration-100">
-            <td className="px-4 py-3.5 font-medium text-[var(--color-text)]">{row.room_code}</td>
-            <td className="px-4 py-3.5"><StatusBadge>{row.room_type}</StatusBadge></td>
-            <td className="px-4 py-3.5 text-[var(--color-text)]">{row.total_beds}</td>
-            <td className="px-4 py-3.5 text-emerald-700">{row.occupied_beds}</td>
-            <td className="px-4 py-3.5 text-rose-700">{row.vacant_beds}</td>
-            <td className="px-4 py-3.5">
-              <div className="flex items-center gap-2">
-                <div className="h-1.5 w-16 rounded-full bg-[var(--color-primary)]/10 overflow-hidden">
-                  <div className="h-full bg-[var(--color-primary)]" style={{ width: `${row.occupancy_rate}%` }} />
+          embedded={true}
+          caption="Occupancy records"
+          ariaLabel="Bed utilization records"
+          columns={[
+            { key: "room", label: "Room" },
+            { key: "type", label: "Room type" },
+            { key: "beds", label: "Beds (total)", className: "text-right" },
+            { key: "occupied", label: "Occupied", className: "text-right" },
+            { key: "vacant", label: "Vacant", className: "text-right" },
+            { key: "rate", label: "Occupancy %", className: "text-right" },
+          ]}
+          rows={rows.map((row) => (
+            <tr key={row.room_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
+              <td className="px-6 py-4">
+                <div className="font-mono text-sm font-black uppercase leading-none tracking-tight text-stone-900">
+                  {row.room_code}
                 </div>
-                <span className="font-mono text-sm tabular-nums">{row.occupancy_rate}%</span>
-              </div>
-            </td>
-          </tr>
-        ))}
-        emptyTitle="No occupancy records found"
-        emptyDescription="Try changing the room type filter or refresh the report."
-      />
-      </div>
-      </div>
+                {row.room_id != null ? (
+                  <div className="mt-0.5 font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
+                    #ROOM-{row.room_id}
+                  </div>
+                ) : null}
+              </td>
+              <td className="px-6 py-4">
+                <StatusBadge>{row.room_type}</StatusBadge>
+              </td>
+              <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-500">{row.total_beds}</td>
+              <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-teal-700 font-bold">{row.occupied_beds}</td>
+              <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-rose-700 font-bold">{row.vacant_beds}</td>
+              <td className="px-6 py-4">
+                <div className="flex items-center justify-end gap-3">
+                  <div className="h-1.5 w-16 rounded-full bg-stone-100 overflow-hidden">
+                    <div className="h-full bg-teal-500" style={{ width: `${row.occupancy_rate}%` }} />
+                  </div>
+                  <span className="font-mono text-[11px] font-bold tabular-nums text-stone-900">{row.occupancy_rate}%</span>
+                </div>
+              </td>
+            </tr>
+          ))}
+          emptyTitle="No occupancy records found"
+          emptyDescription="Try adjusting your filters or search keywords to refine the results."
+        />
+        <TablePagination
+          meta={tableMeta}
+          page={page}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={(n) => {
+            setPage(1);
+            setPerPage(n);
+          }}
+          disabled={false}
+        />
+      </Card>
     </AppMain>
-  );
-}
-
-function SummaryTile({ label, value }) {
-  return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-5 shadow-sm" aria-label={`${label}: ${value ?? 0}`}>
-      <div className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">{label}</div>
-      <div className="mt-2 font-mono text-[1.875rem] font-semibold leading-none tracking-[-0.025em] text-[var(--color-text)] tabular-nums">{value ?? 0}</div>
-    </div>
   );
 }

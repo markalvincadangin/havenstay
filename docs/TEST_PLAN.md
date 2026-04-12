@@ -1,6 +1,6 @@
 # HavenStay BHMS — Test Plan
 
-**Version:** 2.0  
+**Version:** 2.2  
 **Last updated:** April 2026  
 **Aligned to:** `docs/SRS.md` v2.1 · `docs/SDD.md` · `docs/TEST_READINESS.md` · `docs/DATABASE.md`
 
@@ -86,6 +86,13 @@ This document is the **single registry** for:
 | **TC-PAYMENT-003** | `BillingPaymentManagementTest::test_invalid_payment_amount_rolls_back` | FR-024, CCR-006/007 |
 | **TC-REPORT-001** | `ReportsExportTest::test_tc_report_001_occupancy_report_generation_matches_live_data` | FR-028, FR-031 |
 | **TC-REPORT-002** | `ReportsExportTest::test_tc_report_002_billing_summary_date_filter_and_csv_export` | FR-029, FR-032, CCR-004 |
+| **TC-REPORT-003** | `ApiWorkflowAndBoundaryTest::test_viewer_can_access_occupancy_status_report` | FR-015, FR-028, CCR-005 (`vw_occupancy_status`) |
+| **TC-REPORT-004** | `ApiWorkflowAndBoundaryTest::test_viewer_can_access_active_contracts_report` | FR-016, CCR-005 (`vw_active_contracts`) |
+| **TC-REPORT-005** | `BillingPaymentManagementTest::test_tenant_ledger_same_day_orders_debit_before_credit` | FR-030, RPT-01 (stable same-day ledger order) |
+| **TC-AUDIT-EXPORT-001** | `ApiWorkflowAndBoundaryTest::test_admin_can_export_audit_logs_csv` | FR-033, audit CSV stream |
+| **TC-AUDIT-EXPORT-002** | `ApiWorkflowAndBoundaryTest::test_staff_cannot_export_audit_logs_csv`, `test_viewer_cannot_export_audit_logs_csv` | FR-002, FR-033 (admin-only export) |
+| **TC-TX-LOG-001** | `ApiWorkflowAndBoundaryTest::test_transaction_logs_accepts_limit_query` | AUD-04 (honored `limit`) |
+| **TC-TX-LOG-002** | `ApiWorkflowAndBoundaryTest::test_transaction_logs_limit_validation_max` | Invalid `limit` → 422 |
 | *(compliance)* | `ComplianceMysqlEvidenceTest` | CCR-007 scaffolding, MySQL `@app_user_id` |
 | *(boundary)* | `ApiWorkflowAndBoundaryTest`, `ApiEdgeCasesTest` | FR-036–039, NFR-004/005 |
 
@@ -211,12 +218,16 @@ Aligned with **`docs/TEST_READINESS.md`**. Use for manual runs, Playwright, or T
 | ID | Steps |
 | :--- | :--- |
 | LIVE-030 | Each report card loads data; CSV export returns 200 and matches on-screen columns (FR-032). |
+| LIVE-031 | Open **Occupancy (bed-level)** and **Active contracts** from `/reports`; filters apply; CSV download uses authenticated download helper (same pattern as other reports). |
+| LIVE-032 | **Tenant ledger** for a tenant with billing + payment on the same calendar date: running balance matches debit-then-credit order (spot-check vs **TC-REPORT-005** on SQLite; optional MySQL seed confirmation). |
 
 ### 9.5 Logs and audit UI
 
 | ID | Steps |
 | :--- | :--- |
 | LIVE-040 | Admin views **Audit Logs** and **Transaction Logs**; tables readable. |
+| LIVE-041 | **Admin:** Audit Logs → set filters → **Export CSV**; file opens and matches table. **Staff/Viewer:** export URL returns **403** (see **TC-AUDIT-EXPORT-002**). |
+| LIVE-042 | **Admin:** Transaction Logs — optional `?limit=` in network tab or embedded tab reflects row cap; invalid limit shows validation error. |
 
 ---
 
@@ -231,8 +242,8 @@ Aligned with **`docs/TEST_READINESS.md`**. Use for manual runs, Playwright, or T
 | FR-016–019 | TC-CONTRACT-*, INT-101/103, LIVE-022 |
 | FR-020–023 | TC-BILLING-*, INT-102/103 |
 | FR-024–027 | TC-PAYMENT-*, TC-TX-001/003, INT-602 |
-| FR-028–032b | TC-REPORT-*, INT-301–306, LIVE-030 |
-| FR-033–035 | TC-TRIGGER-*, TC-TX-*, TC-CCR-006/008 |
+| FR-028–032b | TC-REPORT-001–005, INT-301–306, LIVE-030 |
+| FR-033–035 | TC-TRIGGER-*, TC-TX-*, TC-AUDIT-EXPORT-*, TC-TX-LOG-*, TC-CCR-006/008 |
 | FR-036–039 | ApiWorkflow*, INT-101/105/106 |
 | FR-040–045 | CCR bundles: Feature suite + `ComplianceMysqlEvidenceTest` + MySQL |
 
@@ -274,6 +285,7 @@ cd frontend && npm test && npm run lint && npm run build
 | :--- | :--- | :--- |
 | 2.0 | 2026-04-11 | Initial publication: `TC-*`/`INT-*`/`LIVE-*` registry, schema source of truth, gaps for TC-TX-004/005/006, alignment with `havenstay_schema.sql` (6 views, 24 triggers). |
 | 2.1 | 2026-04-11 | TC-TX-004/006 implemented in `ContractManagementTest` (`tenant_move_out` transaction logs). TC-TX-005 remains reserved (rollback-after-start). |
+| 2.2 | 2026-04-12 | Registry: **TC-REPORT-003–005**, **TC-AUDIT-EXPORT-001/002**, **TC-TX-LOG-001/002** (`ApiWorkflowAndBoundaryTest`, `BillingPaymentManagementTest`); LIVE-031–032, LIVE-041–042 (audit remediation / optional report surfaces). |
 
 ---
 

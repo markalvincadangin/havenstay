@@ -27,7 +27,10 @@ import PageHeader from "../../_components/ui/PageHeader";
 import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
-import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { StatusBadge } from "../../_components/ui/StatusBadge";
+import { Table } from "../../_components/ui/Table";
+import { secondaryOutlineLinkClass } from "../../_components/ui/LinkTokens";
+import { ROOM_UNIT_OFFLINE_BED_HINT } from "../../../lib/constants";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -93,6 +96,11 @@ export default function RoomDetailsPage() {
 
   const title = room ? `Room ${room.room_code}` : "Room";
   const bedSpaces = room?.bed_spaces ?? [];
+  const roomStatusLower = String(room?.status ?? "").toLowerCase();
+  const unitOfflineBedHint =
+    room && (roomStatusLower === "maintenance" || roomStatusLower === "unavailable")
+      ? ROOM_UNIT_OFFLINE_BED_HINT[roomStatusLower]
+      : null;
 
   return (
     <AppMain>
@@ -121,7 +129,7 @@ export default function RoomDetailsPage() {
           breadcrumbs={
             <Breadcrumbs
               items={[
-                { label: "Room Registry", href: "/rooms" },
+                { label: "Room Inventory", href: "/rooms" },
                 { label: "Room Profile" },
               ]}
             />
@@ -132,19 +140,19 @@ export default function RoomDetailsPage() {
                 type="button"
                 onClick={() => router.push("/rooms")}
                 className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Room Registry"
+                aria-label="Back to Room Inventory"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
-              {canManageRooms(currentUser) ? (
+              {canManageRooms(currentUser) && (
                 <Link
                   href={`/rooms/${roomId}/edit`}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-teal-900/10 transition-colors hover:bg-teal-700"
+                  className={secondaryOutlineLinkClass + " px-6"}
                 >
                   <Edit2 size={16} aria-hidden />
-                  Update details
+                  Update Details
                 </Link>
-              ) : null}
+              )}
               <div className="border-l border-stone-200 pl-3">
                 <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
               </div>
@@ -155,6 +163,12 @@ export default function RoomDetailsPage() {
         {apiError ? (
           <Alert variant="error" title="Could not load room">
             {apiError}
+          </Alert>
+        ) : null}
+
+        {unitOfflineBedHint ? (
+          <Alert variant="info" title="Unit not bookable">
+            {unitOfflineBedHint}
           </Alert>
         ) : null}
 
@@ -171,7 +185,7 @@ export default function RoomDetailsPage() {
                 </div>
               </div>
               <div className="flex justify-center border-b border-stone-100 bg-stone-50/30 px-4 py-3">
-                <span className="text-xs font-bold uppercase tracking-wide text-stone-400 [word-spacing:0.08em]">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
                   At a Glance
                 </span>
               </div>
@@ -179,11 +193,11 @@ export default function RoomDetailsPage() {
                 <MetricItem label="Monthly Rate" value={formatPHP(room?.monthly_rate)} icon={Receipt} />
                 <MetricItem
                   label="Bed Capacity"
-                  value={`${room?.capacity ?? "—"} ${Number(room?.capacity) === 1 ? "bed" : "beds"}`}
+                  value={`${room?.capacity ?? "—"} ${Number(room?.capacity) === 1 ? "Bed" : "Beds"}`}
                   icon={UserCheck}
                 />
                 <MetricItem
-                  label="Room Category"
+                  label="Unit Category"
                   value={
                     room?.room_type
                       ? room.room_type.charAt(0).toUpperCase() + room.room_type.slice(1)
@@ -194,16 +208,18 @@ export default function RoomDetailsPage() {
               </div>
             </Card>
 
-            <Card className="rounded-2xl border-stone-200 !p-8 shadow-sm">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
-                  <Info size={16} aria-hidden />
-                </div>
-                <h3 className="hs-strip-title">Amenities</h3>
-              </div>
-              <p className="text-sm font-medium leading-relaxed text-stone-600">
-                {room?.amenities || "No amenities on file for this room."}
-              </p>
+            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+               <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                     <Info size={14} aria-hidden />
+                  </div>
+                  <h3 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Amenities</h3>
+               </div>
+               <div className="p-8">
+                  <p className="text-sm font-medium leading-relaxed text-stone-600">
+                    {room?.amenities || "No amenities on file for this room."}
+                  </p>
+               </div>
             </Card>
           </aside>
 
@@ -214,55 +230,37 @@ export default function RoomDetailsPage() {
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                     <ShieldCheck size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title">Bed Spaces</h2>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Bed Assignments</h2>
                 </div>
                 <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
                   {bedSpaces.length} {bedSpaces.length === 1 ? "record" : "records"}
                 </span>
               </div>
 
-              <div className="overflow-x-auto p-0">
-                <table className="w-full min-w-[320px] text-left">
-                  <caption className="sr-only">Bed spaces for this room</caption>
-                  <thead>
-                    <tr className="border-b border-stone-100 bg-stone-50/50">
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                        Registry ID
-                      </th>
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                        Bed label
-                      </th>
-                      <th className="px-6 py-4 text-left text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                        Status
-                      </th>
+              <div className="p-0">
+                <Table
+                  embedded
+                  columns={[
+                    { key: "registry_id", label: "Bed space ID" },
+                    { key: "bed_label", label: "Bed Label" },
+                    { key: "status", label: "Status" }
+                  ]}
+                  rows={bedSpaces.map((bed) => (
+                    <tr key={bed.bed_space_id} className="transition-colors hover:bg-stone-50">
+                      <td className="px-6 py-4">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
+                          #BS-{bed.bed_space_id}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-bold text-stone-900 font-mono tracking-tight">{bed.bed_label}</td>
+                      <td className="px-6 py-4">
+                        <StatusBadge size="xs">{bed.status}</StatusBadge>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {bedSpaces.map((bed) => (
-                      <tr key={bed.bed_space_id} className="transition-colors hover:bg-stone-50">
-                        <td className="px-6 py-4">
-                          <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
-                            #BS-{bed.bed_space_id}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm font-bold text-stone-900">{bed.bed_label}</td>
-                        <td className="px-6 py-4">
-                          <StatusBadge size="xs">{bed.status}</StatusBadge>
-                        </td>
-                      </tr>
-                    ))}
-                    {bedSpaces.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-12 text-center">
-                          <p className="text-sm font-bold text-stone-700">No bed spaces</p>
-                          <p className="mt-1 text-xs font-medium text-stone-500">
-                            Bed records should appear here once the room is configured.
-                          </p>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                  ))}
+                  emptyTitle="No bed spaces"
+                  emptyDescription="Bed records should appear here once the room is configured."
+                />
               </div>
             </Card>
 
@@ -271,7 +269,7 @@ export default function RoomDetailsPage() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
                   <Settings size={14} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title">Description</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Unit Description</h2>
               </div>
               <div className="p-8">
                 <p className="text-sm font-medium leading-relaxed text-stone-600">

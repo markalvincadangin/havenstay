@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\AuditService;
 use App\Services\AuthorizationService;
+use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -199,11 +200,45 @@ class UserController extends Controller
             ], 403);
         }
 
-        $users = User::with('role')->get();
+        $validated = $request->validate(array_merge([
+            'q' => ['nullable', 'string', 'max:200'],
+            'role' => ['nullable', 'string', 'max:32'],
+            'account_status' => ['nullable', 'string', 'in:active,inactive'],
+        ], PaginationResponse::queryRules()));
 
-        return response()->json([
-            'users' => $users,
-        ]);
+        $pageParams = PaginationResponse::normalizePageParams($validated);
+
+        $query = User::with('role')->orderByDesc('user_id');
+
+        if (! empty($validated['q'])) {
+            $needle = $validated['q'];
+            $query->where(function ($w) use ($needle): void {
+                $w->where('username', 'LIKE', "%{$needle}%")
+                    ->orWhere('first_name', 'LIKE', "%{$needle}%")
+                    ->orWhere('last_name', 'LIKE', "%{$needle}%")
+                    ->orWhere('email', 'LIKE', "%{$needle}%");
+
+                if (ctype_digit($needle)) {
+                    $w->orWhere('user_id', (int) $needle);
+                }
+            });
+        }
+
+        if (! empty($validated['role'])) {
+            $query->whereHas('role', function ($r) use ($validated): void {
+                $r->where('role_name', $validated['role']);
+            });
+        }
+
+        if (($validated['account_status'] ?? null) === 'active') {
+            $query->where('is_active', true);
+        } elseif (($validated['account_status'] ?? null) === 'inactive') {
+            $query->where('is_active', false);
+        }
+
+        $paginator = $query->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+
+        return PaginationResponse::fromPaginator($paginator);
     }
 
     /**

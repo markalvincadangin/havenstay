@@ -1,0 +1,162 @@
+<?php
+
+namespace Tests\Unit;
+
+use PHPUnit\Framework\TestCase;
+
+/**
+ * Asserts Laravel `in:` validation lists match `db/havenstay_schema.sql` ENUM columns (API ↔ DB contract).
+ *
+ * Extends PHPUnit directly (no app bootstrap) — paths are resolved from `backend/tests/Unit`.
+ */
+class SchemaEnumAlignmentTest extends TestCase
+{
+    private static string $schemaSql;
+
+    public static function setUpBeforeClass(): void
+    {
+        $path = dirname(__DIR__, 2).DIRECTORY_SEPARATOR.'database'.DIRECTORY_SEPARATOR.'sql'.DIRECTORY_SEPARATOR.'havenstay_schema.sql';
+        self::assertFileExists($path, 'DDL mirror: backend/database/sql/havenstay_schema.sql (must match root db/havenstay_schema.sql)');
+        self::$schemaSql = (string) file_get_contents($path);
+    }
+
+    private function backendPath(string $relative): string
+    {
+        return dirname(__DIR__, 2).DIRECTORY_SEPARATOR.$relative;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function parseMysqlEnum(string $table, string $column): array
+    {
+        $this->assertMatchesRegularExpression(
+            '/CREATE TABLE\s+'.$table.'\s*\(([\s\S]*?)\)\s*ENGINE/i',
+            self::$schemaSql,
+            "CREATE TABLE {$table}"
+        );
+        preg_match('/CREATE TABLE\s+'.$table.'\s*\(([\s\S]*?)\)\s*ENGINE/i', self::$schemaSql, $block);
+        $inner = $block[1];
+        $this->assertMatchesRegularExpression(
+            '/\b'.$column.'\s+ENUM\s*\(([^)]+)\)/i',
+            $inner,
+            "ENUM {$table}.{$column}"
+        );
+        preg_match('/\b'.$column.'\s+ENUM\s*\(([^)]+)\)/i', $inner, $m);
+        preg_match_all("/'([^']+)'/", $m[1], $vals);
+
+        return $vals[1];
+    }
+
+    /**
+     * @param  list<string>  $expectedSorted
+     */
+    private function assertControllerInRuleMatches(string $controllerBasename, string $fieldPattern, array $expectedSorted): void
+    {
+        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.$controllerBasename);
+        $this->assertFileExists($path);
+        $content = (string) file_get_contents($path);
+        $this->assertMatchesRegularExpression($fieldPattern, $content, $controllerBasename.' contains '.$fieldPattern);
+        preg_match($fieldPattern, $content, $m);
+        $actual = explode(',', $m[1]);
+        sort($actual);
+        $this->assertSame($expectedSorted, $actual, $controllerBasename.' validation vs schema');
+    }
+
+    public function test_payment_method_matches_payments_table(): void
+    {
+        $expected = $this->parseMysqlEnum('payments', 'payment_method');
+        sort($expected);
+        $this->assertControllerInRuleMatches(
+            'PaymentController.php',
+            "/'payment_method'\s*=>\s*\[[^\]]*'in:([^']+)'/",
+            $expected
+        );
+    }
+
+    public function test_tenant_status_matches_tenants_table(): void
+    {
+        $expected = $this->parseMysqlEnum('tenants', 'status');
+        sort($expected);
+        $this->assertControllerInRuleMatches(
+            'TenantController.php',
+            "/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/",
+            $expected
+        );
+    }
+
+    public function test_contract_status_matches_contracts_table(): void
+    {
+        $expected = $this->parseMysqlEnum('contracts', 'status');
+        sort($expected);
+        $this->assertControllerInRuleMatches(
+            'ContractController.php',
+            "/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/",
+            $expected
+        );
+    }
+
+    public function test_billing_line_item_type_matches_billing_line_items_table(): void
+    {
+        $expected = $this->parseMysqlEnum('billing_line_items', 'item_type');
+        sort($expected);
+        $this->assertControllerInRuleMatches(
+            'BillingController.php',
+            "/'line_items\.\*\.item_type'\s*=>\s*\[[^\]]*'in:([^']+)'/",
+            $expected
+        );
+    }
+
+    public function test_transaction_log_status_matches_transaction_logs_table(): void
+    {
+        $expected = $this->parseMysqlEnum('transaction_logs', 'status');
+        sort($expected);
+        $this->assertControllerInRuleMatches(
+            'TransactionController.php',
+            "/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/",
+            $expected
+        );
+    }
+
+    public function test_audit_log_action_matches_audit_logs_table(): void
+    {
+        $expected = $this->parseMysqlEnum('audit_logs', 'action');
+        sort($expected);
+        $this->assertControllerInRuleMatches(
+            'AuditLogController.php',
+            "/'action'\s*=>\s*\[[^\]]*'in:([^']+)'/",
+            $expected
+        );
+    }
+
+    public function test_room_fields_match_schema(): void
+    {
+        $type = $this->parseMysqlEnum('rooms', 'room_type');
+        sort($type);
+        $status = $this->parseMysqlEnum('rooms', 'status');
+        sort($status);
+        $bed = $this->parseMysqlEnum('bed_spaces', 'status');
+        sort($bed);
+
+        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'RoomController.php');
+        $content = (string) file_get_contents($path);
+
+        preg_match("/'room_type'\s*=>\s*\[[^\]]*'in:([^']+)'/", $content, $m);
+        $this->assertNotEmpty($m[1]);
+        $a = explode(',', $m[1]);
+        sort($a);
+        $this->assertSame($type, $a);
+
+        preg_match("/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/", $content, $m2);
+        $this->assertNotEmpty($m2[1]);
+        $b = explode(',', $m2[1]);
+        sort($b);
+        $this->assertSame($status, $b);
+
+        preg_match("/'bed_spaces\.\*\.status'\s*=>\s*\[[^\]]*'in:([^']+)'/", $content, $m3);
+        $this->assertNotEmpty($m3[1]);
+        $c = explode(',', $m3[1]);
+        sort($c);
+        $this->assertSame($bed, $c);
+    }
+}

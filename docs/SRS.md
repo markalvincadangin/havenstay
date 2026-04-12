@@ -82,7 +82,7 @@ Out of scope for Release 1:
 | **CCR-004** | Implement SQL operators including AND, OR, BETWEEN, and LIKE. | **Required** | Satisfied — LIKE in search; BETWEEN in date-range reports |
 | **CCR-005** | Implement SQL joins for multi-table data retrieval. | **Required** | Satisfied — 6 reporting views with INNER and LEFT JOINs |
 | **CCR-006** | Implement transaction control (START TRANSACTION, COMMIT, ROLLBACK). | **Required** | Satisfied — `DB::transaction()` on all critical write workflows |
-| **CCR-007** | Maintain transaction logs to support reliability and auditability. | **Required** | Satisfied — `transaction_logs` table; started/committed/failed states |
+| **CCR-007** | Maintain transaction logs to support reliability and auditability. | **Required** | Satisfied — `transaction_logs` table; `started` / `committed` / `rolled_back` / `failed` states |
 | **CCR-008** | Implement database triggers for change logging on transactional tables. | **Required** | Satisfied — 24 AFTER triggers on 8 core tables |
 
 **Compliance mapping:** All CCR items are mapped to specific functional requirements in Section 4.11, to design decisions in `docs/SDD.md`, and to test evidence in `docs/TEST_PLAN.md`.
@@ -202,7 +202,7 @@ HavenStay BHMS replaces fragmented paper records and spreadsheets with a single 
 
 ### 4.9 Audit and Transaction Logging
 - **FR-033:** All INSERT, UPDATE, and DELETE operations on core tables shall be captured in `audit_logs` via database-level **triggers** (CCR-008). This ensures no data change goes unrecorded, even if done via direct SQL.
-- **FR-034:** All critical business and financial write workflows (tenant check-in, move-out, payment post, payment void) shall produce `transaction_logs` entries with `started`/`committed`/`failed` states (CCR-007). These are managed at the **application/service level** to track the success of complex logic.
+- **FR-034:** All critical business and financial write workflows (tenant check-in, move-out, payment post, payment void) shall produce `transaction_logs` entries with `started` / `committed` / `rolled_back` / `failed` states (CCR-007). These are managed at the **application/service level** to track the success of complex logic.
 - **FR-035:** Transaction log entries shall be inserted before `DB::transaction()` so that failure records persist through rollback.
 
 ### 4.10 Data Integrity
@@ -266,6 +266,7 @@ See `docs/SDD.md` Section 4.2 for the complete entity table.
 | `contracts` | `status` | `active`, `completed`, `terminated` |
 | `billing` | `status` | `unpaid`, `partial`, `paid`, `overdue` |
 | `payments` | `payment_method` | `cash`, `gcash`, `bank_transfer`, `other` |
+| `audit_logs` | `action` | `create`, `update`, `delete`, `login`, `logout`, `access_denied`, `status_change` |
 | `transaction_logs` | `status` | `started`, `committed`, `rolled_back`, `failed` |
 
 ---

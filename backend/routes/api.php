@@ -86,6 +86,8 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('payments')->group(fun
 
 // FR-028..FR-032: Reporting and export endpoints (read-only for Admin/Staff/Viewer)
 Route::middleware(['auth:sanctum', 'auth.check'])->prefix('reports')->group(function (): void {
+    Route::get('occupancy-status', [ReportController::class, 'occupancyStatus']);
+    Route::get('active-contracts', [ReportController::class, 'activeContracts']);
     Route::get('occupancy', [ReportController::class, 'occupancy']);
     Route::get('billing-summary', [ReportController::class, 'billingSummary']);
     Route::get('outstanding-balances', [ReportController::class, 'outstandingBalances']);
@@ -93,6 +95,8 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('reports')->group(func
     Route::get('tenant-ledger', [ReportController::class, 'tenantLedger']);
     Route::get('tenant-history', [ReportController::class, 'tenantHistory']);
 
+    Route::get('occupancy-status/export', [ReportController::class, 'occupancyStatusExport']);
+    Route::get('active-contracts/export', [ReportController::class, 'activeContractsExport']);
     Route::get('occupancy/export', [ReportController::class, 'occupancyExport']);
     Route::get('billing-summary/export', [ReportController::class, 'billingSummaryExport']);
     Route::get('outstanding-balances/export', [ReportController::class, 'outstandingBalancesExport']);
@@ -104,6 +108,7 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('reports')->group(func
 // FR-033, FR-034: Audit log inspection endpoints (Admin only)
 Route::middleware(['auth:sanctum', 'auth.check'])->group(function (): void {
     Route::get('/audit-logs', [AuditLogController::class, 'index']);
+    Route::get('/audit-logs/export', [AuditLogController::class, 'export']);
     Route::get('/transaction-logs', [TransactionController::class, 'index']);
 });
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { Edit2, Plus, Search, Shield, Users } from "lucide-react";
+import { Edit2, Search, Shield, Users, UserPlus, UserCheck, ShieldCheck } from "lucide-react";
 import { apiRequest } from "../../lib/api";
 import { flattenApiErrors } from "../../lib/errors";
 import { canManageUsers } from "../../lib/auth";
@@ -17,8 +18,16 @@ import { Field, Input, Select } from "../_components/ui/Fields";
 import PageHeader from "../_components/ui/PageHeader";
 import { SkeletonListPage } from "../_components/ui/Skeleton";
 import UserRoleBadge from "../_components/ui/UserRoleBadge";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { StatusBadge } from "../_components/ui/StatusBadge";
 import { Table } from "../_components/ui/Table";
+import { KpiCard } from "../_components/ui/KpiCard";
+import TablePagination from "../_components/ui/TablePagination";
+import { ROLE_NAME_LABELS, USER_ACCOUNT_STATUS_FILTER_LABELS } from "../../lib/constants";
+import {
+  buildPaginationQuery,
+  normalizePaginatedList,
+  readStoredPerPage,
+} from "../../lib/pagination";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -28,22 +37,6 @@ const pageVariants = {
 
 function safeLower(value) {
   return String(value ?? "").toLowerCase();
-}
-
-function KpiCard({ label, value, valueClass = "" }) {
-  return (
-    <div
-      className="rounded-2xl border border-stone-200 bg-white px-6 py-5 shadow-sm"
-      aria-label={label}
-    >
-      <div className="mb-2 text-[10px] font-bold tracking-widest text-stone-500">
-        {label}
-      </div>
-      <div className={`text-2xl font-black leading-none tracking-tight tabular-nums text-stone-900 sm:text-3xl ${valueClass}`}>
-        {value}
-      </div>
-    </div>
-  );
 }
 
 export default function UsersPage() {
@@ -57,23 +50,41 @@ export default function UsersPage() {
   const [actionLoading, setActionLoading] = useState(null);
 
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(() => readStoredPerPage());
+  const [listMeta, setListMeta] = useState(null);
 
   const canAccess = useMemo(() => canManageUsers(currentUser), [currentUser]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
   const fetchUsers = useCallback(async () => {
     setApiError("");
     setLoading(true);
     try {
-      const data = await apiRequest("/api/users", { method: "GET" });
-      setUsers(Array.isArray(data?.users) ? data.users : []);
+      const extra = {};
+      if (debouncedQuery) extra.q = debouncedQuery;
+      if (roleFilter !== "all") extra.role = roleFilter;
+      if (statusFilter === "active") extra.account_status = "active";
+      else if (statusFilter === "inactive") extra.account_status = "inactive";
+
+      const qs = buildPaginationQuery(page, perPage, extra);
+      const data = await apiRequest(`/api/users${qs}`, { method: "GET" });
+      const { rows, meta } = normalizePaginatedList(data);
+      setUsers(rows);
+      setListMeta(meta);
     } catch (error) {
       setApiError(flattenApiErrors(error));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, perPage, debouncedQuery, roleFilter, statusFilter]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -87,28 +98,13 @@ export default function UsersPage() {
       return;
     }
     fetchUsers();
-  }, [authLoading, currentUser, fetchUsers]);
+  }, [authLoading, currentUser, canAccess, fetchUsers]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return users.filter((u) => {
-      const role = safeLower(u?.role?.role_name);
-      if (roleFilter !== "all" && role !== roleFilter) return false;
-
-      if (statusFilter === "active" && !u.is_active) return false;
-      if (statusFilter === "inactive" && u.is_active) return false;
-
-      if (!q) return true;
-
-      const name = `${u.first_name || ""} ${u.last_name || ""}`.trim().toLowerCase();
-      return (
-        String(u.user_id).includes(q) ||
-        safeLower(u.username).includes(q) ||
-        safeLower(u.email).includes(q) ||
-        name.includes(q)
-      );
+  useEffect(() => {
+    flushSync(() => {
+      setPage(1);
     });
-  }, [users, query, roleFilter, statusFilter]);
+  }, [debouncedQuery, roleFilter, statusFilter]);
 
   const activeCount = useMemo(() => users.filter((u) => u.is_active).length, [users]);
   const adminCount = useMemo(
@@ -148,22 +144,20 @@ export default function UsersPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         <PageHeader
-          title="User Accounts"
-          subtitle="Directory of staff accounts, roles, and activation state. Restricted to admin oversight."
-          breadcrumbs={<Breadcrumbs items={[{ label: "User Management" }]} />}
+          title="User Directory"
+          subtitle="Staff accounts and roles (Admin only)."
+          breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "User Directory" }]} />}
           actions={
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
               <Button
                 variant="primary"
                 onClick={() => window.location.href = "/users/new"}
-                className="h-10 !text-[10px] bg-teal-600 hover:bg-teal-700"
+                className="!h-11 rounded-xl bg-teal-600 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
               >
-                <Plus size={14} className="mr-1" />
-                Register User
+                <UserPlus size={14} className="mr-2" />
+                Register Account
               </Button>
-              <div className="border-l border-stone-200 pl-3">
-                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-              </div>
             </div>
           }
         />
@@ -175,207 +169,265 @@ export default function UsersPage() {
           </Alert>
         ) : null}
 
-        {!viewDenied && apiError ? (
-          <Alert variant="error" title="Could not load users">
-            {apiError}
-            <button
-              type="button"
-              onClick={() => fetchUsers()}
-              className="mt-2 text-xs font-bold underline hover:opacity-80"
-            >
-              Retry
-            </button>
-          </Alert>
-        ) : null}
-
-        {actionError ? (
-          <Alert variant="error" title="Action failed">
-            {actionError}
-            <button
-              type="button"
-              onClick={() => setActionError("")}
-              className="mt-2 text-xs font-bold underline hover:opacity-80"
-            >
-              Dismiss
-            </button>
-          </Alert>
-        ) : null}
-
-        {canAccess && !apiError ? (
+        {!viewDenied && (
           <>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <KpiCard label="Total Accounts" value={users.length} />
-              <KpiCard label="Active" value={activeCount} valueClass="text-emerald-800" />
-              <KpiCard label="Administrators" value={adminCount} valueClass="text-stone-900" />
-            </div>
+            {apiError ? (
+              <Alert variant="error" title="Could not load accounts">
+                {apiError}
+                <button
+                  type="button"
+                  onClick={() => fetchUsers()}
+                  className="mt-2 text-xs font-bold underline hover:opacity-80"
+                >
+                  Retry
+                </button>
+              </Alert>
+            ) : null}
 
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 bg-stone-50/50 px-6 py-4 sm:px-8 sm:py-5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                    <Shield size={16} aria-hidden />
-                  </div>
-                  <h2 className="hs-strip-title">Registry Filters</h2>
+            {actionError ? (
+              <Alert variant="error" title="Action failed">
+                {actionError}
+                <button
+                  type="button"
+                  onClick={() => setActionError("")}
+                  className="mt-2 text-xs font-bold underline hover:opacity-80"
+                >
+                  Dismiss
+                </button>
+              </Alert>
+            ) : null}
+
+            {canAccess && !apiError ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <KpiCard 
+                    label="Total Accounts" 
+                    value={listMeta?.total ?? users.length} 
+                    icon={Users}
+                    sub="Matching filters"
+                  />
+                  <KpiCard 
+                    label="Active" 
+                    value={activeCount} 
+                    icon={UserCheck}
+                    sub="On this page"
+                  />
+                  <KpiCard 
+                    label="Administrators" 
+                    value={adminCount} 
+                    icon={ShieldCheck}
+                    sub="On this page"
+                  />
                 </div>
-              </div>
-              <div className="p-6">
-                <div className="grid items-end gap-6 lg:grid-cols-12">
-                  <div className="lg:col-span-5">
-                    <Field label="Search">
-                      <div className="group relative">
-                        <Search
-                          className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600"
-                          aria-hidden
-                        />
-                        <Input
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Username, name, email or ID…"
-                          className="!h-11 border-stone-200 pl-11 focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5"
-                        />
+
+                <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-6 py-4 sm:px-8 sm:py-5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                        <Users size={14} aria-hidden />
                       </div>
-                    </Field>
+                      <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">
+                        Filters
+                      </h2>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={fetchUsers}
+                      className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600"
+                    >
+                      Refresh
+                    </Button>
                   </div>
-                  <div className="lg:col-span-3">
-                    <Field label="Role">
-                      <Select
-                        value={roleFilter}
-                        onChange={(e) => setRoleFilter(e.target.value)}
-                        className="!h-11 border-stone-200"
-                      >
-                        <option value="all">All roles</option>
-                        <option value="admin">Admin</option>
-                        <option value="staff">Staff</option>
-                        <option value="viewer">Viewer</option>
-                      </Select>
-                    </Field>
-                  </div>
-                  <div className="lg:col-span-4">
-                    <Field label="Account status">
-                      <Select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="!h-11 border-stone-200"
-                      >
-                        <option value="all">All statuses</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </Select>
-                    </Field>
-                  </div>
-                </div>
-                <FilterChips
-                  className="mt-6"
-                  items={[
-                    { key: "q", label: "Search", value: query, onClear: () => setQuery("") },
-                    {
-                      key: "role",
-                      label: "Role",
-                      value: roleFilter !== "all" ? roleFilter : "",
-                      onClear: () => setRoleFilter("all"),
-                    },
-                    {
-                      key: "status",
-                      label: "Status",
-                      value: statusFilter !== "all" ? statusFilter : "",
-                      onClear: () => setStatusFilter("all"),
-                    },
-                  ]}
-                  onClearAll={() => {
-                    setQuery("");
-                    setRoleFilter("all");
-                    setStatusFilter("all");
-                  }}
-                />
-              </div>
-            </Card>
+                  <div className="p-8">
+                    <div className="grid items-end gap-6 md:grid-cols-12">
+                      <div className="md:col-span-12 lg:col-span-5">
+                        <Field label="Cross-reference search">
+                          <div className="group relative">
+                            <Search
+                              className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600"
+                              aria-hidden
+                            />
+                            <Input
+                              value={query}
+                              onChange={(e) => setQuery(e.target.value)}
+                              placeholder="Name, username, email, or user ID…"
+                              className="!h-12 border-stone-200 pl-11 font-medium transition-[border-color,box-shadow] focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5"
+                            />
+                          </div>
+                        </Field>
+                      </div>
+                      <div className="md:col-span-6 lg:col-span-3">
+                        <Field label="Role">
+                          <Select
+                            value={roleFilter}
+                            onChange={(e) => setRoleFilter(e.target.value)}
+                            className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
+                          >
+                            <option value="all">All roles</option>
+                            {Object.entries(ROLE_NAME_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                      </div>
+                      <div className="md:col-span-6 lg:col-span-4">
+                        <Field label="Account status">
+                          <Select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
+                          >
+                            {Object.entries(USER_ACCOUNT_STATUS_FILTER_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                      </div>
+                    </div>
 
-            <div className="mt-2 flex items-center gap-2 text-xs font-medium text-stone-500">
-              <Users className="h-3.5 w-3.5 shrink-0 text-stone-400" aria-hidden />
-              <span>
-                Showing {filtered.length} of {users.length} accounts
-              </span>
-            </div>
+                    <FilterChips
+                      className="mt-6"
+                      items={[
+                        { key: "q", label: "Query", value: query, onClear: () => setQuery("") },
+                        {
+                          key: "role",
+                          label: "Role",
+                          value: roleFilter !== "all" ? ROLE_NAME_LABELS[roleFilter] || roleFilter : "",
+                          onClear: () => setRoleFilter("all"),
+                        },
+                        {
+                          key: "status",
+                          label: "Status",
+                          value:
+                            statusFilter !== "all"
+                              ? USER_ACCOUNT_STATUS_FILTER_LABELS[statusFilter] || statusFilter
+                              : "",
+                          onClear: () => setStatusFilter("all"),
+                        },
+                      ]}
+                      onClearAll={() => {
+                        setQuery("");
+                        setRoleFilter("all");
+                        setStatusFilter("all");
+                      }}
+                    />
+                  </div>
+                </Card>
 
-            <Table
-              caption="User directory"
-              ariaLabel="User accounts and roles"
-              columns={[
-                { key: "id", label: "User ID", className: "whitespace-nowrap" },
-                { key: "username", label: "Username" },
-                { key: "name", label: "Name" },
-                { key: "email", label: "Email" },
-                { key: "role", label: "Role" },
-                { key: "status", label: "Status" },
-                { key: "actions", label: "", className: "text-right" },
-              ]}
-              rows={filtered.map((row) => {
-                const displayName = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "—";
-                const isSelf = row.user_id === currentUser?.user_id;
-                return (
-                  <tr
-                    key={row.user_id}
-                    className="border-t border-stone-100 transition-colors hover:bg-stone-50"
-                  >
-                    <td className="px-6 py-4 font-mono text-[10px] font-bold tracking-tighter text-stone-400">
-                      #{row.user_id}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-stone-900">{row.username}</td>
-                    <td className="px-6 py-4 text-sm text-stone-700">{displayName}</td>
-                    <td className="px-6 py-4 text-xs font-mono text-stone-500">{row.email || "—"}</td>
-                    <td className="px-6 py-4">
-                      <StatusBadge>{row?.role?.role_name || "—"}</StatusBadge>
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge>{row.is_active ? "active" : "inactive"}</StatusBadge>
-                    </td>
-                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                       <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => window.location.href = `/users/${row.user_id}/edit`}
-                        aria-label={`Edit user ${row.username}`}
-                        className="!h-8 !px-3"
-                      >
-                        <Edit2 size={12} className="mr-1" />
-                        Edit
-                      </Button>
-                      {row.is_active ? (
-                        <Button
-                          type="button"
-                          variant="danger"
-                          size="sm"
-                          loading={actionLoading === row.user_id}
-                          disabled={actionLoading !== null || isSelf}
-                          onClick={() => handleToggleActive(row)}
-                          aria-label={`Deactivate user ${row.username}`}
-                          title={isSelf ? "You cannot deactivate your own account" : undefined}
+                <Card className="mt-6 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
+                    <Table
+                    embedded={true}
+                    caption={`${listMeta?.total ?? users.length} staff accounts`}
+                    ariaLabel="User accounts and roles"
+                    columns={[
+                        {
+                          key: "user_id",
+                          label: "User ID",
+                          className: "w-[7.5rem]",
+                          headerClassName: "!px-4",
+                        },
+                        { key: "user", label: "Name" },
+                        { key: "username", label: "Username" },
+                        { key: "email", label: "Email" },
+                        { key: "role", label: "Role" },
+                        { key: "status", label: "Status" },
+                        { key: "actions", label: "", className: "text-right min-w-[5.5rem]" },
+                    ]}
+                    rows={users.map((row) => {
+                        const displayName = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "—";
+                        const isSelf = row.user_id === currentUser?.user_id;
+                        return (
+                        <tr
+                            key={row.user_id}
+                            className="border-t border-stone-100 transition-colors hover:bg-stone-50"
                         >
-                          Deactivate
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          loading={actionLoading === row.user_id}
-                          disabled={actionLoading !== null || isSelf}
-                          onClick={() => handleToggleActive(row)}
-                          aria-label={`Reactivate user ${row.username}`}
-                        >
-                          Reactivate
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              emptyTitle="No users match filters"
-              emptyDescription="Clear filters or adjust search to see accounts."
-            />
+                            <td className="px-4 py-4 align-middle">
+                              <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
+                                #USER-{row.user_id}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-xs font-bold text-stone-900">{displayName}</span>
+                            </td>
+                            <td className="px-6 py-4 font-mono text-[11px] text-stone-600">{row.username}</td>
+                            <td className="px-6 py-4 text-xs tabular-nums text-stone-500 font-medium">{row.email || "—"}</td>
+                            <td className="px-6 py-4 text-xs font-mono">
+                                <StatusBadge size="sm">{row?.role?.role_name || "—"}</StatusBadge>
+                            </td>
+                            <td className="px-6 py-4">
+                                <StatusBadge size="sm">{row.is_active ? "active" : "inactive"}</StatusBadge>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => window.location.href = `/users/${row.user_id}/edit`}
+                                        aria-label={`Edit user ${row.username}`}
+                                        className="!h-8 !w-8 !p-0 flex items-center justify-center rounded-lg border-stone-200"
+                                        title="Edit Profile"
+                                    >
+                                        <Edit2 size={12} className="text-stone-600" />
+                                    </Button>
+                                    {row.is_active ? (
+                                        <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        loading={actionLoading === row.user_id}
+                                        disabled={actionLoading !== null || isSelf}
+                                        onClick={() => handleToggleActive(row)}
+                                        aria-label={`Deactivate user ${row.username}`}
+                                        title={isSelf ? "Self-protection enabled" : "Deactivate Account"}
+                                        className="!h-8 !w-8 !p-0 flex items-center justify-center rounded-lg border-rose-100 bg-rose-50/30 hover:bg-rose-100 group"
+                                        >
+                                            <Shield size={12} className="text-rose-600 group-hover:scale-110 transition-transform" />
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        loading={actionLoading === row.user_id}
+                                        disabled={actionLoading !== null || isSelf}
+                                        onClick={() => handleToggleActive(row)}
+                                        aria-label={`Reactivate user ${row.username}`}
+                                        title="Reactivate Account"
+                                        className="!h-8 !w-8 !p-0 flex items-center justify-center rounded-lg border-emerald-100 bg-emerald-50/30 hover:bg-emerald-100 group"
+                                        >
+                                            <UserCheck size={12} className="text-emerald-700 group-hover:scale-110 transition-transform" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </td>
+                        </tr>
+                        );
+                    })}
+                    emptyTitle="No staff accounts match filters"
+                    emptyDescription="Clear filters or adjust search criteria to see system accounts."
+                    />
+                    <TablePagination
+                      meta={listMeta}
+                      page={page}
+                      perPage={perPage}
+                      onPageChange={setPage}
+                      onPerPageChange={(n) => {
+                        setPage(1);
+                        setPerPage(n);
+                      }}
+                      disabled={loading}
+                    />
+                </Card>
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </motion.div>
     </AppMain>
   );

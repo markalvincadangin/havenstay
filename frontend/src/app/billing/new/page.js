@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Calendar, FileText, Wallet } from "lucide-react";
+import { ArrowLeft, Calendar, FileText, Wallet, ShieldCheck, TrendingUp } from "lucide-react";
+
 import { apiRequest } from "../../../lib/api";
 import { canManageBilling } from "../../../lib/auth";
 import { flattenApiErrors } from "../../../lib/errors";
@@ -21,6 +21,7 @@ import PageHeader from "../../_components/ui/PageHeader";
 import Spinner from "../../_components/ui/Spinner";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import { normalizePaginatedList } from "../../../lib/pagination";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -39,7 +40,7 @@ function contractDisplayLabel(c) {
   const tenant = tenantLabel(c.tenant);
   const room = c.room?.room_code ?? c.room_id ?? "—";
   const start = formatDateString(c.move_in_date);
-  return `${tenant} — Room ${room} (Move-in: ${start})`;
+  return `${tenant} — Room ${room} (Start: ${start})`;
 }
 
 export default function NewBillingPage() {
@@ -113,9 +114,9 @@ export default function NewBillingPage() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await apiRequest("/api/contracts?status=active", { method: "GET" });
+        const data = await apiRequest("/api/contracts?status=active&per_page=100", { method: "GET" });
         if (cancelled) return;
-        setActiveContracts(Array.isArray(data) ? data : []);
+        setActiveContracts(normalizePaginatedList(data).rows);
       } catch (e) {
         if (!cancelled) setContractsError(flattenApiErrors(e));
       } finally {
@@ -138,7 +139,6 @@ export default function NewBillingPage() {
     });
   }, [activeContracts, getValues, setValue]);
 
-  // Intelligent prefill logic on contract change
   const selectedContractId = watch("contract_id");
   useEffect(() => {
     if (!selectedContractId || activeContracts.length === 0) return;
@@ -154,11 +154,9 @@ export default function NewBillingPage() {
 
     let startDate;
     if (contract.latest_billing?.billing_period_to) {
-      // If there's a previous bill, default to the start of the next month
       const latestTo = new Date(contract.latest_billing.billing_period_to);
       startDate = new Date(latestTo.getFullYear(), latestTo.getMonth() + 1, 1);
     } else {
-      // Default to start of move-in month
       const moveIn = new Date(contract.move_in_date);
       startDate = new Date(moveIn.getFullYear(), moveIn.getMonth(), 1);
     }
@@ -191,18 +189,18 @@ export default function NewBillingPage() {
       if (Number.isFinite(br) && br > 0) {
         lineItems.push({
           item_type: "base_rent",
-          item_description: "Monthly rent",
+          item_description: "Monthly Rent",
           amount: br,
         });
       }
     }
     pushIfPositive(data.utility_amount, "utility", "Utilities");
     pushIfPositive(data.add_on_amount, "add_on", "Add-ons");
-    pushIfPositive(data.penalty_amount, "penalty", "Late fee / penalty");
+    pushIfPositive(data.penalty_amount, "penalty", "Late Fee / Penalty");
     pushIfPositive(data.adjustment_amount, "adjustment", "Adjustment");
 
     if (lineItems.length === 0) {
-      setApiError("Add at least one line item with a non-zero amount.");
+      setApiError("Minimum protocol violation: Aggregate statement must contain at least one non-zero line item.");
       return;
     }
 
@@ -226,10 +224,13 @@ export default function NewBillingPage() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || loadingContracts) {
     return (
       <AppMain>
-        <Spinner label="Loading form…" />
+        <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
+          <Spinner className="size-10 text-teal-600" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Syncing active contracts…</p>
+        </div>
       </AppMain>
     );
   }
@@ -238,24 +239,13 @@ export default function NewBillingPage() {
     return (
       <AppMain>
         <div className="mx-auto mt-8 w-full max-w-4xl space-y-6">
-          <Alert variant="warning" title="View-only access">
-            You do not have permission to create billing entries.
+          <Alert variant="warning" title="Protocol Restricted">
+            Administrative clearance required to generate statements.
           </Alert>
-          <Link
-            href="/billing"
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--color-border-strong)] px-5 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)]"
-          >
-            Back to billing
-          </Link>
+          <Button variant="secondary" onClick={() => router.push("/billing")} className="!h-11 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest">
+            Cancel
+          </Button>
         </div>
-      </AppMain>
-    );
-  }
-
-  if (loadingContracts) {
-    return (
-      <AppMain>
-        <Spinner label="Loading contracts…" />
       </AppMain>
     );
   }
@@ -266,16 +256,16 @@ export default function NewBillingPage() {
         className="mx-auto mt-8 w-full max-w-4xl space-y-6"
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
+        transition={shouldReduceMotion ? { duration: 0.2 } : pageVariants.transition}
       >
         <PageHeader
-          title="Generate Monthly Bill"
-          subtitle="Generate a billing cycle for an active lease. Line items roll up into the amount due for this period."
+          title="Post Statement"
+          subtitle="Generate a monthly cycle statement for an active tenant contract."
           breadcrumbs={
             <Breadcrumbs
               items={[
                 { label: "Billing", href: "/billing" },
-                { label: "Create billing entry" },
+                { label: "Post Statement" },
               ]}
             />
           }
@@ -284,9 +274,8 @@ export default function NewBillingPage() {
               <button
                 type="button"
                 onClick={() => router.push("/billing")}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to billing"
-                title="Back to billing"
+                className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
+                aria-label="Back to Billing"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
@@ -297,49 +286,39 @@ export default function NewBillingPage() {
           }
         />
 
-        {contractsError ? (
-          <Alert variant="error" title="Could not load contracts">
-            {contractsError}
-          </Alert>
-        ) : null}
+        {contractsError && <Alert variant="error" title="Could not load contracts">{contractsError}</Alert>}
 
         {activeContracts.length === 0 && !contractsError ? (
           <div className="space-y-4">
-            <Alert variant="warning" title="No active contracts">
-              There are no active contracts to bill. Create a contract first, then return here.
+            <Alert variant="warning" title="Population Empty">
+              No active tenant contracts found for billing.
             </Alert>
-            <Link
-              href="/contracts"
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-[var(--color-border-strong)] px-5 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)]"
-            >
-              Go to contracts
-            </Link>
+            <Button variant="secondary" onClick={() => router.push("/contracts")} className="!h-11 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest">
+              Return to Contracts
+            </Button>
           </div>
-        ) : null}
-
-        {activeContracts.length > 0 ? (
+        ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
                   <FileText size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title">Contract & Tenant</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Tenant & Room</h2>
               </div>
               <div className="space-y-6 p-8">
                 <Field
-                  label="Active contract"
+                  label="Target Contract"
                   required
                   error={errors.contract_id?.message}
-                  helpText="Only contracts in active status appear here."
                 >
                   <Select
                     id="contract_id"
-                    className="!h-11 border-stone-200"
+                    className="!h-12 border-stone-200 font-bold"
                     hasError={Boolean(errors.contract_id)}
-                    {...register("contract_id", { required: "Select an active contract." })}
+                    {...register("contract_id", { required: "Mandatory: Select an active resident contract." })}
                   >
-                    <option value="">Select a contract…</option>
+                    <option value="">Select Contract…</option>
                     {activeContracts.map((c) => (
                       <option key={c.contract_id} value={c.contract_id}>
                         {contractDisplayLabel(c)}
@@ -352,37 +331,31 @@ export default function NewBillingPage() {
 
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-stone-50 text-stone-600">
                   <Calendar size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title">Billing Period & Due Date</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Billing Dates</h2>
               </div>
               <div className="grid gap-6 p-8 sm:grid-cols-3">
-                <Field label="Billing Period From" required error={errors.billing_period_from?.message}>
+                <Field label="Cycle Start" required error={errors.billing_period_from?.message}>
                   <Input
-                    id="billing_period_from"
                     type="date"
-                    className="!h-11 border-stone-200"
-                    hasError={Boolean(errors.billing_period_from)}
-                    {...register("billing_period_from", { required: "Required." })}
+                    className="!h-12 border-stone-200 font-bold"
+                    {...register("billing_period_from", { required: "Mandatory." })}
                   />
                 </Field>
-                <Field label="Billing Period To" required error={errors.billing_period_to?.message}>
+                <Field label="Cycle End" required error={errors.billing_period_to?.message}>
                   <Input
-                    id="billing_period_to"
                     type="date"
-                    className="!h-11 border-stone-200"
-                    hasError={Boolean(errors.billing_period_to)}
-                    {...register("billing_period_to", { required: "Required." })}
+                    className="!h-12 border-stone-200 font-bold"
+                    {...register("billing_period_to", { required: "Mandatory." })}
                   />
                 </Field>
-                <Field label="Payment Due Date" required error={errors.due_date?.message}>
+                <Field label="Payment Deadline" required error={errors.due_date?.message}>
                   <Input
-                    id="due_date"
                     type="date"
-                    className="!h-11 border-stone-200"
-                    hasError={Boolean(errors.due_date)}
-                    {...register("due_date", { required: "Required." })}
+                    className="!h-12 border-stone-200 font-bold"
+                    {...register("due_date", { required: "Mandatory." })}
                   />
                 </Field>
               </div>
@@ -390,123 +363,111 @@ export default function NewBillingPage() {
 
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
                   <Wallet size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title">Line Items</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Charges & Fees</h2>
               </div>
-              <div className="space-y-6 p-8">
-                <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-5">
+              <div className="space-y-8 p-8">
+                <Alert variant="info" title="Charges" className="!py-3">
+                  Rent is normally billed as a <span className="font-mono text-xs">base_rent</span> line (BR-001). Security
+                  deposits belong on the contract record, not as billing line items (BR-002). The statement total must not
+                  be negative (FR-021b).
+                </Alert>
+                <div className="rounded-2xl border border-stone-100 bg-stone-50/30 p-6">
                   <label className="flex cursor-pointer items-start gap-3">
                     <input
                       type="checkbox"
-                      className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+                      className="mt-1 h-5 w-5 rounded-lg border-stone-300 text-teal-600 focus:ring-teal-500/20"
                       {...register("include_base_rent")}
                     />
-                    <span>
-                      <span className="block text-sm font-bold text-stone-900">Include base rent</span>
-                      <span className="mt-0.5 block text-xs font-medium text-stone-500">
-                        Uncheck to bill utilities, fees, or adjustments only.
+                    <div>
+                      <span className="block text-xs font-black uppercase tracking-widest text-stone-900">Include Monthly Rent</span>
+                      <span className="mt-1 block text-xs font-medium text-stone-400">
+                        Include monthly rent as defined in the master contract.
                       </span>
-                    </span>
+                    </div>
                   </label>
-                  {includeBaseRent ? (
-                    <div className="mt-4">
-                      <Field 
-                        label="Contracted Monthly Rent (₱)" 
-                        required 
-                        error={errors.base_rent_amount?.message}
-                        helpText="This amount is automatically sourced from the contract and remains locked to ensure billing integrity."
-                      >
+                  {includeBaseRent && (
+                    <div className="mt-6 pt-6 border-t border-stone-100">
+                      <Field label="Contracted Monthly Yield (₱)">
                         <Input
-                          id="base_rent_amount"
                           type="number"
                           readOnly
-                          inputMode="decimal"
-                          step="0.01"
-                          placeholder="0.00"
-                          className="!h-11 border-stone-200 font-mono bg-stone-50/80 cursor-not-allowed"
-                          hasError={Boolean(errors.base_rent_amount)}
-                          {...register("base_rent_amount", {
-                            validate: (v) => {
-                              if (!includeBaseRent) return true;
-                              const n = parseFloat(String(v || ""));
-                              if (!Number.isFinite(n) || n <= 0) {
-                                return "Contract monthly rate must be a positive value.";
-                              }
-                              return true;
-                            },
-                          })}
+                          className="!h-12 border-stone-200 font-mono text-lg font-black bg-stone-50/50 cursor-not-allowed tabular-nums text-stone-400"
+                          {...register("base_rent_amount")}
                         />
                       </Field>
                     </div>
-                  ) : null}
+                  )}
                 </div>
 
                 <div className="grid gap-6 sm:grid-cols-2">
-                  <Field label="Utilities (₱)" error={errors.utility_amount?.message}>
+                  <Field label="Utilities (₱)">
                     <Input
                       type="number"
-                      inputMode="decimal"
                       step="0.01"
                       placeholder="0.00"
-                      className="!h-11 border-stone-200 font-mono"
+                      className="!h-12 border-stone-200 font-mono font-bold tabular-nums"
                       {...register("utility_amount")}
                     />
                   </Field>
-                  <Field label="Add-ons (₱)" error={errors.add_on_amount?.message}>
+                  <Field label="Add-ons (₱)">
                     <Input
                       type="number"
-                      inputMode="decimal"
                       step="0.01"
                       placeholder="0.00"
-                      className="!h-11 border-stone-200 font-mono"
+                      className="!h-12 border-stone-200 font-mono font-bold tabular-nums"
                       {...register("add_on_amount")}
                     />
                   </Field>
-                  <Field label="Penalties (₱)" error={errors.penalty_amount?.message}>
+                  <Field label="Penalties (₱)">
                     <Input
                       type="number"
-                      inputMode="decimal"
                       step="0.01"
                       placeholder="0.00"
-                      className="!h-11 border-stone-200 font-mono"
+                      className="!h-12 border-stone-200 font-mono font-bold tabular-nums text-red-700"
                       {...register("penalty_amount")}
                     />
                   </Field>
-                  <Field label="Adjustments (₱)" error={errors.adjustment_amount?.message}>
+                  <Field label="Adjustments (₱)">
                     <Input
                       type="number"
-                      inputMode="decimal"
                       step="0.01"
                       placeholder="0.00"
-                      className="!h-11 border-stone-200 font-mono"
+                      className="!h-12 border-stone-200 font-mono font-bold tabular-nums"
                       {...register("adjustment_amount")}
                     />
                   </Field>
                 </div>
 
-                <div className="flex flex-col justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50/40 px-5 py-4 sm:flex-row sm:items-center">
+                {totalDue < 0 ? (
+                  <Alert variant="warning" title="Invalid total">
+                    Preview total is negative. Adjust line items so the cycle total is zero or positive before submitting.
+                  </Alert>
+                ) : null}
+
+                <div className="flex flex-col justify-between gap-4 rounded-2xl border border-teal-600/10 bg-teal-50/30 p-8 sm:flex-row sm:items-center">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-teal-800/70">
-                      Total due (preview)
-                    </p>
-                    <p className="mt-1 font-mono text-2xl font-bold text-teal-900">{formatPHP(totalDue)}</p>
+                    <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp size={14} className="text-teal-700" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-800/70">Statement Aggregate Yield</p>
+                    </div>
+                    <p className="font-mono text-4xl font-black text-teal-900 tabular-nums">{formatPHP(totalDue)}</p>
                   </div>
-                  <p className="max-w-sm text-xs font-medium text-teal-900/80">
-                    Only non-zero amounts are recorded as line items.
-                  </p>
+                  <div className="flex items-start gap-3 max-w-sm rounded-xl bg-white/50 p-4 border border-teal-600/5">
+                     <ShieldCheck size={16} className="text-teal-600 mt-0.5" />
+                     <p className="text-[11px] font-medium text-teal-900/60 leading-relaxed">
+                       Postings to the authoritative ledger are permanent. Finalize all cycle items before confirming the statement.
+                     </p>
+                  </div>
                 </div>
               </div>
             </Card>
 
-            {apiError ? (
-              <Alert variant="error" title="Could not save billing">
-                {apiError}
-              </Alert>
-            ) : null}
+            {apiError && <Alert variant="error" title="Post Failed">{apiError}</Alert>}
 
-            <div className="flex flex-col-reverse gap-3 border-t border-stone-200 pt-6 sm:flex-row sm:items-center sm:justify-end">
+            <div className="flex flex-col-reverse gap-3 border-t border-stone-100 pt-8 sm:flex-row sm:items-center sm:justify-end">
               <Button
                 type="button"
                 variant="secondary"
@@ -519,14 +480,14 @@ export default function NewBillingPage() {
                 type="submit"
                 variant="primary"
                 loading={isSubmitting}
-                disabled={isSubmitting}
-                className="!h-11 rounded-xl bg-teal-600 px-12 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
+                disabled={totalDue < 0}
+                className="!h-11 rounded-xl bg-teal-600 px-12 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700 active:scale-95"
               >
-                Post Billing
+                Generate Bill
               </Button>
             </div>
           </form>
-        ) : null}
+        )}
       </motion.div>
     </AppMain>
   );

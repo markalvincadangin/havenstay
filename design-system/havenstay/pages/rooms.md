@@ -1,8 +1,8 @@
-# Rooms Page Design Specification
+# Room Inventory Design Specification — v4.3 (Master-Aligned)
 
-> **PROJECT:** HavenStay
-> **Last Updated:** 2026-04-10
-> **Page Type:** List / Detail / Form Pages
+> **PROJECT:** HavenStay Boarding House Management System (BHMS)
+> **Last Updated:** 2026-04-12
+> **Page Type:** Inventory / Detail / Form Pages
 > **Routes:** `/rooms`, `/rooms/[id]`, `/rooms/new`, `/rooms/[id]/edit`
 
 > ⚠️ **IMPORTANT:** Rules in this file **override** the Master file (`../MASTER.md`) for Rooms pages only.
@@ -10,120 +10,39 @@
 
 ---
 
-## Page Purpose
+## 1. Page Purpose
 
-The Rooms pages manage room and bed space records across four views:
+The Room Inventory manages real-time property capacity across four views:
 
-1. **Rooms List** (`/rooms`) - Browse all rooms with occupancy status
-2. **Room Detail** (`/rooms/[id]`) - View room details and bed space assignments
-3. **New Room Form** (`/rooms/new`) - Create new room records
-4. **Edit Room Form** (`/rooms/[id]/edit`) - Update existing room information
+1. **Room Inventory** (`/rooms`) - Browse room capacity and occupancy status.
+2. **Room Details** (`/rooms/[id]`) - View specific unit profile and bed assignments.
+3. **Register unit** (`/rooms/new`) - Create new unit record.
+4. **Update unit** (`/rooms/[id]/edit`) - Modify existing room information.
 
-**Design Philosophy:** Clarity, Speed, Trust — operators must quickly understand room occupancy, manage bed spaces, and track availability.
-
-**Research Foundation (UI reasoning #17: Real Estate):**
-- **Pattern**: Hero-Centric + Feature-Rich with property visualization
-- **Color Mood**: Trust Blue + Gold + White for professional property management
-- **Key Effects**: 3D property tour zoom + Map hover for spatial understanding
-- **Decision Rules**: 
-  - IF luxury: add-3d-models (not applicable for boarding house)
-  - MUST HAVE: map-integration for room layout visualization
-- **Anti-Patterns to AVOID**: 
-  - Poor photos (ensure high-quality room images)
-  - No virtual tours (provide clear room visualization)
+**Design Philosophy:** Clarity, Speed, Trust — operators must quickly understand unit availability and maintenance states.
 
 ---
 
-## Database Schema Alignment
+## 2. Layout Structure (Master §4)
 
-### Critical Data Keys
+### 2.1 Rooms List Page (`/rooms`)
+1.  **Page Header**: `Room Inventory` with "Register Unit" Primary CTA.
+2.  **Summary KPIs**: 3-column `KpiCard` grid (Total Beds, Vacancies, Revenue).
+3.  **Filter Hub**: `Registry Card` with strip title **Filters** (**MASTER §5.8.3**).
+4.  **Unit Grid**: Standard `room-card` grid (§112).
 
-**Always use these exact field names:**
+### 2.2 Room Detail Page (`/rooms/[id]`)
+1.  **Page Header**: `Unit {room_code}` with "Update Details" Secondary action.
+2.  **Status Well**: Standard `StatusBadge`.
+3.  **Split View**:
+    - **Sidebar (4)**: Room Profile (Monthly Rate, Floor, Amenities).
+    - **Main (8)**: Bed Assignments table with occupancy progress.
 
-```typescript
-interface Room {
-  room_id: number;              // PRIMARY KEY
-  room_number: string;          // Display identifier (e.g., "101", "A-1")
-  floor: number | null;         // Floor number
-  capacity: number;             // Total bed spaces in room
-  monthly_rate: number;         // Base monthly rent per bed
-  status: 'available' | 'occupied' | 'maintenance';  // ENUM
-  description: string | null;   // Room features/amenities
-  created_at: string;
-  updated_at: string;
-}
-
-interface BedSpace {
-  bed_space_id: number;         // PRIMARY KEY
-  room_id: number;              // FOREIGN KEY
-  bed_number: string;           // Identifier within room (e.g., "A", "1")
-  status: 'available' | 'occupied';  // ENUM
-  current_tenant_id: number | null;  // FOREIGN KEY (nullable)
-}
+### 2.3 Unit Registration Form
+1.  **Form Shell**: Centered `max-w-4xl` column containing `PageHeader` and `Registry Cards`.  
+  [Cancel] [Save Changes / Register Room]
 ```
-
-**Status Enum Mapping:**
-- Room: `available` → "Available" (badge-success), `occupied` → "Occupied" (badge-info), `maintenance` → "Maintenance" (badge-warning)
-- Bed Space: `available` → "Available" (badge-success), `occupied` → "Occupied" (badge-info)
-
----
-
-## Layout Structures
-
-### Rooms List Page
-
-```
-[Page Header]
-  [Breadcrumb: Rooms]                        [user@email · Role]
-  [H1: Rooms]                                [+ New Room (btn-primary)]
-  [Subtitle: Manage rooms and bed spaces]
-
-[Filter Controls]
-  [Status Filter Dropdown]  [Floor Filter Dropdown]  [Clear All]
-  [Active Filter Chips]
-
-[Room Cards Grid]
-  3 columns on desktop, 2 on tablet, 1 on mobile
-  Each card shows: room_number, capacity, occupancy, status, monthly_rate
-```
-
-### Room Detail Page
-
-```
-[Page Header]
-  [Breadcrumb: Rooms / Room {room_number}]  [user@email · Role]
-  [H1: Room {room_number}]                  [Edit Room (btn-primary)]
-  [Status Badge]  [Floor Badge]
-
-[Room Information Card]
-  [Details Section: Capacity, Monthly Rate, Floor, Description]
-  [Occupancy Progress Bar]
-
-[Bed Spaces Table]
-  Columns: Bed Number | Status | Current Tenant | Move-In Date | Actions
-  
-[Room History Timeline] (Optional future enhancement)
-```
-
-### New/Edit Room Form
-
-```
-[Page Header]
-  [Breadcrumb: Rooms / New Room]            [user@email · Role]
-  [H1: New Room]
-  [Subtitle: * Required fields]
-
-[Form Card (max-width: 640px centered)]
-  [Room Information Section]
-    - Room Number * | Floor
-    - Capacity * | Monthly Rate *
-    - Description (textarea)
-  
-  [Status Section] (Edit only)
-    - Current Status (read-only with explanation)
-  
-  [Form Actions]
-    [Cancel (btn-secondary)]  [Save Room (btn-primary)]
+tn-primary)]
 ```
 
 ---

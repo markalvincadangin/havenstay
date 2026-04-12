@@ -2,6 +2,8 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Keyboard, X } from "lucide-react";
+import { APP_KEYBOARD_SHORTCUTS } from "../../../lib/appKeyboardShortcuts";
+import { G_KEY_NAV_BINDINGS } from "../../../lib/keyboardNav";
 import { Card } from "./Card";
 
 /**
@@ -14,17 +16,11 @@ import { Card } from "./Card";
 export default function KeyboardHelpModal({ isOpen, onClose }) {
   const shortcuts = [
     { key: "?", label: "Toggle help overlay" },
-    { key: "G + D", label: "Go to Operations" },
-    { key: "G + T", label: "Go to Tenants" },
-    { key: "G + R", label: "Go to Rooms" },
-    { key: "G + C", label: "Go to Contracts" },
-    { key: "G + B", label: "Go to Billing" },
-    { key: "G + P", label: "Go to Payments" },
-    { key: "G + O", label: "Go to Reports" },
-    { key: "G + L", label: "Go to Audit Logs" },
-    { key: "G + U", label: "Go to Users" },
-    { key: "Ctrl + P", label: "Open New Payment Form" },
-    { key: "Ctrl + R", label: "Refresh Page" },
+    ...G_KEY_NAV_BINDINGS.map(({ key, label }) => ({
+      key: `G + ${key.toUpperCase()}`,
+      label: `Go to ${label}`,
+    })),
+    ...APP_KEYBOARD_SHORTCUTS.map((s) => ({ key: s.keys, label: s.label })),
   ];
 
   return (
@@ -70,6 +66,12 @@ export default function KeyboardHelpModal({ isOpen, onClose }) {
 
               {/* List */}
               <div className="max-h-[60vh] overflow-y-auto px-6 py-4 scrollbar-hide">
+                <p className="mb-3 rounded-lg border border-stone-100 bg-stone-50/80 px-3 py-2 text-[10px] leading-snug text-stone-500">
+                  Browser shortcuts such as <kbd className="font-mono">Ctrl+P</kbd> (Print) and{" "}
+                  <kbd className="font-mono">Ctrl+R</kbd> (Reload) are not overridden. Use{" "}
+                  <kbd className="font-mono">Alt+Shift+P</kbd> / <kbd className="font-mono">Alt+Shift+R</kbd> for the
+                  actions below.
+                </p>
                 <div className="space-y-1">
                   {shortcuts.map((item) => (
                     <div

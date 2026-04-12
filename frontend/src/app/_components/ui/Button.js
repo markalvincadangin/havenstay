@@ -82,7 +82,7 @@ export default function Button({
           aria-hidden="true"
         />
       ) : null}
-      <span>{children}</span>
+      {children}
     </button>
   );
 }

@@ -8,19 +8,23 @@ import { useCallback, useState } from "react";
  * @returns {{ sortColumn: string | null, sortDirection: 'asc' | 'desc', onSortChange: (key: string) => void }}
  */
 export function useTableSort() {
-  const [sortColumn, setSortColumn] = useState(null);
-  const [sortDirection, setSortDirection] = useState("asc");
+  const [state, setState] = useState({ column: null, direction: "asc" });
 
   const onSortChange = useCallback((key) => {
-    setSortColumn((prev) => {
-      if (prev !== key) {
-        setSortDirection("asc");
-        return key;
+    setState((prev) => {
+      if (prev.column !== key) {
+        return { column: key, direction: "asc" };
       }
-      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
-      return prev;
+      return {
+        column: key,
+        direction: prev.direction === "asc" ? "desc" : "asc",
+      };
     });
   }, []);
 
-  return { sortColumn, sortDirection, onSortChange };
+  return { 
+    sortColumn: state.column, 
+    sortDirection: state.direction, 
+    onSortChange 
+  };
 }

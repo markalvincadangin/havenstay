@@ -16,7 +16,16 @@ import { Field, Select } from "../../_components/ui/Fields";
 import PageHeader from "../../_components/ui/PageHeader";
 import Spinner from "../../_components/ui/Spinner";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import { KpiCard } from "../../_components/ui/KpiCard";
 import { Table } from "../../_components/ui/Table";
+import { BookOpen, User, Landmark, DollarSign, Activity } from "lucide-react";
+import {
+  buildReportListQuery,
+  normalizePaginatedList,
+  normalizeReportRows,
+  readStoredPerPage,
+} from "../../../lib/pagination";
+import TablePagination from "../../_components/ui/TablePagination";
 
 export default function TenantLedgerReportPage() {
   const { user: currentUser, authLoading } = useAuthGuard();
@@ -27,36 +36,41 @@ export default function TenantLedgerReportPage() {
   const [tenants, setTenants] = useState([]);
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [report, setReport] = useState({ tenant: null, summary: null, entries: [] });
+  const [tableMeta, setTableMeta] = useState(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
   const loadTenants = useCallback(async () => {
     try {
-      const data = await apiRequest("/api/tenants", { method: "GET" });
-      const rows = Array.isArray(data) ? data : data?.tenants || [];
+      const data = await apiRequest("/api/tenants?per_page=100", { method: "GET" });
+      const rows = normalizePaginatedList(data).rows;
       setTenants(rows.filter(t => t.status !== 'archived').sort((a, b) => a.last_name.localeCompare(b.last_name)));
     } catch (_error) {
       setApiError("Failed to load tenants list.");
     }
   }, []);
 
-  const loadLedger = useCallback(async (tenantId) => {
-    if (!tenantId) return;
+  const loadLedger = useCallback(async () => {
+    if (!selectedTenantId) return;
     setFetchingLedger(true);
     setApiError("");
     try {
-      const data = await apiRequest(`/api/reports/tenant-ledger?tenant_id=${tenantId}`, { method: "GET" });
+      const qs = buildReportListQuery(page, perPage, { tenant_id: selectedTenantId });
+      const data = await apiRequest(`/api/reports/tenant-ledger${qs}`, { method: "GET" });
       setReport(data);
+      setTableMeta(normalizeReportRows(data, "entries").meta);
     } catch (error) {
       setApiError(flattenApiErrors(error));
     } finally {
       setFetchingLedger(false);
     }
-  }, []);
+  }, [selectedTenantId, page, perPage]);
 
   useEffect(() => {
     if (authLoading || !currentUser) return;
 
     if (!canViewReports(currentUser)) {
-      setApiError("Unauthorized: you do not have permission to view reports.");
+      setApiError("Unauthorized: you do not have permission to access financial records.");
       setLoading(false);
       return;
     }
@@ -64,12 +78,17 @@ export default function TenantLedgerReportPage() {
     loadTenants().finally(() => setLoading(false));
   }, [authLoading, currentUser, loadTenants]);
 
+  useEffect(() => {
+    if (!selectedTenantId) return;
+    loadLedger();
+  }, [selectedTenantId, loadLedger]);
+
   const handleTenantChange = (id) => {
     setSelectedTenantId(id);
-    if (id) {
-      loadLedger(id);
-    } else {
+    setPage(1);
+    if (!id) {
       setReport({ tenant: null, summary: null, entries: [] });
+      setTableMeta(null);
     }
   };
 
@@ -91,16 +110,22 @@ export default function TenantLedgerReportPage() {
   if (authLoading || loading) {
     return (
       <AppMain>
-        <Spinner label="Loading tenant data..." />
+        <Spinner label="Loading ledger history..." />
       </AppMain>
     );
   }
 
+  const { rows: entries } = normalizeReportRows(report, "entries");
+  const totalEntries = tableMeta?.total ?? entries.length;
+  const timestampLabel = selectedTenantId
+    ? `Statement Generated ${formatReportTimestamp()} • ${totalEntries} entries`
+    : "Select a tenant to view their itemized financial statement.";
+
   return (
     <AppMain>
       <PageHeader
-        title="Detailed Tenant Ledger"
-        subtitle="Chronological statement of billings, payments, and running balance."
+        title="Tenant Ledger"
+        subtitle={timestampLabel}
         breadcrumbs={
           <Breadcrumbs
             items={[
@@ -110,7 +135,7 @@ export default function TenantLedgerReportPage() {
           />
         }
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <UserRoleBadge
               username={currentUser?.username}
               roleName={currentUser?.role?.role_name}
@@ -118,116 +143,147 @@ export default function TenantLedgerReportPage() {
             {selectedTenantId && (
               <Button
                 type="button"
+                variant="primary"
                 onClick={onExport}
                 loading={exporting}
                 disabled={exporting}
+                className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
               >
-                {exporting ? "Downloading..." : "Export Statement"}
+                Export CSV
               </Button>
             )}
           </div>
         }
       />
 
-      <p className="mt-2 text-xs italic text-[var(--color-text-secondary)] print:block">
-        Generated {formatReportTimestamp()}
-      </p>
-
-      <Card className="mt-8">
-        <div className="max-w-md">
-          <Field label="Select Tenant to view Ledger">
-            <Select
-              value={selectedTenantId}
-              onChange={(e) => handleTenantChange(e.target.value)}
-              disabled={fetchingLedger}
-            >
-              <option value="">Choose a tenant...</option>
-              {tenants.map(t => (
-                <option key={t.tenant_id} value={t.tenant_id}>
-                  {t.last_name}, {t.first_name} ({t.status})
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        {apiError ? <Alert variant="error" className="mt-4" title="Problem">{apiError}</Alert> : null}
-      </Card>
-
       {selectedTenantId && report.summary && (
-        <>
-          {/* Summary Metrics */}
-          <Card className="mt-6 border-none bg-stone-100/50 shadow-inner">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Metric label="Total Billed" value={formatPHP(report.summary.total_billed)} />
-              <Metric label="Total Paid" value={formatPHP(report.summary.total_paid)} />
-              <Metric 
-                label="Outstanding Balance" 
+        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <KpiCard 
+                label="Total Billed" 
+                value={formatPHP(report.summary.total_billed)} 
+                icon={Activity}
+            />
+            <KpiCard 
+                label="Total Paid" 
+                value={formatPHP(report.summary.total_paid)} 
+                icon={DollarSign}
+            />
+            <KpiCard 
+                label="Current Balance" 
                 value={formatPHP(report.summary.current_balance)} 
                 isDanger={report.summary.current_balance > 0}
-                isSuccess={report.summary.current_balance <= 0}
-              />
-            </div>
-          </Card>
+                icon={Landmark}
+                sub={report.summary.current_balance > 0 ? "Amount Outstanding" : "Settled Balance"}
+            />
+        </div>
+      )}
 
-          <div className="mt-8">
+      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl bg-white">
+        <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5 flex items-center justify-between">
+           <div className="flex items-center gap-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm border border-teal-100/50">
+                 <User size={14} />
+              </div>
+              <h3 className="hs-strip-title uppercase tracking-widest text-xs font-black text-stone-900">Filters</h3>
+           </div>
+           {selectedTenantId && (
+             <Button type="button" variant="ghost" onClick={() => loadLedger()} className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600">
+                Refresh Ledger
+             </Button>
+           )}
+        </div>
+
+        <div className="p-8">
+            <div className="max-w-md">
+                <Field label="Choose a tenant to view history">
+                    <Select
+                    className="!h-11 border-stone-200"
+                    value={selectedTenantId}
+                    onChange={(e) => handleTenantChange(e.target.value)}
+                    disabled={fetchingLedger}
+                    >
+                    <option value="">Select a tenant...</option>
+                    {tenants.map(t => (
+                        <option key={t.tenant_id} value={t.tenant_id}>
+                        {t.last_name}, {t.first_name} ({t.status})
+                        </option>
+                    ))}
+                    </Select>
+                </Field>
+            </div>
+            {apiError ? <Alert variant="error" className="mt-6" title="Sync Error">{apiError}</Alert> : null}
+        </div>
+      </Card>
+
+      {selectedTenantId ? (
+        <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
             {fetchingLedger ? (
-              <Spinner label="Recalculating ledger..." />
+                <div className="py-20 flex flex-col items-center justify-center text-center">
+                    <Spinner label="Updating ledger records..." />
+                </div>
             ) : (
-              <Table
-                caption={`Ledger for ${report.tenant?.name}`}
-                ariaLabel="Tenant ledger entries"
+                <Table
+                embedded={true}
+                caption={`Financial statement for ${report.tenant?.name}`}
+                ariaLabel="Tenant financial ledger"
                 columns={[
                   { key: "date", label: "Date" },
                   { key: "desc", label: "Description" },
-                  { key: "debit", label: "Debit (Charge)", align: "right" },
-                  { key: "credit", label: "Credit (Pay)", align: "right" },
-                  { key: "balance", label: "Balance", align: "right" },
+                  { key: "debit", label: "Debit", className: "text-right" },
+                  { key: "credit", label: "Credit", className: "text-right" },
+                  { key: "balance", label: "Balance", className: "text-right" },
                 ]}
-                rows={report.entries.map((entry, idx) => (
-                  <tr key={`${entry.link_type}-${entry.link_id}-${idx}`} className="border-t border-[var(--color-border)] hover:bg-[var(--surface-muted)] transition-colors duration-100">
-                    <td className="px-4 py-3.5 text-xs text-[var(--color-text-secondary)]">{formatDateString(entry.date)}</td>
-                    <td className="px-4 py-3.5 text-sm text-[var(--color-text)]">{entry.description}</td>
-                    <td className="px-4 py-3.5 text-right font-mono tabular-nums text-red-700">
-                      {entry.type === 'debit' ? formatPHP(entry.amount) : "—"}
+                rows={entries.map((entry, idx) => (
+                  <tr key={`${entry.link_type}-${entry.link_id}-${idx}`} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
+                    <td className="px-6 py-4 text-[10px] font-medium text-stone-400 uppercase font-mono">{formatDateString(entry.date)}</td>
+                    <td className="px-6 py-4 text-xs font-bold text-stone-700">{entry.description}</td>
+                    <td className="px-6 py-4 text-right">
+                        {entry.type === 'debit' ? (
+                            <span className="font-mono text-xs tabular-nums text-rose-800 font-black">{formatPHP(entry.amount)}</span>
+                        ) : "—"}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-mono tabular-nums text-emerald-700">
-                      {entry.type === 'credit' ? formatPHP(entry.amount) : "—"}
+                    <td className="px-6 py-4 text-right">
+                        {entry.type === 'credit' ? (
+                            <span className="font-mono text-xs tabular-nums text-teal-700 font-bold">{formatPHP(entry.amount)}</span>
+                        ) : "—"}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-mono tabular-nums font-semibold text-[var(--color-text)]">
-                      {formatPHP(entry.running_balance)}
+                    <td className="px-6 py-4 text-right">
+                        <span className={[
+                            "font-mono text-xs tabular-nums font-black",
+                            entry.running_balance > 0 ? "text-stone-900" : "text-emerald-800"
+                        ].join(" ")}>
+                            {formatPHP(entry.running_balance)}
+                        </span>
                     </td>
                   </tr>
                 ))}
                 emptyTitle="No financial records found"
-                emptyDescription="This tenant has no billing cycles or payments recorded yet."
+                emptyDescription="This tenant has no recorded transactions in the authoritative ledger."
               />
             )}
+            {!fetchingLedger && selectedTenantId ? (
+              <TablePagination
+                meta={tableMeta}
+                page={page}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={(n) => {
+                  setPage(1);
+                  setPerPage(n);
+                }}
+                disabled={fetchingLedger}
+              />
+            ) : null}
+        </Card>
+      ) : (
+        <div className="mt-12 flex flex-col items-center justify-center text-center py-20 border-2 border-dashed border-stone-200 rounded-3xl bg-stone-50/20">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm border border-stone-100 mb-6 text-stone-300">
+             <BookOpen size={32} strokeWidth={1.5} />
           </div>
-        </>
-      )}
-
-      {!selectedTenantId && !loading && (
-        <div className="mt-12 flex flex-col items-center justify-center text-center py-12 border-2 border-dashed border-[var(--color-border)] rounded-2xl bg-stone-50/30">
-          <div className="text-stone-300 mb-4">
-             <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M8 15h8"/></svg>
-          </div>
-          <h3 className="text-lg font-medium text-stone-600">No Tenant Selected</h3>
-          <p className="text-sm text-stone-400 mt-1 max-w-xs">Select a tenant from the dropdown above to view their itemized financial ledger.</p>
+          <h3 className="hs-strip-title uppercase tracking-widest text-sm font-black text-stone-500">Awaiting Tenant Selection</h3>
+          <p className="text-[11px] font-medium text-stone-400 mt-2 max-w-xs leading-relaxed">Select a tenant from the selection panel above to view their itemized financial history and running balance.</p>
         </div>
       )}
     </AppMain>
-  );
-}
-
-function Metric({ label, value, isDanger, isSuccess }) {
-  let colorClass = "text-[var(--color-text)]";
-  if (isDanger) colorClass = "text-[#991B1B]";
-  if (isSuccess) colorClass = "text-emerald-700";
-
-  return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-5 shadow-sm" aria-label={`${label}: ${value ?? 0}`}>
-      <div className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">{label}</div>
-      <div className={`mt-2 font-sans text-xl font-semibold leading-none tracking-[-0.025em] ${colorClass}`}>{value ?? 0}</div>
-    </div>
   );
 }

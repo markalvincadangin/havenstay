@@ -22,6 +22,7 @@ class TransactionLog extends Model
         'reference_entity',
         'reference_id',
         'details_json',
+        'correlation_id',
     ];
 
     /**

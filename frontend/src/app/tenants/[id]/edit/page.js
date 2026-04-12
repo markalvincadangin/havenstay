@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { User, Phone, ShieldAlert, Mail, MapPin, RefreshCw, ArrowLeft } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { apiRequest } from "../../../../lib/api";
 import { canManageTenants } from "../../../../lib/auth";
@@ -19,6 +20,9 @@ import PageHeader from "../../../_components/ui/PageHeader";
 import { SkeletonDetailPage } from "../../../_components/ui/Skeleton";
 import UserRoleBadge from "../../../_components/ui/UserRoleBadge";
 import Breadcrumbs from "../../../_components/ui/Breadcrumbs";
+import { primaryLinkCtaClass, secondaryOutlineLinkClass } from "../../../_components/ui/LinkTokens";
+import { TENANT_STATUS_LABELS } from "../../../../lib/constants";
+import { formatTenantDirectoryName } from "../../../../lib/formatters";
 
 const PH_MOBILE_REGEX = /^(09\d{9}|(\+639)\d{9})$/;
 
@@ -135,7 +139,7 @@ export default function EditTenantPage() {
   }
 
   const readOnly = !canManageTenants(currentUser);
-  const fullName = tenant ? `${tenant.first_name} ${tenant.last_name}` : "Tenant";
+  const fullName = tenant ? formatTenantDirectoryName(tenant) : "Tenant";
 
   return (
     <AppMain>
@@ -146,12 +150,12 @@ export default function EditTenantPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         <PageHeader
-          title="Update details"
+          title="Update Details"
           subtitle={`Changes apply to ${fullName} and are used on contracts and billing.`}
           breadcrumbs={
             <Breadcrumbs
               items={[
-                { label: "Tenant Registry", href: "/tenants" },
+                { label: "Tenant Directory", href: "/tenants" },
                 { label: fullName, href: `/tenants/${tenantId}` },
                 { label: "Update" },
               ]}
@@ -176,7 +180,7 @@ export default function EditTenantPage() {
         />
 
         {readOnly ? (
-          <Alert variant="warning" title="Restricted access">
+          <Alert variant="warning" title="Restricted Access">
             You do not have permission to edit tenant records.
           </Alert>
         ) : null}
@@ -186,18 +190,18 @@ export default function EditTenantPage() {
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                 <div className="flex items-center gap-3">
-                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
-                      <RefreshCw size={16} aria-hidden />
+                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                      <RefreshCw size={14} aria-hidden />
                    </div>
-                   <h2 className="hs-strip-title">Tenant Status</h2>
+                   <h2 className="hs-strip-title text-sm font-black uppercase tracking-widest text-stone-400">Basic Information</h2>
                 </div>
                 <p className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
-                  #TENANT-{tenantId}
+                   #TENANT-{tenantId}
                 </p>
               </div>
               <div className="p-8">
                 <Field
-                  label="Record status"
+                  label="Record Status"
                   error={errors.status?.message}
                   helpText={
                     hasActiveContract
@@ -210,9 +214,11 @@ export default function EditTenantPage() {
                     className="!h-11 border-stone-200 bg-stone-50/50 font-bold"
                     {...register("status", { required: "Status is required." })}
                   >
-                    <option value="active">Active</option>
-                    {tenant?.status === 'moved_out' && <option value="moved_out">Moved Out (System Managed)</option>}
-                    <option value="archived">Archived</option>
+                    <option value="active">{TENANT_STATUS_LABELS.active}</option>
+                    {tenant?.status === "moved_out" && (
+                      <option value="moved_out">{`${TENANT_STATUS_LABELS.moved_out} (System Managed)`}</option>
+                    )}
+                    <option value="archived">{TENANT_STATUS_LABELS.archived}</option>
                   </Select>
                 </Field>
               </div>
@@ -221,23 +227,23 @@ export default function EditTenantPage() {
             {/* Section 2: Basic Information */}
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                     <User size={16} aria-hidden />
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                     <User size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title">Basic Information</h2>
+                  <h2 className="hs-strip-title text-sm font-black uppercase tracking-widest text-stone-400">Basic Information</h2>
                </div>
                <div className="p-8 grid gap-6 sm:grid-cols-2">
                   <Field label="First Name" required error={errors.first_name?.message}>
                     <Input
                       disabled={readOnly}
-                      className="!h-11 border-stone-200"
+                      className="!h-11 border-stone-200 focus:border-teal-500/50"
                       {...register("first_name", { required: "Required" })}
                     />
                   </Field>
                   <Field label="Last Name" required error={errors.last_name?.message}>
                     <Input
                       disabled={readOnly}
-                      className="!h-11 border-stone-200"
+                      className="!h-11 border-stone-200 focus:border-teal-500/50"
                       {...register("last_name", { required: "Required" })}
                     />
                   </Field>
@@ -247,10 +253,10 @@ export default function EditTenantPage() {
             {/* Section 3: Contact Address */}
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                     <Phone size={16} aria-hidden />
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                     <Phone size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title">Contact Details</h2>
+                  <h2 className="hs-strip-title text-sm font-black uppercase tracking-widest text-stone-400">Contact Details</h2>
                </div>
                <div className="p-8 space-y-6">
                   <div className="grid gap-6 sm:grid-cols-2">
@@ -296,23 +302,23 @@ export default function EditTenantPage() {
             {/* Section 4: Emergency Details */}
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
-                     <ShieldAlert size={16} aria-hidden />
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                     <ShieldAlert size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title">Emergency Contact</h2>
+                  <h2 className="hs-strip-title text-sm font-black uppercase tracking-widest text-stone-400">Emergency Contact</h2>
                </div>
                <div className="p-8 grid gap-6 sm:grid-cols-2">
                   <Field label="Contact name" required error={errors.emergency_contact_name?.message}>
                     <Input
                       disabled={readOnly}
-                      className="!h-11 border-stone-200"
+                      className="!h-11 border-stone-200 focus:border-teal-500/50"
                       {...register("emergency_contact_name", { required: "Emergency contact name is required." })}
                     />
                   </Field>
                   <Field label="Contact phone" required error={errors.emergency_contact_number?.message}>
                     <Input
                       disabled={readOnly}
-                      className="!h-11 border-stone-200 font-mono"
+                      className="!h-11 border-stone-200 font-mono focus:border-teal-500/50"
                       {...register("emergency_contact_number", {
                         required: "Emergency phone is required.",
                         pattern: { value: PH_MOBILE_REGEX, message: "Invalid format" },
@@ -322,29 +328,23 @@ export default function EditTenantPage() {
                </div>
             </Card>
 
-            {apiError ? (
-              <Alert variant="error" title="Could not save changes">
-                {apiError}
-              </Alert>
-            ) : null}
+            {apiError && <Alert variant="error" title="Could not save changes">{apiError}</Alert>}
 
             <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => router.push(`/tenants/${tenantId}`)}
-                className="!h-11 rounded-xl px-8 text-[10px] font-bold uppercase tracking-widest"
+              <Link
+                href={`/tenants/${tenantId}`}
+                className={secondaryOutlineLinkClass + " px-8"}
               >
                 Cancel
-              </Button>
+              </Link>
               <Button
                 type="submit"
                 variant="primary"
                 loading={isSubmitting}
                 disabled={readOnly || isSubmitting}
-                className="!h-11 rounded-xl bg-teal-600 px-10 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
+                className={primaryLinkCtaClass + " px-12 border-0 shadow-lg shadow-teal-900/10"}
               >
-                Save changes
+                Save Changes
               </Button>
             </div>
         </form>

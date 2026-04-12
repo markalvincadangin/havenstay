@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { User, Shield, ArrowLeft, Key } from "lucide-react";
+import { User, Shield, ArrowLeft, Key, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -115,11 +115,11 @@ export default function NewUserPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         <PageHeader
-          title="Register User"
+          title="Register Account"
           subtitle="Create a new system account with specific role-based permissions."
           breadcrumbs={
             <Breadcrumbs
-              items={[{ label: "User Management", href: "/users" }, { label: "Register user" }]}
+              items={[{ label: "User Directory", href: "/users" }, { label: "Register account" }]}
             />
           }
           actions={
@@ -128,8 +128,8 @@ export default function NewUserPage() {
                 type="button"
                 onClick={() => router.push("/users")}
                 className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to User Registry"
-                title="Back to User Registry"
+                aria-label="Back to User Directory"
+                title="Back to User Directory"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
@@ -149,10 +149,10 @@ export default function NewUserPage() {
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm border border-teal-100/50">
                     <User size={16} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title">Identity Details</h2>
+                  <h2 className="hs-strip-title uppercase tracking-widest text-xs font-black text-stone-900">Identity Details</h2>
                 </div>
               </div>
 
@@ -176,7 +176,7 @@ export default function NewUserPage() {
                   <Field label="Username" required error={errors.username?.message}>
                     <Input
                       placeholder="jdelacruz"
-                      className="!h-11 border-stone-200 font-mono"
+                      className="!h-11 border-stone-200 font-mono text-sm"
                       {...register("username", { 
                         required: "Username is required.",
                         minLength: { value: 4, message: "Minimum 4 characters." }
@@ -203,10 +203,10 @@ export default function NewUserPage() {
 
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700 shadow-sm border border-amber-100/50">
                   <Shield size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title">Access Control</h2>
+                <h2 className="hs-strip-title uppercase tracking-widest text-xs font-black text-stone-900">System Access</h2>
               </div>
 
               <div className="p-8">
@@ -253,7 +253,8 @@ export default function NewUserPage() {
                 loading={isSubmitting}
                 className="!h-11 rounded-xl bg-teal-600 px-12 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
               >
-                Create Account
+                <UserPlus size={14} className="mr-2" />
+                Register Account
               </Button>
             </div>
           </form>

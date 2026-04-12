@@ -2,6 +2,17 @@
 
 REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Request and response bodies are JSON unless noted.
 
+## List responses (pagination)
+
+Many `GET` list endpoints return **`{ "data": [...], "meta": { ... } }`**:
+
+- Query: `page` (integer ≥ 1), `per_page` (integer 1–100; default **25**).
+- `meta`: `current_page`, `last_page`, `per_page`, `total`, `from`, `to`.
+
+**Report JSON** (`/api/reports/*`, except exports): if **`page` or `per_page`** is present, the primary row array (`rows`, or `entries` for tenant ledger) is **sliced** server-side and **`meta`** is appended; `summary` and `filters` are unchanged. Omit both to receive the full row list (used by UIs that filter client-side). CSV exports are always full filtered datasets.
+
+---
+
 ## Authentication and access
 
 - **Bearer token:** Send `Authorization: Bearer <token>` for every route except those listed under [Public routes](#public-routes).
@@ -45,7 +56,7 @@ REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Reques
 
 | Method | Path | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/users` | List users. |
+| `GET` | `/api/users` | List users (`page`, `per_page`; optional `q`, `role`, `account_status`). |
 | `GET` | `/api/users/roles` | List roles (`roles` table) for assignment UIs. |
 | `GET` | `/api/users/{user}` | Get one user (with `role`). |
 | `POST` | `/api/users` | Create user. |
@@ -62,7 +73,7 @@ REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Reques
 
 | Method | Path | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/tenants` | All authenticated | List tenants (`TenantService::allRich`). |
+| `GET` | `/api/tenants` | All authenticated | List tenants (`page`, `per_page`; optional `q`, `status`). |
 | `POST` | `/api/tenants` | Staff+ | Create tenant. |
 | `GET` | `/api/tenants/search` | All authenticated | Search (query params: `q`, optional `status`). CCR-004 LIKE search in service. |
 | `GET` | `/api/tenants/{tenant}` | All authenticated | Tenant detail. |
@@ -78,7 +89,7 @@ REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Reques
 
 | Method | Path | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/rooms` | All authenticated | List rooms with bed spaces. |
+| `GET` | `/api/rooms` | All authenticated | List rooms with bed spaces (`page`, `per_page`; optional `q`, `status`, `room_type`). |
 | `POST` | `/api/rooms` | Staff+ | Create room (optional nested `bed_spaces`). |
 | `GET` | `/api/rooms/availability` | All authenticated | Availability payload (`RoomService::getAllAvailability`). |
 | `GET` | `/api/rooms/{room}` | All authenticated | Room detail with bed spaces. |
@@ -104,7 +115,7 @@ REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Reques
 
 | Method | Path | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/billing` | Billing view | List billing records. |
+| `GET` | `/api/billing` | Billing view | List billing (`page`, `per_page`; optional `contract_id`, `tenant_id`, `q`, `status` ∈ unpaid/partial/paid/overdue, **`past_due`** boolean for calendar receivables: due before today with positive balance). |
 | `POST` | `/api/billing` | Staff+ | Create billing + line items. |
 | `GET` | `/api/billing/{billing}` | Billing view | Billing detail and line items. |
 | `PATCH` | `/api/billing/{billing}/status` | Staff+ | Update status (validated in controller). |
@@ -115,7 +126,7 @@ REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Reques
 
 | Method | Path | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/payments` | Billing view | List payments. |
+| `GET` | `/api/payments` | Billing view | List payments (`page`, `per_page`; optional `tenant_id`, `contract_id`, `billing_id`, `q`, `payment_from`, `payment_to`, `posting_status` = `posted` or `voided`). |
 | `POST` | `/api/payments` | Staff+ | Post payment against billing. |
 | `GET` | `/api/payments/{payment}` | Billing view | Payment detail. |
 | `DELETE` | `/api/payments/{payment}` | Staff+ | **Soft void** — HTTP DELETE for REST semantics; **does not** run SQL `DELETE` on `payments`. Sets `voided_at` / `voided_by` / `void_reason` (FR-026). |
@@ -130,12 +141,14 @@ REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Reques
 
 | Method | Path | Query parameters (validated) | Primary view / notes |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/reports/occupancy` | — | `vw_room_occupancy` / occupancy composition in `ReportService::occupancy()` |
-| `GET` | `/api/reports/billing-summary` | `start_date`, `end_date` (optional) | `vw_billing_summary` |
-| `GET` | `/api/reports/outstanding-balances` | `tenant_id`, `due_from`, `due_to` (optional) | `vw_billing_summary` |
-| `GET` | `/api/reports/collections-performance` | `start_date`, `end_date`, `payment_method` (optional) | `vw_collections_summary` |
-| `GET` | `/api/reports/tenant-ledger` | **`tenant_id` required** | Tenant ledger aggregation |
-| `GET` | `/api/reports/tenant-history` | `from`, `to`, `status` (`all` \| `active` \| `moved_out` \| `completed` \| `terminated`) | `vw_tenant_contract_history` |
+| `GET` | `/api/reports/occupancy-status` | As before + optional **`page` / `per_page`** (slices `rows`; adds `meta`) | `vw_occupancy_status` (FR-015 bed-level) |
+| `GET` | `/api/reports/active-contracts` | `room_id` (optional) + optional **`page` / `per_page`** | `vw_active_contracts` (active leases only) |
+| `GET` | `/api/reports/occupancy` | Optional **`room_type`** (`solo` \| `shared`) + **`page` / `per_page`**; CSV export supports **`room_type`** | `vw_room_occupancy` / occupancy composition in `ReportService::occupancy()` |
+| `GET` | `/api/reports/billing-summary` | `start_date`, `end_date` (optional) + optional **`page` / `per_page`** | `vw_billing_summary` |
+| `GET` | `/api/reports/outstanding-balances` | `tenant_id`, `due_from`, `due_to` (optional) + optional **`page` / `per_page`** | `vw_billing_summary` |
+| `GET` | `/api/reports/collections-performance` | `start_date`, `end_date`, `payment_method` (optional) + optional **`page` / `per_page`** | `vw_collections_summary` |
+| `GET` | `/api/reports/tenant-ledger` | **`tenant_id` required** + optional **`page` / `per_page`** (slices **`entries`**) | Tenant ledger aggregation |
+| `GET` | `/api/reports/tenant-history` | `from`, `to`, `status` + optional **`page` / `per_page`** | `vw_tenant_contract_history` |
 
 **Tenant history JSON `rows[]` fields:** `contract_id`, `tenant_id`, `tenant_name`, `email`, `move_in_date`, `move_out_date`, `room_label`, `status`.
 
@@ -145,6 +158,8 @@ Same query parameters as the matching JSON endpoint where applicable.
 
 | Method | Path |
 | :--- | :--- |
+| `GET` | `/api/reports/occupancy-status/export` |
+| `GET` | `/api/reports/active-contracts/export` |
 | `GET` | `/api/reports/occupancy/export` |
 | `GET` | `/api/reports/billing-summary/export` |
 | `GET` | `/api/reports/outstanding-balances/export` |
@@ -162,8 +177,9 @@ Exports return streamed CSV (`text/csv`) with `Content-Disposition` attachment f
 
 | Method | Path | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/audit-logs` | Row-level audit (`AuditService::listLogs`; supports query filters from request). |
-| `GET` | `/api/transaction-logs` | Workflow transaction logs (`TransactionService::listLogs`). |
+| `GET` | `/api/audit-logs` | Row-level audit (paginated: `page`, `per_page`; filters: `entity_type`, `action`, `from`, `to`, `user`, `correlation` (partial match on `correlation_id`)). Response `meta` includes `access_denied_total` (count of `action=access_denied` rows matching the same filters, all pages; `0` when `action` is filtered to something other than `access_denied`). CSV export remains capped (`AuditService::AUDIT_LOG_LIST_LIMIT`). JSON includes `correlation_id` when set (MySQL trigger workflows). |
+| `GET` | `/api/audit-logs/export` | Same filters as `/api/audit-logs`; streamed CSV includes `correlation_id` column. **Admin only.** |
+| `GET` | `/api/transaction-logs` | Transaction logs (paginated: `page`, `per_page`; optional `q` matches name, reference, initiator, or **`correlation_id`**; optional `status` ∈ **`started` \| `committed` \| `rolled_back` \| `failed`** per `transaction_logs.status` in schema; `from`, `to`). JSON includes `correlation_id` when set. |
 
 ---
 

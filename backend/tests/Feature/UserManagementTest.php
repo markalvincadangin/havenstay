@@ -146,7 +146,7 @@ class UserManagementTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->actingAs($admin)->getJson('/api/users')->assertOk()->assertJsonStructure(['users']);
+        $this->actingAs($admin)->getJson('/api/users')->assertOk()->assertJsonStructure(['data', 'meta']);
     }
 
     /**

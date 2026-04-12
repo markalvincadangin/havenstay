@@ -1,10 +1,11 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { Search, Plus, User, Mail, Phone, ArrowUpRight } from "lucide-react";
+import { Search, Plus, User, Mail, Phone, ArrowUpRight, Users, Bed, Calendar } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { apiRequest } from "../../lib/api";
 import { flattenApiErrors } from "../../lib/errors";
 import { canManageTenants } from "../../lib/auth";
@@ -21,7 +22,22 @@ import PageHeader from "../_components/ui/PageHeader";
 import { SkeletonListPage } from "../_components/ui/Skeleton";
 import { Table } from "../_components/ui/Table";
 import UserRoleBadge from "../_components/ui/UserRoleBadge";
-import { StatusBadge } from "../../components/ui/StatusBadge";
+import { StatusBadge } from "../_components/ui/StatusBadge";
+import { KpiCard } from "../_components/ui/KpiCard";
+import EmptyState from "../_components/ui/EmptyState";
+import { TENANT_STATUS_LABELS } from "../../lib/constants";
+import {
+  buildPaginationQuery,
+  normalizePaginatedList,
+  readStoredPerPage,
+} from "../../lib/pagination";
+import TablePagination from "../_components/ui/TablePagination";
+import {
+  compareTenantDirectoryName,
+  formatTenantDirectoryName,
+  getTenantInitials,
+} from "../../lib/formatters";
+import { primaryLinkCtaClass } from "../_components/ui/LinkTokens";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -29,14 +45,8 @@ const pageVariants = {
   transition: { duration: 0.2, ease: "easeOut" },
 };
 
-function TenantAvatar({ label }) {
-  const initials = label
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-
+function TenantAvatar({ tenant }) {
+  const initials = getTenantInitials(tenant);
   return (
     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-[10px] font-bold text-stone-500 ring-1 ring-stone-200">
       {initials}
@@ -51,50 +61,91 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tenants, setTenants] = useState([]);
+  const [listMeta, setListMeta] = useState(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(() => readStoredPerPage());
   const { sortColumn, sortDirection, onSortChange } = useTableSort();
+
+  // Summary Metrics State (Master §18.2)
+  const [stats, setStats] = useState({
+    activeCount: 0,
+    totalBeds: 0,
+    pendingExits: 0
+  });
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const [activePage, reportData] = await Promise.all([
+        apiRequest("/api/tenants?status=active&per_page=1", { method: "GET" }),
+        apiRequest("/api/reports/occupancy", { method: "GET" }).catch(() => null),
+      ]);
+      const activeTotal = normalizePaginatedList(activePage).meta?.total ?? 0;
+      const totalBeds = reportData?.summary?.total_beds ?? 0;
+      setStats({
+        activeCount: activeTotal,
+        totalBeds,
+        pendingExits: 0,
+      });
+    } catch {
+      /* KPIs best-effort */
+    }
+  }, []);
+
+  const fetchTenants = useCallback(async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const extra = {};
+      if (debouncedQuery) extra.q = debouncedQuery;
+      if (statusFilter !== "all") extra.status = statusFilter;
+      const qs = buildPaginationQuery(page, perPage, extra);
+      const tenantData = await apiRequest(`/api/tenants${qs}`, { method: "GET" });
+      const { rows, meta } = normalizePaginatedList(tenantData);
+      setTenants(rows);
+      setListMeta(meta);
+    } catch (err) {
+      setError(flattenApiErrors(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [page, perPage, debouncedQuery, statusFilter]);
 
   useEffect(() => {
     if (authLoading || !currentUser) return;
+    fetchStats();
+  }, [authLoading, currentUser, fetchStats]);
 
-    const fetchTenants = async () => {
-      try {
-        const data = await apiRequest("/api/tenants", { method: "GET" });
-        setTenants(Array.isArray(data) ? data : data?.tenants || []);
-      } catch (err) {
-        setError(flattenApiErrors(err));
-      } finally {
-        setLoading(false);
-      }
-    };
+  useEffect(() => {
+    if (authLoading || !currentUser) return;
     fetchTenants();
-  }, [authLoading, currentUser]);
+  }, [authLoading, currentUser, fetchTenants]);
 
-  const rows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return tenants.filter((tenant) => {
-      const matchesSearch =
-        !normalizedQuery ||
-        tenant.first_name.toLowerCase().includes(normalizedQuery) ||
-        tenant.last_name.toLowerCase().includes(normalizedQuery) ||
-        String(tenant.contact_number || "").includes(query) ||
-        (tenant.email && tenant.email.toLowerCase().includes(normalizedQuery)) ||
-        String(tenant.tenant_id || "").includes(normalizedQuery);
-
-      const matchesStatus =
-        statusFilter === "all" || tenant.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
+  useEffect(() => {
+    flushSync(() => {
+      setPage(1);
     });
-  }, [query, statusFilter, tenants]);
+  }, [debouncedQuery, statusFilter]);
 
   const sortedRows = useMemo(() => {
-    if (!sortColumn) return rows;
-    return sortClientRows(rows, sortColumn, sortDirection, (t) => {
+    if (!sortColumn) return tenants;
+    if (sortColumn === "name") {
+      const list = [...tenants];
+      const dir = sortDirection === "asc" ? 1 : -1;
+      list.sort((a, b) => compareTenantDirectoryName(a, b) * dir);
+      return list;
+    }
+    return sortClientRows(tenants, sortColumn, sortDirection, (t) => {
       switch (sortColumn) {
-        case "name":
-          return `${t.last_name || ""} ${t.first_name || ""}`;
+        case "id":
+          return Number(t.tenant_id) || 0;
         case "contact":
           return t.contact_number || "";
         case "room":
@@ -105,7 +156,7 @@ export default function TenantsPage() {
           return "";
       }
     });
-  }, [rows, sortColumn, sortDirection]);
+  }, [tenants, sortColumn, sortDirection]);
 
   if (authLoading || loading) {
     return (
@@ -114,6 +165,10 @@ export default function TenantsPage() {
       </AppMain>
     );
   }
+
+  const saturation = stats.totalBeds > 0 
+    ? Math.round((stats.activeCount / stats.totalBeds) * 100) 
+    : 0;
 
   return (
     <AppMain>
@@ -124,16 +179,13 @@ export default function TenantsPage() {
         className="space-y-6"
       >
         <PageHeader
-          title="Tenant Registry"
-          subtitle="Tenants on file — active, moved out, and archived."
-          breadcrumbs={<Breadcrumbs items={[{ label: "Tenant Registry" }]} />}
+          title="Tenant Directory"
+          subtitle="Manage profile data, contact details, and historical lease statuses."
+          breadcrumbs={<Breadcrumbs items={[{ label: "Tenant Directory" }]} />}
           actions={
             <div className="flex items-center gap-3">
               {canManageTenants(currentUser) && (
-                <Link
-                  href="/tenants/new"
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-teal-600 px-6 text-xs font-black tracking-widest text-white shadow-lg shadow-teal-900/10 transition-colors hover:bg-teal-700"
-                >
+                <Link href="/tenants/new" className={primaryLinkCtaClass}>
                   <Plus size={18} aria-hidden />
                   <span>Register Tenant</span>
                 </Link>
@@ -145,17 +197,40 @@ export default function TenantsPage() {
           }
         />
 
+        {/* Operational KPIs (Master §18.2) */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <KpiCard 
+            label="Active Residents" 
+            value={stats.activeCount} 
+            sub="Currently staying"
+            icon={Users}
+          />
+          <KpiCard 
+            label="Bed Saturation" 
+            value={`${saturation}%`} 
+            sub={`${stats.activeCount} of ${stats.totalBeds} beds used`}
+            icon={Bed}
+            progress={saturation}
+          />
+          <KpiCard 
+            label="Pending Move-outs" 
+            value={stats.pendingExits} 
+            sub="Next 30 days"
+            icon={Calendar}
+          />
+        </div>
+
         <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-6 py-4 sm:px-8 sm:py-5">
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
             <div className="flex items-center gap-2.5">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
                 <User size={14} aria-hidden />
               </div>
-              <h2 className="hs-strip-title">Registry Filters</h2>
+              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Filter Tenants</h2>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-8">
             {!canManageTenants(currentUser) && (
               <div className="mb-6">
                 <Alert variant="info" title="Read-only Access">
@@ -165,29 +240,29 @@ export default function TenantsPage() {
             )}
 
             <div className="grid gap-6 md:grid-cols-12 items-end">
-              <div className="md:col-span-8 lg:col-span-9">
+              <div className="md:col-span-9">
                 <Field label="Search">
                   <Input
                     icon={Search}
                     placeholder="Name, phone, email, or tenant ID…"
-                    className="!h-12 border-stone-200 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
+                    className="!h-11 border-stone-200 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </Field>
               </div>
 
-              <div className="md:col-span-4 lg:col-span-3">
+              <div className="md:col-span-3">
                 <Field label="Status">
                   <Select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="!h-12 border-stone-200 focus:border-teal-500/50"
+                    className="!h-11 border-stone-200 focus:border-teal-500/50"
                   >
                     <option value="all">All Statuses</option>
-                    <option value="active">Active</option>
-                    <option value="moved_out">Moved Out</option>
-                    <option value="archived">Archived</option>
+                    {Object.entries(TENANT_STATUS_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
                   </Select>
                 </Field>
               </div>
@@ -205,7 +280,7 @@ export default function TenantsPage() {
                 {
                   key: "status",
                   label: "Status",
-                  value: statusFilter !== "all" ? statusFilter : "",
+                  value: statusFilter !== "all" ? TENANT_STATUS_LABELS[statusFilter] || statusFilter : "",
                   onClear: () => setStatusFilter("all"),
                 },
               ]}
@@ -221,19 +296,40 @@ export default function TenantsPage() {
           {error ? (
             <Alert variant="error" title="Failed to load tenants">
               {error}
-              <button type="button" onClick={() => window.location.reload()} className="mt-2 text-xs font-bold underline">
+              <button
+                type="button"
+                onClick={() => {
+                  void fetchTenants();
+                }}
+                className="mt-2 text-xs font-bold underline"
+              >
                 Retry
               </button>
             </Alert>
+          ) : sortedRows.length === 0 ? (
+            <EmptyState 
+              title="No tenants found"
+              message="No records matching your search or filters. Try adjusting your search criteria."
+            />
           ) : (
+            <Card className="overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-sm">
             <Table
-                caption="Registry of current and former tenants"
+                embedded
+                caption={`Directory of current and former resident records — ${listMeta?.total ?? sortedRows.length} matching`}
                 columns={[
-                  { key: "name", label: "Tenant Name", sortable: true, sortKey: "name" },
-                  { key: "contact", label: "Contact Details", sortable: true, sortKey: "contact" },
-                  { key: "room", label: "Room Code", sortable: true, sortKey: "room" },
+                  {
+                    key: "id",
+                    label: "Tenant ID",
+                    sortable: true,
+                    sortKey: "id",
+                    className: "w-[4.5rem]",
+                    headerClassName: "!px-4",
+                  },
+                  { key: "name", label: "Name", sortable: true, sortKey: "name" },
+                  { key: "contact", label: "Contact", sortable: true, sortKey: "contact" },
+                  { key: "room", label: "Room", sortable: true, sortKey: "room" },
                   { key: "status", label: "Status", sortable: true, sortKey: "status" },
-                  { key: "actions", label: "", className: "text-right" },
+                  { key: "actions", label: "", className: "text-right w-16" },
                 ]}
                 sortColumn={sortColumn}
                 sortDirection={sortDirection}
@@ -244,51 +340,69 @@ export default function TenantsPage() {
                     className="group cursor-pointer border-t border-stone-100 transition-colors hover:bg-stone-50 active:bg-stone-100"
                     onClick={() => router.push(`/tenants/${tenant.tenant_id}`)}
                   >
+                    <td className="px-4 py-4 align-middle">
+                      <span
+                        className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums"
+                        title={`Tenant ID ${tenant.tenant_id}`}
+                      >
+                        #TENANT-{tenant.tenant_id}
+                      </span>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <TenantAvatar label={`${tenant.first_name} ${tenant.last_name}`} />
-                        <div>
-                          <p className="text-sm font-bold text-stone-900 leading-tight">
-                            {tenant.first_name} {tenant.last_name}
-                          </p>
-                          <p className="mt-1 font-mono text-[10px] font-bold text-stone-400 tracking-tighter">
-                            #TENANT-{tenant.tenant_id}
-                          </p>
-                        </div>
+                        <TenantAvatar tenant={tenant} />
+                        <p className="text-sm font-bold text-stone-900 leading-snug">
+                          {formatTenantDirectoryName(tenant)}
+                        </p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-xs text-stone-600">
-                          <Phone size={12} className="text-stone-300" />
-                          <span className="font-mono tracking-tighter">{tenant.contact_number || "—"}</span>
+                        <div className="flex items-center gap-2 text-[11px] font-mono tabular-nums text-stone-600">
+                          <Phone size={11} className="text-stone-300" />
+                          <span className="tracking-tighter">{tenant.contact_number || "—"}</span>
                         </div>
                         {tenant.email && (
                           <div className="flex items-center gap-2 text-xs text-stone-400">
-                            <Mail size={12} className="text-stone-300" />
+                            <Mail size={11} className="text-stone-300" />
                             <span className="truncate max-w-[150px]">{tenant.email}</span>
                           </div>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                          {tenant.room_code ? `Room ${tenant.room_code}` : "—"}
+                      <div className="flex items-center gap-2 text-sm text-stone-600">
+                          {tenant.room_code ? (
+                            <span className="font-bold text-stone-900">Room {tenant.room_code}</span>
+                          ) : (
+                            <span className="text-stone-400 italic">Unassigned</span>
+                          )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <StatusBadge size="sm">{tenant.status || "active"}</StatusBadge>
+                      <StatusBadge>{tenant.status || "active"}</StatusBadge>
                     </td>
                     <td className="px-6 py-4 text-right">
+                      {/* Registry Action Pattern (Master §5.8) */}
                       <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-400 transition-[border-color,background-color,color] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600">
                         <ArrowUpRight size={16} />
                       </div>
                     </td>
                   </tr>
                 ))}
-                emptyTitle="No tenants found"
-                emptyDescription="No records matching your search or filters."
               />
+              <TablePagination
+                meta={listMeta}
+                page={page}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={(n) => {
+                  setPage(1);
+                  setPerPage(n);
+                }}
+                disabled={loading}
+              />
+            </Card>
           )}
         </div>
       </motion.div>

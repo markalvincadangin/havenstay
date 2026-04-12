@@ -20,6 +20,7 @@ class AuditLog extends Model
         'action',
         'old_values_json',
         'new_values_json',
+        'correlation_id',
     ];
 
     /**

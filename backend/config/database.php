@@ -44,6 +44,8 @@ return [
             'transaction_mode' => 'DEFERRED',
         ],
 
+        // Read/write split: SELECTs use read; DDL/writes use write. Keep DB_READ_PORT=DB_WRITE_PORT until the replica
+        // has the same database as the primary, then set DB_READ_PORT to the replica (see docs/DISTRIBUTED_DB_SETUP.md).
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),

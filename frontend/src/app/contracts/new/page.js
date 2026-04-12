@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, MapPin, RefreshCw, Wallet } from "lucide-react";
+import { ArrowLeft, MapPin, RefreshCw, Wallet, ShieldCheck } from "lucide-react";
 
 import { apiRequest } from "../../../lib/api";
 import { canManageContracts } from "../../../lib/auth";
@@ -22,6 +22,8 @@ import { Field, Input, Select, Textarea } from "../../_components/ui/Fields";
 import PageHeader from "../../_components/ui/PageHeader";
 import Spinner from "../../_components/ui/Spinner";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import { ROOM_STATUS_LABELS, BED_STATUS_LABELS, ROOM_TYPE_LABELS } from "../../../lib/constants";
+import { normalizePaginatedList } from "../../../lib/pagination";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -61,9 +63,7 @@ export default function NewContractPage() {
   });
   useUnsavedChangesWarning(isDirty && !isSubmitting);
 
-  /** Only when the user changes room selection — not when `rooms` refetches (avoids overwriting monthly_rent). */
   const lastRoomIdForRentRef = useRef(null);
-
   const selectedRoomId = watch("room_id");
   const selectedRoom = useMemo(
     () => rooms.find((room) => String(room.room_id) === String(selectedRoomId)),
@@ -71,7 +71,6 @@ export default function NewContractPage() {
   );
   const isSharedRoom = selectedRoom?.room_type === "shared";
 
-  /** Tenants who may receive a new lease: not archived, and no existing active contract (FR-017). */
   const eligibleTenants = useMemo(() => {
     const activeContractTenantIds = new Set(
       contracts
@@ -111,19 +110,16 @@ export default function NewContractPage() {
       return;
     }
     const id = String(selectedRoomId);
-    if (lastRoomIdForRentRef.current === id) {
-      return;
-    }
-    const room = rooms.find((r) => String(r.room_id) === id);
-    if (!room) {
-      return;
-    }
-    lastRoomIdForRentRef.current = id;
+    if (lastRoomIdForRentRef.current === id) return;
 
-    const roomRate = parseMoneyInput(room.monthly_rate ?? 0);
-    const capacity = Number(room.capacity || 1);
+    const roomData = rooms.find((r) => String(r.room_id) === id);
+    if (!roomData) return;
+    
+    lastRoomIdForRentRef.current = id;
+    const roomRate = parseMoneyInput(roomData.monthly_rate ?? 0);
+    const capacity = Number(roomData.capacity || 1);
     const suggestedRate =
-      room.room_type === "shared" && capacity > 0
+      roomData.room_type === "shared" && capacity > 0
         ? (roomRate / capacity).toFixed(2)
         : roomRate.toFixed(2);
     setValue("monthly_rent", suggestedRate, { shouldDirty: true });
@@ -131,63 +127,50 @@ export default function NewContractPage() {
 
   useEffect(() => {
     if (authLoading || !currentUser) return;
-
     const bootstrap = async () => {
       try {
         const [tenantData, roomData, contractData] = await Promise.all([
-          apiRequest("/api/tenants", { method: "GET" }),
-          apiRequest("/api/rooms", { method: "GET" }),
-          apiRequest("/api/contracts", { method: "GET" }),
+          apiRequest("/api/tenants?per_page=100", { method: "GET" }),
+          apiRequest("/api/rooms?per_page=100", { method: "GET" }),
+          apiRequest("/api/contracts?per_page=100", { method: "GET" }),
         ]);
-
-        setTenants(Array.isArray(tenantData) ? tenantData : tenantData?.tenants || []);
-        setRooms(Array.isArray(roomData) ? roomData : roomData?.rooms || []);
-        setContracts(Array.isArray(contractData) ? contractData : contractData?.contracts || []);
+        setTenants(normalizePaginatedList(tenantData).rows);
+        setRooms(normalizePaginatedList(roomData).rows);
+        setContracts(normalizePaginatedList(contractData).rows);
       } catch (error) {
         setApiError(error.message || "Failed to load form data.");
       } finally {
         setLoading(false);
       }
     };
-
     bootstrap();
   }, [authLoading, currentUser]);
 
   const onSubmit = async (values) => {
     setApiError("");
-
     if (!canManageContracts(currentUser)) {
       setApiError("Unauthorized: only Admin or Staff can create contracts.");
       return;
     }
 
     let bedSpaceId = values.bed_space_id;
-
     if (!isSharedRoom && selectedRoom) {
       try {
         const room = await apiRequest(`/api/rooms/${selectedRoomId}`, { method: "GET" });
-        const bedSpaces = Array.isArray(room?.bed_spaces)
-          ? room.bed_spaces
-          : Array.isArray(room?.bedSpaces)
-            ? room.bedSpaces
-            : [];
-        if (bedSpaces.length > 0) {
-          bedSpaceId = bedSpaces[0].bed_space_id;
-        } else {
-          setApiError("Solo room has no bed spaces configured. Contact an administrator.");
+        const bedSpaces = Array.isArray(room?.bed_spaces) ? room.bed_spaces : (room?.bedSpaces || []);
+        if (bedSpaces.length > 0) bedSpaceId = bedSpaces[0].bed_space_id;
+        else {
+          setApiError("Solo room has no bed spaces configured.");
           return;
         }
       } catch {
-        setApiError("Failed to load bed space information for this room.");
+        setApiError("Failed to load inventory for this room.");
         return;
       }
     }
 
     if (!bedSpaceId) {
-      setError("bed_space_id", {
-        type: "manual",
-        message: "Bed space is required.",
-      });
+      setError("bed_space_id", { type: "manual", message: "Bed space is required." });
       return;
     }
 
@@ -214,7 +197,6 @@ export default function NewContractPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
-
       const newId = response?.contract?.contract_id;
       if (newId) router.push(`/contracts/${newId}`);
     } catch (error) {
@@ -225,7 +207,7 @@ export default function NewContractPage() {
   if (authLoading || loading) {
     return (
       <AppMain>
-        <Spinner label="Loading registration form…" />
+        <Spinner label="Initializing registration form…" />
       </AppMain>
     );
   }
@@ -245,7 +227,10 @@ export default function NewContractPage() {
           subtitle="Draft new lease terms and link tenants to available room inventory."
           breadcrumbs={
             <Breadcrumbs
-              items={[{ label: "Contract Registry", href: "/contracts" }, { label: "Register contract" }]}
+              items={[
+                { label: "Contract Ledger", href: "/contracts" },
+                { label: "Register Contract" },
+              ]}
             />
           }
           actions={
@@ -254,8 +239,7 @@ export default function NewContractPage() {
                 type="button"
                 onClick={() => router.push("/contracts")}
                 className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Contract Registry"
-                title="Back to Contract Registry"
+                aria-label="Back to Contract Ledger"
               >
                 <ArrowLeft size={18} aria-hidden />
               </button>
@@ -267,261 +251,211 @@ export default function NewContractPage() {
         />
 
         <div className="space-y-6">
-        {readOnly ? (
-          <Alert variant="warning" title="Read-only role">
-            You cannot register contracts with your current role.
-          </Alert>
-        ) : null}
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600 shadow-sm">
-                  <RefreshCw size={16} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title">Tenant & Room Assignment</h2>
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-wide text-stone-400 [word-spacing:0.06em]">
-                Required where marked
-              </span>
-            </div>
-            <div className="space-y-8 p-8">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <Field
-                  label="Primary Resident"
-                  required
-                  error={errors.tenant_id?.message}
-                  helpText={
-                    eligibleTenants.length === 0
-                      ? "No eligible tenants: archive excludes profiles; anyone with an active lease is hidden until move-out completes."
-                      : "Only tenants who are not archived and who do not already have an active contract."
-                  }
-                >
-                  <Select
-                    autoFocus
-                    hasError={Boolean(errors.tenant_id)}
-                    disabled={readOnly}
-                    className="!h-11 border-stone-200"
-                    {...register("tenant_id", { required: "Select a Tenant." })}
-                  >
-                    <option value="">Select Tenant</option>
-                    {eligibleTenants.map((t) => (
-                      <option key={t.tenant_id} value={t.tenant_id}>
-                        #{t.tenant_id} — {t.last_name}, {t.first_name} ({t.status})
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-
-                <Field label="Room" required error={errors.room_id?.message}>
-                  <Select
-                    hasError={Boolean(errors.room_id)}
-                    disabled={readOnly}
-                    className="!h-11 border-stone-200"
-                    {...register("room_id", { required: "Select a room." })}
-                  >
-                    <option value="">Select room</option>
-                    {rooms.map((room) => (
-                      <option
-                        key={room.room_id}
-                        value={room.room_id}
-                        disabled={room.status !== "available"}
-                      >
-                        {room.room_code} ({room.room_type})
-                        {room.status !== "available" ? ` — ${room.status}` : ""}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-
-              <Field
-                label="Bed Space"
-                error={errors.bed_space_id?.message}
-                helpText={
-                  isSharedRoom
-                    ? bedSpaceOptions.length > 0
-                      ? bedSpaceOptions.some((b) => b.status === "vacant")
-                        ? "Select a vacant bed label."
-                        : "No vacant beds in this room."
-                      : "Loading bed spaces…"
-                    : "Auto-selected for solo rooms."
-                }
-              >
-                <Select
-                  hasError={Boolean(errors.bed_space_id)}
-                  disabled={
-                    readOnly ||
-                    !isSharedRoom ||
-                    !bedSpaceOptions.some((b) => b.status === "vacant")
-                  }
-                  className="!h-11 border-stone-200"
-                  {...register("bed_space_id", {
-                    validate: (value) => {
-                      if (isSharedRoom && !value) {
-                        return "Bed space is required for shared rooms.";
-                      }
-                      return true;
-                    },
-                  })}
-                >
-                  <option value="">
-                    {isSharedRoom
-                      ? bedSpaceOptions.some((b) => b.status === "vacant")
-                        ? "Select bed space"
-                        : "No vacant beds"
-                      : "N/A — solo room"}
-                  </option>
-                  {bedSpaceOptions.map((bed) => (
-                    <option
-                      key={bed.bed_space_id}
-                      value={bed.bed_space_id}
-                      disabled={bed.status !== "vacant"}
-                    >
-                      {bed.bed_label || `Bed #${bed.bed_space_id}`}
-                      {bed.status !== "vacant" ? ` (${bed.status})` : ""}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </div>
-          </Card>
-
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm">
-                <MapPin size={16} aria-hidden />
-              </div>
-              <h2 className="hs-strip-title">Lease Period</h2>
-            </div>
-            <div className="grid gap-6 p-8 sm:grid-cols-2">
-              <Field label="Move-in Date" required error={errors.move_in_date?.message}>
-                <Input
-                  type="date"
-                  hasError={Boolean(errors.move_in_date)}
-                  disabled={readOnly}
-                  className="!h-11 border-stone-200"
-                  {...register("move_in_date", { required: "Move-in date is required." })}
-                />
-              </Field>
-              <Field label="Expected Move-out" error={errors.expected_move_out?.message}>
-                <Input
-                  type="date"
-                  hasError={Boolean(errors.expected_move_out)}
-                  disabled={readOnly}
-                  className="!h-11 border-stone-200"
-                  {...register("expected_move_out", {
-                    validate: (value) => {
-                      if (!value) return true;
-                      const moveIn = watch("move_in_date");
-                      if (moveIn && new Date(value) <= new Date(moveIn)) {
-                        return "Must be after move-in date.";
-                      }
-                      return true;
-                    },
-                  })}
-                />
-              </Field>
-            </div>
-          </Card>
-
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm">
-                <Wallet size={16} aria-hidden />
-              </div>
-              <h2 className="hs-strip-title">Financial Terms</h2>
-            </div>
-            <div className="space-y-8 p-8">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Deposit Amount" required error={errors.deposit_amount?.message}>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    hasError={Boolean(errors.deposit_amount)}
-                    disabled={readOnly}
-                    className="!h-11 border-stone-200 tabular-nums"
-                    {...register("deposit_amount", {
-                      required: "Deposit is required.",
-                      min: { value: 0, message: "Min ₱0" },
-                      max: { value: 500000, message: "Max ₱500,000" },
-                    })}
-                  />
-                </Field>
-                <Field
-                  label="Monthly Rate"
-                  required
-                  error={errors.monthly_rent?.message}
-                  helpText={
-                    selectedRoom
-                      ? `Room total ${formatPHP(selectedRoom.monthly_rate)} · Suggested ${
-                          isSharedRoom && selectedRoom.capacity
-                            ? `${formatPHP(
-                                parseMoneyInput(selectedRoom.monthly_rate ?? 0) /
-                                  Number(selectedRoom.capacity || 1),
-                              )} per bed`
-                            : formatPHP(selectedRoom.monthly_rate)
-                        }`
-                      : null
-                  }
-                >
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    hasError={Boolean(errors.monthly_rent)}
-                    disabled={readOnly}
-                    className="!h-11 border-stone-200 tabular-nums"
-                    {...register("monthly_rent", {
-                      required: "Monthly rate is required.",
-                      min: { value: 500, message: "Min ₱500" },
-                      max: { value: 100000, message: "Max ₱100,000" },
-                    })}
-                  />
-                </Field>
-              </div>
-
-              <Field label="Notes">
-                <Textarea
-                  rows={3}
-                  disabled={readOnly}
-                  className="border-stone-200"
-                  {...register("notes", {
-                    maxLength: { value: 1000, message: "Max 1,000 characters" },
-                  })}
-                />
-              </Field>
-            </div>
-          </Card>
-
-          {apiError ? (
-            <Alert variant="error" title="Registration failed">
-              {apiError}
+          {readOnly && (
+            <Alert variant="warning" title="Restricted Role">
+              You do not have administrative clearance to register new contracts.
             </Alert>
-          ) : null}
+          ) || apiError && (
+             <Alert variant="error" title="Submission Error">{apiError}</Alert>
+          )}
 
-          <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => router.push("/contracts")}
-              className="!h-11 rounded-xl px-8 text-[10px] font-bold uppercase tracking-widest"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={isSubmitting}
-              disabled={readOnly || isSubmitting}
-              className="!h-11 rounded-xl bg-teal-600 px-10 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
-            >
-              Register Contract
-            </Button>
-          </div>
-        </form>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+              <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600 shadow-sm">
+                    <RefreshCw size={16} aria-hidden />
+                  </div>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Room & Bed Assignment</h2>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Operational Step 01</span>
+              </div>
+              <div className="space-y-8 p-8">
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <Field
+                    label="Primary Resident"
+                    required
+                    error={errors.tenant_id?.message}
+                    helpText={
+                      eligibleTenants.length === 0
+                        ? "No eligible tenants found."
+                        : "Only tenants without active agreements are listed."
+                    }
+                  >
+                    <Select
+                      autoFocus
+                      hasError={Boolean(errors.tenant_id)}
+                      disabled={readOnly}
+                      className="!h-11 border-stone-200 font-bold"
+                      {...register("tenant_id", { required: "Assign a resident to this contract." })}
+                    >
+                      <option value="">Select Tenant</option>
+                      {eligibleTenants.map((t) => (
+                        <option key={t.tenant_id} value={t.tenant_id}>
+                          #{t.tenant_id} · {t.last_name}, {t.first_name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+
+                  <Field label="Inventory Room" required error={errors.room_id?.message}>
+                    <Select
+                      hasError={Boolean(errors.room_id)}
+                      disabled={readOnly}
+                      className="!h-11 border-stone-200 font-bold"
+                      {...register("room_id", { required: "Select a room unit." })}
+                    >
+                      <option value="">Select room</option>
+                      {rooms.map((room) => (
+                        <option key={room.room_id} value={room.room_id} disabled={room.status !== "available"}>
+                          {room.room_code} ({ROOM_TYPE_LABELS[room.room_type] || room.room_type}) {room.status !== "available" ? `— ${ROOM_STATUS_LABELS[room.status] || room.status}` : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+
+                <Field
+                  label="Assigned Bed Space"
+                  error={errors.bed_space_id?.message}
+                  helpText={isSharedRoom ? "Select a vacant bed label." : "System will auto-assign for solo rooms."}
+                >
+                  <Select
+                    hasError={Boolean(errors.bed_space_id)}
+                    disabled={readOnly || !isSharedRoom || !bedSpaceOptions.some((b) => b.status === "vacant")}
+                    className="!h-11 border-stone-200 font-bold"
+                    {...register("bed_space_id", {
+                      validate: (value) => isSharedRoom && !value ? "Bed assignment is required for shared units." : true,
+                    })}
+                  >
+                    <option value="">
+                      {isSharedRoom ? (bedSpaceOptions.some(b => b.status === 'vacant') ? "Select Bed" : "No vacancy") : "N/A — Solo Unit"}
+                    </option>
+                    {bedSpaceOptions.map((bed) => (
+                      <option key={bed.bed_space_id} value={bed.bed_space_id} disabled={bed.status !== "vacant"}>
+                        {bed.bed_label || `Bed #${bed.bed_space_id}`} {bed.status !== "vacant" ? `(${BED_STATUS_LABELS[bed.status] || bed.status})` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            </Card>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm">
+                    <MapPin size={16} aria-hidden />
+                  </div>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Lease Terms</h2>
+                </div>
+                <div className="grid gap-6 p-8">
+                  <Field label="Inception (Move-in)" required error={errors.move_in_date?.message}>
+                    <Input
+                      type="date"
+                      hasError={Boolean(errors.move_in_date)}
+                      disabled={readOnly}
+                      className="!h-11 border-stone-200"
+                      {...register("move_in_date", { required: "Inception date is required." })}
+                    />
+                  </Field>
+                  <Field label="Expected Move-Out" error={errors.expected_move_out?.message}>
+                    <Input
+                      type="date"
+                      hasError={Boolean(errors.expected_move_out)}
+                      disabled={readOnly}
+                      className="!h-11 border-stone-200"
+                      {...register("expected_move_out", {
+                        validate: (val) => !val || new Date(val) > new Date(watch("move_in_date")) || "Must be after inception.",
+                      })}
+                    />
+                  </Field>
+                </div>
+              </Card>
+
+              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shadow-sm">
+                    <Wallet size={16} aria-hidden />
+                  </div>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Financial Terms</h2>
+                </div>
+                <div className="grid gap-6 p-8">
+                  <Field label="Security Deposit" required error={errors.deposit_amount?.message}>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      hasError={Boolean(errors.deposit_amount)}
+                      disabled={readOnly}
+                      className="!h-11 border-stone-200 font-mono font-bold tabular-nums"
+                      {...register("deposit_amount", { required: "Deposit required." })}
+                    />
+                  </Field>
+                  <Field 
+                    label="Lease Monthly Rate" 
+                    required 
+                    error={errors.monthly_rent?.message}
+                    helpText={selectedRoom ? `Unit total ${formatPHP(selectedRoom.monthly_rate)}` : null}
+                  >
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      hasError={Boolean(errors.monthly_rent)}
+                      disabled={readOnly}
+                      className="!h-11 border-stone-200 font-mono font-bold tabular-nums"
+                      {...register("monthly_rent", { required: "Monthly rate required." })}
+                    />
+                  </Field>
+                </div>
+              </Card>
+            </div>
+
+            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
+              <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Notes</h2>
+              </div>
+              <div className="p-8">
+                <Field label="Agreement Notes">
+                  <Textarea
+                    rows={3}
+                    placeholder="Specific terms, shared utility agreements, etc."
+                    disabled={readOnly}
+                    className="border-stone-200"
+                    {...register("notes")}
+                  />
+                </Field>
+              </div>
+            </Card>
+
+            <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.push("/contracts")}
+                className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                loading={isSubmitting}
+                disabled={readOnly || isSubmitting}
+                className="!h-12 rounded-xl bg-teal-600 px-12 text-[10px] font-black uppercase tracking-widest shadow-xl shadow-teal-900/20 hover:bg-teal-700 active:scale-95"
+              >
+                Register Contract
+              </Button>
+            </div>
+          </form>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl bg-stone-50 p-6 text-stone-500">
+          <ShieldCheck size={20} className="text-stone-300" />
+          <p className="text-[10px] font-bold uppercase tracking-widest leading-relaxed">
+            Registering a contract initiates a legal ledger record. Ensure all financial terms are verified against the standard room rates.
+          </p>
         </div>
       </motion.div>
     </AppMain>

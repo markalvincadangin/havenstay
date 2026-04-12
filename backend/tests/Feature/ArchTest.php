@@ -32,6 +32,7 @@ test('services')
         'auth',
         'Illuminate\Validation',
         'Illuminate\Database',
+        'Illuminate\Contracts\Pagination\LengthAwarePaginator',
         'Symfony\Component\HttpFoundation',
         'now',
         'collect', // Allow collect() helper

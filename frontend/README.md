@@ -47,7 +47,15 @@ npm run dev
 npm run build
 npm run start
 npm run lint
+npm test
 ```
+
+## Domain labels, navigation, and keyboard shortcuts
+
+- **ENUM codes and human-readable labels** (statuses, payment methods, audit actions, etc.) are defined in **`src/lib/constants.js`**. Align new UI with those maps; **Vitest** `src/lib/constants.schema.test.js` reads **`../backend/database/sql/havenstay_schema.sql`** (must match the canonical **`../db/havenstay_schema.sql`**).
+- **Primary navigation** (routes + labels) is **`src/lib/navItems.js`**, consumed by **`src/app/_components/Sidebar.js`** and **`MobileNav.js`**.
+- **G + letter** jumps are **`src/lib/keyboardNav.js`**, wired in **`src/hooks/useKeyboardShortcuts.js`**.
+- **Do not use Ctrl+P or Ctrl+R** for in-app actions (browser Print / Reload). Use **Alt+Shift+P** to open **`/payments/new`** and **Alt+Shift+R** for `router.refresh()` — see **`src/lib/appKeyboardShortcuts.js`** and **`KeyboardHelpModal.js`**.
 
 ## Authentication and Route Guarding
 
@@ -90,14 +98,16 @@ npm run lint
 
 ### Reports
 
-- `/reports` (hub listing six report areas)
-- `/reports/occupancy`
-- `/reports/billing-summary`
+- `/reports` (hub — eight report links; data sources include the six reporting **views** in `db/havenstay_schema.sql` where noted in `docs/API_REFERENCE.md`)
+- `/reports/occupancy` (`vw_room_occupancy`)
+- `/reports/occupancy-status` (`vw_occupancy_status`)
+- `/reports/active-contracts` (`vw_active_contracts`)
+- `/reports/billing-summary` (`vw_billing_summary`)
 - `/reports/outstanding-balances`
-- `/reports/receivables` (redirect/alias to outstanding balances)
+- `/reports/receivables` (re-export of outstanding-balances page)
 - `/reports/collections` (collections performance; `vw_collections_summary`)
 - `/reports/tenant-ledger`
-- `/reports/tenant-history` (contract history; `GET /api/reports/tenant-history`)
+- `/reports/tenant-history` (contract history; `GET /api/reports/tenant-history`; `vw_tenant_contract_history`)
 
 ### Admin
 

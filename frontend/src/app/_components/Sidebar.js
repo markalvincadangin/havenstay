@@ -15,22 +15,33 @@ import {
 } from "./ui/Icons";
 import { canManageUsers } from "../../lib/auth";
 import { matchesPath } from "../../lib/formatters";
+import { ADMIN_NAV_ITEMS, OPERATIONS_NAV_ITEMS } from "../../lib/navItems";
 
-const OPERATIONS_NAV = [
-  { href: "/dashboard", label: "Operations", Icon: DashboardIcon },
-  { href: "/tenants", label: "Tenants", Icon: TenantIcon },
-  { href: "/rooms", label: "Rooms", Icon: RoomIcon },
-  { href: "/contracts", label: "Contracts", Icon: ContractIcon },
-  { href: "/billing", label: "Billing", Icon: BillingIcon },
-  { href: "/payments", label: "Payments", Icon: PaymentIcon },
-  { href: "/reports", label: "Reports", Icon: ReportIcon },
-];
+const OPERATIONS_ICONS_BY_HREF = {
+  "/dashboard": DashboardIcon,
+  "/tenants": TenantIcon,
+  "/rooms": RoomIcon,
+  "/contracts": ContractIcon,
+  "/billing": BillingIcon,
+  "/payments": PaymentIcon,
+  "/reports": ReportIcon,
+};
 
-const ADMIN_NAV = [
-  { href: "/users", label: "Users", Icon: UserManagementIcon },
-  { href: "/audit-logs", label: "Audit Logs", Icon: ReportIcon },
-  { href: "/transaction-logs", label: "Transaction Logs", Icon: ReportIcon },
-];
+const ADMIN_ICONS_BY_HREF = {
+  "/users": UserManagementIcon,
+  "/audit-logs": ReportIcon,
+  "/transaction-logs": ReportIcon,
+};
+
+const OPERATIONS_NAV = OPERATIONS_NAV_ITEMS.map((item) => ({
+  ...item,
+  Icon: OPERATIONS_ICONS_BY_HREF[item.href],
+}));
+
+const ADMIN_NAV = ADMIN_NAV_ITEMS.map((item) => ({
+  ...item,
+  Icon: ADMIN_ICONS_BY_HREF[item.href],
+}));
 
 
 

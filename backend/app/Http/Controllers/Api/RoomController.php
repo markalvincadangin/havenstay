@@ -8,6 +8,7 @@ use App\Models\Room;
 use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\RoomService;
+use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -18,9 +19,36 @@ class RoomController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $rooms = Room::with('bedSpaces')->get();
+        $validated = $request->validate(array_merge([
+            'q' => ['nullable', 'string', 'max:200'],
+            'status' => ['nullable', 'string', 'in:available,unavailable,maintenance'],
+            'room_type' => ['nullable', 'string', 'in:solo,shared'],
+        ], PaginationResponse::queryRules()));
 
-        return response()->json($rooms);
+        $pageParams = PaginationResponse::normalizePageParams($validated);
+
+        $query = Room::with('bedSpaces')->orderBy('room_code');
+
+        if (! empty($validated['status'])) {
+            $query->where('status', $validated['status']);
+        }
+
+        if (! empty($validated['room_type'])) {
+            $query->where('room_type', $validated['room_type']);
+        }
+
+        if (! empty($validated['q'])) {
+            $needle = $validated['q'];
+            $query->where(function ($w) use ($needle): void {
+                $w->where('room_code', 'LIKE', "%{$needle}%")
+                    ->orWhere('amenities', 'LIKE', "%{$needle}%")
+                    ->orWhere('description', 'LIKE', "%{$needle}%");
+            });
+        }
+
+        $paginator = $query->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+
+        return PaginationResponse::fromPaginator($paginator);
     }
 
     /**

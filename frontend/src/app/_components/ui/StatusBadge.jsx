@@ -1,4 +1,15 @@
 import React from "react";
+import {
+  TENANT_STATUS_LABELS,
+  ROOM_STATUS_LABELS,
+  BED_STATUS_LABELS,
+  CONTRACT_STATUS_LABELS,
+  BILLING_STATUS_LABELS,
+  PAYMENT_STATUS_LABELS,
+  ROOM_TYPE_LABELS,
+  AUDIT_ACTION_LABELS,
+  TX_LOG_STATUS_LABELS,
+} from "../../../lib/constants";
 
 /**
  * StatusBadge Component
@@ -69,6 +80,21 @@ export function StatusBadge({ children }) {
     'admin': 'badge-success',
     'staff': 'badge-info',
     'viewer': 'badge-neutral',
+
+    // Audit Actions (audit_logs.action)
+    'create': 'badge-success',
+    'update': 'badge-info',
+    'status_change': 'badge-warning',
+    'delete': 'badge-danger',
+    'access_denied': 'badge-danger',
+    'login': 'badge-neutral',
+    'logout': 'badge-neutral',
+
+    // Transaction Statuses (transaction_logs.status)
+    'started': 'badge-info',
+    'committed': 'badge-success',
+    'rolled_back': 'badge-warning',
+    'failed': 'badge-danger',
   };
   
   const variant = variantMap[normalizedValue] || 'badge-neutral';
@@ -105,32 +131,21 @@ export function StatusBadge({ children }) {
   const styles = variantStyles[variant];
   
   // Human-readable label mapping (Requirement 4.5)
+  // Derived from centralized constants in src/lib/constants.js
   const labelMap = {
-    'moved_out': 'Moved Out',
-    'active': 'Active',
-    'inactive': 'Inactive',
-    'paid': 'Paid',
-    'partial': 'Partial',
-    'unpaid': 'Unpaid',
-    'overdue': 'Overdue',
-    'posted': 'Posted',
-    'voided': 'Voided',
-    'voided_contract': 'Voided',
-    'available': 'Available',
-    'occupied': 'Occupied',
-    'maintenance': 'Maintenance',
-    'unavailable': 'Unavailable',
-    'vacant': 'Vacant',
-    'ended': 'Ended',
-    'terminated': 'Terminated',
-    'completed': 'Completed',
-    'archived': 'Archived',
-    'error': 'Error',
-    'solo': 'Solo Room',
-    'shared': 'Shared Room',
-    'admin': 'Admin',
-    'staff': 'Staff',
-    'viewer': 'Viewer',
+    ...TENANT_STATUS_LABELS,
+    ...ROOM_STATUS_LABELS,
+    ...BED_STATUS_LABELS,
+    ...CONTRACT_STATUS_LABELS,
+    ...BILLING_STATUS_LABELS,
+    ...PAYMENT_STATUS_LABELS,
+    ...ROOM_TYPE_LABELS,
+    ...AUDIT_ACTION_LABELS,
+    ...TX_LOG_STATUS_LABELS,
+    voided_contract: "Voided",
+    admin: "Admin",
+    staff: "Staff",
+    viewer: "Viewer",
   };
   
   const displayLabel = labelMap[normalizedValue] || children;

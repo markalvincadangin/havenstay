@@ -34,17 +34,19 @@ class ContractService
         self::validateCreateInput($data);
         self::guardActiveOverlaps((int) $data['tenant_id'], $data['bed_space_id'] ?? null);
 
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'tenant_check_in',
             $actor->user_id,
             'tenants',
             (string) $data['tenant_id']
         );
+        $txLogId = $started['tx_log_id'];
+
+        if (Auth::check()) {
+            AuditService::setAuditUserContext(Auth::id());
+        }
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
@@ -84,6 +86,8 @@ class ContractService
         } catch (\Exception $e) {
             TransactionService::logRolledBack($txLogId, $e->getMessage());
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 
@@ -117,17 +121,19 @@ class ContractService
             ]);
         }
 
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-
         // CCR-007: Transaction log entry
-        $txLogId = TransactionService::logStarted(
+        $started = TransactionService::logStarted(
             'tenant_move_out',
             Auth::id() ?? 0,
             'contracts',
             (string) $contract->contract_id
         );
+        $txLogId = $started['tx_log_id'];
+
+        if (Auth::check()) {
+            AuditService::setAuditUserContext(Auth::id());
+        }
+        AuditService::setCorrelationContext($started['correlation_id']);
 
         try {
             // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
@@ -161,6 +167,8 @@ class ContractService
         } catch (\Exception $e) {
             TransactionService::logRolledBack($txLogId, $e->getMessage());
             throw $e;
+        } finally {
+            AuditService::clearCorrelationContext();
         }
     }
 

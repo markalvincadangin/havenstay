@@ -368,7 +368,7 @@ class ApiEdgeCasesTest extends TestCase
     {
         $this->actingAs($this->viewerUser)->getJson('/api/tenants/search?q=')
             ->assertOk()
-            ->assertJsonStructure(['tenants', 'count']);
+            ->assertJsonStructure(['data', 'meta']);
     }
 
     public function test_show_nonexistent_contract_returns_404(): void

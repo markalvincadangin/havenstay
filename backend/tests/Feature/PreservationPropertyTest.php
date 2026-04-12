@@ -360,6 +360,11 @@ class PreservationPropertyTest extends TestCase
                 'This behavior must be preserved after fixing BUG-005.'
             );
 
+            $this->assertNotEmpty(
+                $txLog->correlation_id,
+                'transaction_logs.correlation_id should be set for workflow traceability.'
+            );
+
             // Assert: transaction log status should be 'committed'
             $this->assertEquals(
                 'committed',

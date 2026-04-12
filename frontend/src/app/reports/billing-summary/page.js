@@ -17,8 +17,16 @@ import { Field, Input } from "../../_components/ui/Fields";
 import PageHeader from "../../_components/ui/PageHeader";
 import Spinner from "../../_components/ui/Spinner";
 import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import { KpiCard } from "../../_components/ui/KpiCard";
 import { Table } from "../../_components/ui/Table";
-import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { StatusBadge } from "../../_components/ui/StatusBadge";
+import { Receipt, Search, Calendar, Landmark, DollarSign, Activity } from "lucide-react";
+import TablePagination from "../../_components/ui/TablePagination";
+import {
+  buildReportListQuery,
+  normalizeReportRows,
+  readStoredPerPage,
+} from "../../../lib/pagination";
 
 function buildQuery(params) {
   const query = new URLSearchParams();
@@ -32,18 +40,25 @@ function buildQuery(params) {
 export default function BillingSummaryReportPage() {
   const { user: currentUser, authLoading } = useAuthGuard();
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const [report, setReport] = useState({ summary: null, rows: [] });
+  const [tableMeta, setTableMeta] = useState(null);
   const [filters, setFilters] = useState({ start_date: "", end_date: "" });
+  const [appliedFilters, setAppliedFilters] = useState({ start_date: "", end_date: "" });
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
-  const loadReport = useCallback(async (nextFilters = {}) => {
-    const query = buildQuery(nextFilters);
-    const data = await apiRequest(`/api/reports/billing-summary${query}`, { method: "GET" });
+  const loadReport = useCallback(async () => {
+    const extra = {};
+    if (appliedFilters.start_date) extra.start_date = appliedFilters.start_date;
+    if (appliedFilters.end_date) extra.end_date = appliedFilters.end_date;
+    const qs = buildReportListQuery(page, perPage, extra);
+    const data = await apiRequest(`/api/reports/billing-summary${qs}`, { method: "GET" });
     setReport(data);
-  }, []); // no filters dep — callers always pass filters explicitly
+    setTableMeta(normalizeReportRows(data, "rows").meta);
+  }, [appliedFilters, page, perPage]);
 
   useEffect(() => {
     if (authLoading || !currentUser) return;
@@ -57,14 +72,14 @@ export default function BillingSummaryReportPage() {
     const fetchReport = async () => {
       try {
         setApiUnavailable(false);
-        await loadReport({ start_date: "", end_date: "" });
+        await loadReport();
       } catch (error) {
         if (error?.status === 404) {
           setApiUnavailable(true);
           setApiError("");
           setReport({ summary: null, rows: [] });
+          setTableMeta(null);
         } else {
-          setApiUnavailable(false);
           setApiError(flattenApiErrors(error));
         }
       } finally {
@@ -75,18 +90,12 @@ export default function BillingSummaryReportPage() {
     fetchReport();
   }, [authLoading, currentUser, loadReport]);
 
-  const onApplyFilters = async (event) => {
+  const onApplyFilters = (event) => {
     event.preventDefault();
     if (apiUnavailable) return;
     setApiError("");
-    setSubmitting(true);
-    try {
-      await loadReport(filters);
-    } catch (error) {
-      setApiError(flattenApiErrors(error));
-    } finally {
-      setSubmitting(false);
-    }
+    setAppliedFilters({ ...filters });
+    setPage(1);
   };
 
   const onExport = async () => {
@@ -94,7 +103,7 @@ export default function BillingSummaryReportPage() {
     setApiError("");
     setExporting(true);
     try {
-      const query = buildQuery(filters);
+      const query = buildQuery(appliedFilters);
       const stamp = new Date().toISOString().slice(0, 10);
       await downloadCsvWithAuth(`/api/reports/billing-summary/export${query}`, `billing-summary-report-${stamp}.csv`);
     } catch (error) {
@@ -107,16 +116,20 @@ export default function BillingSummaryReportPage() {
   if (authLoading || loading) {
     return (
       <AppMain>
-        <Spinner label="Loading billing summary report..." />
+        <Spinner label="Assembling billing data..." />
       </AppMain>
     );
   }
 
+  const rows = Array.isArray(report.rows) ? report.rows : [];
+  const totalRecords = tableMeta?.total ?? rows.length;
+  const timestampLabel = `Generated ${formatReportTimestamp()} • ${totalRecords} records`;
+
   return (
     <AppMain>
       <PageHeader
-        title="Billing Summary Report"
-        subtitle="Analyze billed, collected, and outstanding balances for selected periods."
+        title="Billing Summary"
+        subtitle={timestampLabel}
         breadcrumbs={
           <Breadcrumbs
             items={[
@@ -126,156 +139,187 @@ export default function BillingSummaryReportPage() {
           />
         }
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <UserRoleBadge
               username={currentUser?.username}
               roleName={currentUser?.role?.role_name}
             />
             <Button
               type="button"
+              variant="primary"
               onClick={onExport}
               loading={exporting}
               disabled={exporting || apiUnavailable}
+              className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
             >
-              {exporting ? "Downloading..." : "Export CSV"}
+              Export CSV
             </Button>
           </div>
         }
       />
 
-      <p className="mt-2 text-xs italic text-[var(--color-text-secondary)] print:block">
-        Generated {formatReportTimestamp()}
-      </p>
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard 
+           label="Total Bills" 
+           value={report.summary?.billing_count ?? 0}
+           icon={Activity}
+        />
+        <KpiCard 
+           label="Billed Amount" 
+           value={formatPHP(report.summary?.billed_total)}
+           icon={Receipt}
+        />
+        <KpiCard 
+           label="Collected Amount" 
+           value={formatPHP(report.summary?.collected_total)}
+           icon={DollarSign}
+        />
+        <KpiCard 
+           label="Outstanding Amount" 
+           value={formatPHP(report.summary?.outstanding_total)}
+           isDanger={report.summary?.outstanding_total > 0}
+           icon={Landmark}
+        />
+      </div>
 
-      {/* Summary Metrics - Moved outside for visibility */}
-      <Card className="mt-8 border-none bg-stone-100/50 shadow-inner">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Billing Entries" value={report.summary?.billing_count} />
-          <Metric
-            label="Billed Total"
-            value={formatPHP(report.summary?.billed_total)}
-          />
-          <Metric
-            label="Collected Total"
-            value={formatPHP(report.summary?.collected_total)}
-          />
-          <Metric
-            label="Outstanding"
-            value={formatPHP(report.summary?.outstanding_total)}
-          />
+      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
+        <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5 flex items-center justify-between">
+           <div className="flex items-center gap-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm border border-teal-100/50">
+                 <Search size={14} />
+              </div>
+              <h3 className="hs-strip-title uppercase tracking-widest text-xs font-black text-stone-900">Filters</h3>
+           </div>
+           <Button type="button" variant="ghost" onClick={() => loadReport()} className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600">
+              Refresh
+           </Button>
+        </div>
+
+        <div className="p-8">
+            <form
+            className="grid gap-6 sm:grid-cols-4"
+            onSubmit={onApplyFilters}
+            >
+            <Field label="Start Date" icon={Calendar}>
+                <Input
+                type="date"
+                value={filters.start_date}
+                disabled={apiUnavailable}
+                onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, start_date: event.target.value }))
+                }
+                className="!h-11"
+                />
+            </Field>
+            <Field label="End Date" icon={Calendar}>
+                <Input
+                type="date"
+                value={filters.end_date}
+                disabled={apiUnavailable}
+                onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, end_date: event.target.value }))
+                }
+                className="!h-11"
+                />
+            </Field>
+            <div className="flex items-end">
+                <Button
+                type="submit"
+                variant="secondary"
+                disabled={apiUnavailable}
+                className="w-full !h-11 shadow-sm"
+                >
+                Apply filters
+                </Button>
+            </div>
+            </form>
+            <div className="mt-6">
+                <FilterChips
+                items={[
+                    {
+                    key: "start_date",
+                    label: "Start",
+                    value: appliedFilters.start_date,
+                    onClear: () => {
+                      setFilters((prev) => ({ ...prev, start_date: "" }));
+                      setAppliedFilters((prev) => ({ ...prev, start_date: "" }));
+                      setPage(1);
+                    },
+                    },
+                    {
+                    key: "end_date",
+                    label: "End",
+                    value: appliedFilters.end_date,
+                    onClear: () => {
+                      setFilters((prev) => ({ ...prev, end_date: "" }));
+                      setAppliedFilters((prev) => ({ ...prev, end_date: "" }));
+                      setPage(1);
+                    },
+                    },
+                ]}
+                onClearAll={() => {
+                  setFilters({ start_date: "", end_date: "" });
+                  setAppliedFilters({ start_date: "", end_date: "" });
+                  setPage(1);
+                }}
+                />
+            </div>
+
+            {apiUnavailable ? (
+            <Alert variant="info" className="mt-6" title="Report unavailable">
+                The billing summary endpoint did not respond. Check API configuration and try again.
+            </Alert>
+            ) : null}
+            {apiError ? (
+            <Alert variant="error" className="mt-6" title="Error">
+                {apiError}
+            </Alert>
+            ) : null}
         </div>
       </Card>
 
-      <Card className="mt-8">
-        <form
-          className="grid gap-3 sm:grid-cols-4"
-          onSubmit={onApplyFilters}
-        >
-          <Field label="Start Date">
-            <Input
-              type="date"
-              value={filters.start_date}
-              disabled={apiUnavailable}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, start_date: event.target.value }))
-              }
-            />
-          </Field>
-          <Field label="End Date">
-            <Input
-              type="date"
-              value={filters.end_date}
-              disabled={apiUnavailable}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, end_date: event.target.value }))
-              }
-            />
-          </Field>
-          <div className="flex items-end">
-            <Button
-              type="submit"
-              variant="secondary"
-              loading={submitting}
-              disabled={submitting || apiUnavailable}
-              className="w-full"
-            >
-              {submitting ? "Applying..." : "Apply Filters"}
-            </Button>
-          </div>
-        </form>
-        <FilterChips
-          items={[
-            {
-              key: "start_date",
-              label: "Start Date",
-              value: filters.start_date,
-              onClear: () => setFilters((prev) => ({ ...prev, start_date: "" })),
-            },
-            {
-              key: "end_date",
-              label: "End Date",
-              value: filters.end_date,
-              onClear: () => setFilters((prev) => ({ ...prev, end_date: "" })),
-            },
-          ]}
-          onClearAll={() => setFilters({ start_date: "", end_date: "" })}
-        />
-
-        {apiUnavailable ? (
-          <Alert
-            variant="info"
-            className="mt-4"
-            title="Backend report endpoint unavailable"
-          >
-            Billing Summary report data is not yet available from the API.
-          </Alert>
-        ) : null}
-        {apiError ? (
-          <Alert variant="error" className="mt-4" title="Report error">
-            {apiError}
-          </Alert>
-        ) : null}
-      </Card>
-
-      <div className="mt-8">
+      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
         <Table
-          caption="Billing summary report table"
-        ariaLabel="Billing summary report results"
-        columns={[
-          { key: "id", label: "#" },
-          { key: "tenant", label: "Tenant" },
-          { key: "room", label: "Room" },
-          { key: "period", label: "Period" },
-          { key: "due", label: "Due" },
-          { key: "paid", label: "Paid" },
-          { key: "balance", label: "Outstanding" },
-          { key: "status", label: "Status" },
-        ]}
-        rows={report.rows.map((row) => (
-          <tr key={row.billing_id} className="border-t border-[var(--color-border)] hover:bg-[var(--surface-muted)] transition-colors duration-100">
-            <td className="px-4 py-3.5 font-mono text-xs text-[var(--color-text-secondary)]">{row.billing_id}</td>
-            <td className="px-4 py-3.5 font-medium text-[var(--color-text)]">{row.tenant_name}</td>
-            <td className="px-4 py-3.5 text-[var(--color-text)]">{row.room_code}</td>
-            <td className="px-4 py-3.5 text-[var(--color-text-secondary)]">{formatDateString(row.billing_period_from)} – {formatDateString(row.billing_period_to)}</td>
-            <td className="px-4 py-3.5 text-right font-mono tabular-nums text-[var(--color-text)]">{formatPHP(row.amount_due)}</td>
-            <td className="px-4 py-3.5 text-right font-mono tabular-nums text-emerald-700">{formatPHP(row.amount_paid)}</td>
-            <td className="px-4 py-3.5 text-right font-mono tabular-nums font-semibold text-[#991B1B]">{formatPHP(row.outstanding_balance)}</td>
-            <td className="px-4 py-3.5"><StatusBadge>{row.status}</StatusBadge></td>
-          </tr>
-        ))}
-        emptyTitle="No billing rows found"
-        emptyDescription="Try a different date range or clear filters."
-      />
-      </div>
+            embedded={true}
+            caption="Billing Summary"
+            ariaLabel="Billing records"
+            columns={[
+            { key: "id", label: "Billing ID" },
+            { key: "tenant", label: "Tenant" },
+            { key: "room", label: "Room" },
+            { key: "period", label: "Billing period" },
+            { key: "due", label: "Amount due", className: "text-right" },
+            { key: "paid", label: "Amount paid", className: "text-right" },
+            { key: "balance", label: "Balance", className: "text-right" },
+            { key: "status", label: "Status" },
+            ]}
+            rows={rows.map((row) => (
+            <tr key={row.billing_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
+                <td className="px-6 py-4 font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">#BILL-{row.billing_id}</td>
+                <td className="px-6 py-4 text-xs font-bold text-stone-900">{row.tenant_name}</td>
+                <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500">{row.room_code}</td>
+                <td className="px-6 py-4 text-[10px] font-medium text-stone-400">{formatDateString(row.billing_period_from)} – {formatDateString(row.billing_period_to)}</td>
+                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-900 font-bold">{formatPHP(row.amount_due)}</td>
+                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-teal-700 font-bold">{formatPHP(row.amount_paid)}</td>
+                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums font-black text-rose-800">{formatPHP(row.outstanding_balance)}</td>
+                <td className="px-6 py-4"><StatusBadge>{row.status}</StatusBadge></td>
+            </tr>
+            ))}
+            emptyTitle="No billing records found"
+            emptyDescription="Adjust your date filters or clear the range to view all records."
+        />
+        <TablePagination
+          meta={tableMeta}
+          page={page}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={(n) => {
+            setPage(1);
+            setPerPage(n);
+          }}
+          disabled={false}
+        />
+      </Card>
     </AppMain>
-  );
-}
-
-function Metric({ label, value }) {
-  return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-5 shadow-sm" aria-label={`${label}: ${value ?? 0}`}>
-      <div className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">{label}</div>
-      <div className="mt-2 font-sans text-[1.875rem] font-semibold leading-none tracking-[-0.025em] text-[var(--color-text)]">{value ?? 0}</div>
-    </div>
   );
 }

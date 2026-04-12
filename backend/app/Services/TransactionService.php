@@ -3,25 +3,34 @@
 namespace App\Services;
 
 use App\Models\TransactionLog;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class TransactionService
 {
     /**
      * Start a business process log entry.
      * CCR-007: Transaction log entry
+     *
+     * @return array{tx_log_id: int, correlation_id: string}
      */
-    public static function logStarted(string $txName, int $userId, string $entity, string $id): int
+    public static function logStarted(string $txName, int $userId, string $entity, string $id): array
     {
-        return DB::table('transaction_logs')->insertGetId([
+        $correlationId = (string) Str::uuid();
+
+        $txLogId = (int) DB::table('transaction_logs')->insertGetId([
             'tx_name' => $txName,
             'started_at' => now(),
             'status' => 'started',
             'initiated_by' => $userId,
             'reference_entity' => $entity,
             'reference_id' => $id,
+            'correlation_id' => $correlationId,
         ]);
+
+        return ['tx_log_id' => $txLogId, 'correlation_id' => $correlationId];
     }
 
     /**
@@ -74,16 +83,75 @@ class TransactionService
             ]);
     }
 
+    /** Default cap for transaction log listing (`transaction_logs` — CCR-007). */
+    public const DEFAULT_LIST_LIMIT = 200;
+
+    public const MAX_LIST_LIMIT = 200;
+
     /**
-     * List transaction logs with humanized context.
+     * Paginated transaction logs with humanized context.
      */
-    public static function listLogs(): Collection
+    /**
+     * @param  array{q?: string, status?: string, from?: string, to?: string}  $filters  `q` matches tx name, reference, initiator username, or `correlation_id`.
+     */
+    public static function listLogsPaginated(int $page, int $perPage, array $filters = []): LengthAwarePaginator
     {
+        $base = TransactionLog::with(['user' => function ($q) {
+            $q->select('user_id', 'username', 'first_name', 'last_name');
+        }]);
+
+        if (! empty($filters['status'])) {
+            $base->where('status', $filters['status']);
+        }
+
+        if (! empty($filters['from'])) {
+            $base->where('started_at', '>=', $filters['from'].' 00:00:00');
+        }
+
+        if (! empty($filters['to'])) {
+            $base->where('started_at', '<=', $filters['to'].' 23:59:59');
+        }
+
+        if (! empty($filters['q'])) {
+            $needle = $filters['q'];
+            $base->where(function ($w) use ($needle): void {
+                $w->where('tx_name', 'like', "%{$needle}%")
+                    ->orWhere('reference_id', 'like', "%{$needle}%")
+                    ->orWhere('reference_entity', 'like', "%{$needle}%")
+                    ->orWhere('correlation_id', 'like', "%{$needle}%")
+                    ->orWhereHas('user', function ($u) use ($needle): void {
+                        $u->where('username', 'like', "%{$needle}%");
+                    });
+            });
+        }
+
+        $paginator = $base->orderByDesc('started_at')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        $paginator->getCollection()->transform(function ($log) {
+            $log->user_username = $log->user?->username;
+            $log->user_first_name = $log->user?->first_name;
+            $log->user_last_name = $log->user?->last_name;
+
+            return $log;
+        });
+
+        return $paginator;
+    }
+
+    /**
+     * List transaction logs with humanized context (legacy limit-based list).
+     */
+    public static function listLogs(?int $limit = null): Collection
+    {
+        $cap = $limit ?? self::DEFAULT_LIST_LIMIT;
+        $cap = max(1, min($cap, self::MAX_LIST_LIMIT));
+
         return TransactionLog::with(['user' => function ($q) {
             $q->select('user_id', 'username', 'first_name', 'last_name');
         }])
             ->orderByDesc('started_at')
-            ->limit(200)
+            ->limit($cap)
             ->get()
             ->map(function ($log) {
                 $log->user_username = $log->user?->username;

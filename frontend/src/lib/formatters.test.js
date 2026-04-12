@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareTenantDirectoryName,
   formatDateString,
   formatPHP,
   formatReportTimestamp,
+  formatTenantDirectoryName,
+  getTenantInitials,
   matchesPath,
 } from "./formatters";
 
@@ -30,6 +33,34 @@ describe("formatDateString", () => {
     const out = formatDateString("2026-04-11");
     expect(out).not.toBe("-");
     expect(out.length).toBeGreaterThan(3);
+  });
+});
+
+describe("formatTenantDirectoryName", () => {
+  it("uses Last, First when both present", () => {
+    expect(
+      formatTenantDirectoryName({ first_name: "Juan", last_name: "Dela Cruz" })
+    ).toBe("Dela Cruz, Juan");
+  });
+
+  it("returns single name or em dash", () => {
+    expect(formatTenantDirectoryName({ first_name: "Madonna", last_name: "" })).toBe("Madonna");
+    expect(formatTenantDirectoryName({ first_name: "", last_name: "Smith" })).toBe("Smith");
+    expect(formatTenantDirectoryName({ first_name: "  ", last_name: "  " })).toBe("—");
+  });
+});
+
+describe("getTenantInitials", () => {
+  it("uses first letter of first and last name", () => {
+    expect(getTenantInitials({ first_name: "Juan", last_name: "Dela Cruz" })).toBe("JD");
+  });
+});
+
+describe("compareTenantDirectoryName", () => {
+  it("sorts by last name then first", () => {
+    const a = { first_name: "B", last_name: "Smith" };
+    const b = { first_name: "A", last_name: "Smith" };
+    expect(compareTenantDirectoryName(a, b)).toBeGreaterThan(0);
   });
 });
 
