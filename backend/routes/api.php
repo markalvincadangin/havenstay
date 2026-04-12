@@ -113,8 +113,19 @@ Route::middleware(['auth:sanctum', 'auth.check'])->group(function (): void {
 });
 
 Route::get('/health', function () {
-    return response()->json([
-        'status' => 'ok',
-        'service' => 'havenstay-backend',
-    ]);
+    try {
+        \DB::connection()->getPdo();
+        return response()->json([
+            'status' => 'ok',
+            'database' => 'connected',
+            'service' => 'havenstay-backend',
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'database' => 'disconnected',
+            'message' => $e->getMessage(),
+            'service' => 'havenstay-backend',
+        ], 500);
+    }
 });
