@@ -32,4 +32,4 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.
 
 # Final Startup Command: Clear cache, run migrations + seed, then start Apache
 EXPOSE 80
-CMD php artisan config:clear && php artisan migrate --force --seed && apache2-foreground
+CMD php artisan config:clear && php artisan migrate:fresh --force --seed && apache2-foreground
