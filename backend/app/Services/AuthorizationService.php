@@ -13,9 +13,23 @@ class AuthorizationService
         return $user->role?->role_name;
     }
 
+    public static function canManageRooms(User $user): bool
+    {
+        $role = strtolower(self::roleName($user));
+
+        return in_array($role, ['admin', 'staff'], true);
+    }
+
     public static function canManageUsers(User $user): bool
     {
         return strtolower(self::roleName($user)) === 'admin';
+    }
+
+    public static function canManageTenants(User $user): bool
+    {
+        $role = strtolower(self::roleName($user));
+
+        return in_array($role, ['admin', 'staff'], true);
     }
 
     public static function canViewTenants(User $user): bool
@@ -27,10 +41,9 @@ class AuthorizationService
 
     public static function canEditTenants(User $user): bool
     {
-        $role = strtolower(self::roleName($user));
-
-        return in_array($role, ['admin', 'staff'], true);
+        return self::canManageTenants($user);
     }
+
 
     public static function canManageContracts(User $user): bool
     {

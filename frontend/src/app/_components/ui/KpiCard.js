@@ -15,6 +15,7 @@ import { motion, useReducedMotion } from "framer-motion";
  * @param {string} [href] - Optional link destination.
  * @param {number} [progress] - Optional percentage for progress bar (0-100).
  * @param {boolean} [isLoading] - Shows pulse skeleton state.
+ * @param {string|null} [error] - Error message to display.
  * @param {boolean} [isDanger] - Applies red-600 treatment to value and icon well.
  */
 export function KpiCard({ 
@@ -25,13 +26,34 @@ export function KpiCard({
   href, 
   progress, 
   isLoading = false, 
+  error = null,
   isDanger = false 
 }) {
   const shouldReduceMotion = useReducedMotion();
 
+  // 1. Loading State (Skeleton)
   if (isLoading) {
     return (
-      <div className="h-[120px] w-full animate-pulse rounded-2xl border border-stone-200 bg-white shadow-sm" />
+      <div className="h-[120px] w-full animate-pulse rounded-2xl border border-stone-100 bg-stone-50/30 shadow-sm" />
+    );
+  }
+
+  // 2. Error State (Graceful Failure)
+  if (error) {
+    return (
+      <div className="flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-red-100 bg-red-50/30 p-6 shadow-sm">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-red-300">
+            {label}
+          </p>
+          <h3 className="mt-1 text-lg font-bold text-red-600">
+            Could not load
+          </h3>
+          <p className="mt-1 text-[10px] font-medium text-red-400">
+            Connection error or invalid data.
+          </p>
+        </div>
+      </div>
     );
   }
 

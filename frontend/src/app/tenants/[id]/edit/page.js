@@ -273,14 +273,14 @@ export default function EditTenantPage() {
                         />
                       </div>
                     </Field>
-                    <Field label="Email Address" error={errors.email?.message}>
+                    <Field label="Email Address" required error={errors.email?.message}>
                       <div className="relative">
                         <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" />
                         <Input
                           disabled={readOnly}
                           type="email"
                           className="!h-11 border-stone-200 pl-10"
-                          {...register("email")}
+                          {...register("email", { required: "Email is required." })}
                         />
                       </div>
                     </Field>

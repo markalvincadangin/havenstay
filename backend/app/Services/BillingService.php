@@ -129,8 +129,11 @@ class BillingService
             });
         }
 
-        return $query->orderByDesc('billing_id');
+        $query->orderByDesc('billing_id');
+
+        return $query;
     }
+
 
     /**
      * List billing records with filters.
@@ -240,6 +243,13 @@ class BillingService
                     "line_items.$index.amount" => ['Line item amount cannot be zero.'],
                 ]);
             }
+
+            if (empty($item['item_description'])) {
+                throw ValidationException::withMessages([
+                    "line_items.$index.item_description" => ['Line item description is required.'],
+                ]);
+            }
+
             $totalAmount += $amount;
         }
 

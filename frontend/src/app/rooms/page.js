@@ -184,7 +184,7 @@ export default function RoomsPage() {
     });
   }, [debouncedQuery, statusFilter, typeFilter]);
 
-  if (authLoading || loading) {
+  if (authLoading || (loading && currentUser)) {
     return (
       <AppMain>
         <SkeletonGridPage cards={6} />
@@ -241,13 +241,12 @@ export default function RoomsPage() {
              value={`${stats.occupancyPct}%`}
              progress={stats.occupancyPct}
            />
-           <KpiCard
-             label="Available Capacity"
-             icon={Bed}
-             value={stats.bookableVacantBeds}
-             sub="Vacant beds in available units"
-             isDanger={stats.bookableVacantBeds < 5}
-           />
+            <KpiCard
+              label="Available Capacity"
+              icon={Bed}
+              value={stats.bookableVacantBeds}
+              sub="Vacant beds in available units"
+            />
         </div>
 
         <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">

@@ -15,6 +15,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { formatDateString, formatPHP, formatTenantDirectoryName, getTenantInitials } from "../../../lib/formatters";
 import Alert from "../../_components/ui/Alert";
 import { AppMain } from "../../_components/ui/AppShell";
+import Button from "../../_components/ui/Button";
 import { Card } from "../../_components/ui/Card";
 import PageHeader from "../../_components/ui/PageHeader";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
@@ -154,13 +155,32 @@ export default function TenantDetailsPage() {
                 <ArrowLeft size={18} aria-hidden />
               </button>
               {canManageTenants(currentUser) && (
-                <Link
-                  href={`/tenants/${tenantId}/edit`}
-                  className={secondaryOutlineLinkClass + " px-6"}
-                >
-                  <Edit2 size={16} aria-hidden />
-                  Update Details
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/tenants/${tenantId}/edit`}
+                    className={secondaryOutlineLinkClass + " px-6"}
+                  >
+                    <Edit2 size={16} aria-hidden />
+                    Update Details
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (confirm("Forensic Archival: Are you sure you want to archive this tenant? Historical records will be preserved but the profile will be hidden from default views.")) {
+                        try {
+                          await apiRequest(`/api/tenants/${tenantId}/archive`, { method: "POST" });
+                          router.push("/tenants");
+                        } catch (err) {
+                          alert(err.message || "Failed to archive tenant.");
+                        }
+                      }
+                    }}
+                    className="!h-11 rounded-xl border border-rose-100 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50"
+                  >
+                    Archive
+                  </Button>
+                </div>
               )}
               <div className="pl-3 border-l border-stone-200">
                 <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />

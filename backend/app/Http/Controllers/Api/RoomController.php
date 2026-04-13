@@ -58,8 +58,9 @@ class RoomController extends Controller
     public function store(Request $request): JsonResponse
     {
         // Check authorization: only admin/staff
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageRooms($request->user())) {
             AuditService::logAccessDenied($request->user(), 'rooms.create');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can create rooms.',
@@ -101,8 +102,9 @@ class RoomController extends Controller
     public function update(Request $request, Room $room): JsonResponse
     {
         // Check authorization
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageRooms($request->user())) {
             AuditService::logAccessDenied($request->user(), 'rooms.update');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can update rooms.',
@@ -137,8 +139,9 @@ class RoomController extends Controller
     public function addBedSpace(Request $request, Room $room): JsonResponse
     {
         // Check authorization
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageRooms($request->user())) {
             AuditService::logAccessDenied($request->user(), 'bed_spaces.create');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can add bed spaces.',
@@ -170,8 +173,9 @@ class RoomController extends Controller
     public function occupyBedSpace(Request $request, BedSpace $bedSpace): JsonResponse
     {
         // Check authorization
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageRooms($request->user())) {
             AuditService::logAccessDenied($request->user(), 'bed_spaces.occupy');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can occupy bed spaces.',
@@ -192,17 +196,53 @@ class RoomController extends Controller
             ], 409);
         }
     }
-
     /**
-     * FR-015: Get availability status for all rooms
-     * CCR-005: Use JOIN logic (rooms + bed_spaces)
+     * FR-012: Room availability summary
      */
-    public function availability(Request $request): JsonResponse
+    public function availability(): JsonResponse
     {
         $availability = RoomService::getAllAvailability();
 
         return response()->json([
             'availability' => $availability,
+        ]);
+    }
+
+
+    /**
+     * Archive a room (Soft Delete)
+     */
+    public function archive(Request $request, Room $room): JsonResponse
+    {
+        if (! AuthorizationService::canManageRooms($request->user())) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $room->delete(); // Eloquent SoftDeletes
+
+        return response()->json([
+            'message' => 'Room archived successfully.',
+            'room' => $room,
+        ]);
+    }
+
+
+    /**
+     * Restore an archived room
+     */
+    public function restore(Request $request, int $id): JsonResponse
+    {
+        if (! AuthorizationService::canManageRooms($request->user())) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+
+        $room = Room::withTrashed()->findOrFail($id);
+        $room->restore();
+
+        return response()->json([
+            'message' => 'Room restored successfully.',
+            'room' => $room,
         ]);
     }
 }

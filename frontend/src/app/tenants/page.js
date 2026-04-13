@@ -24,7 +24,8 @@ import { Table } from "../_components/ui/Table";
 import UserRoleBadge from "../_components/ui/UserRoleBadge";
 import { StatusBadge } from "../_components/ui/StatusBadge";
 import { KpiCard } from "../_components/ui/KpiCard";
-import EmptyState from "../_components/ui/EmptyState";
+import ResourceView from "../_components/ui/ResourceView";
+
 import { TENANT_STATUS_LABELS } from "../../lib/constants";
 import {
   buildPaginationQuery,
@@ -158,13 +159,9 @@ export default function TenantsPage() {
     });
   }, [tenants, sortColumn, sortDirection]);
 
-  if (authLoading || loading) {
-    return (
-      <AppMain>
-        <SkeletonListPage rows={10} />
-      </AppMain>
-    );
-  }
+  // Auth loading is still handled separately as it's a structural guard
+  if (authLoading) return <SkeletonListPage rows={10} />;
+
 
   const saturation = stats.totalBeds > 0 
     ? Math.round((stats.activeCount / stats.totalBeds) * 100) 
@@ -293,26 +290,19 @@ export default function TenantsPage() {
         </Card>
 
         <div className="mt-6">
-          {error ? (
-            <Alert variant="error" title="Failed to load tenants">
-              {error}
-              <button
-                type="button"
-                onClick={() => {
-                  void fetchTenants();
-                }}
-                className="mt-2 text-xs font-bold underline"
-              >
-                Retry
-              </button>
-            </Alert>
-          ) : sortedRows.length === 0 ? (
-            <EmptyState 
-              title="No tenants found"
-              message="No records matching your search or filters. Try adjusting your search criteria."
-            />
-          ) : (
+          <ResourceView
+            isLoading={loading}
+            error={error}
+            isEmpty={sortedRows.length === 0}
+            onRetry={fetchTenants}
+            skeleton={<SkeletonListPage rows={10} />}
+            emptyProps={{
+              title: "No tenants found",
+              message: "No records matching your search or filters. Try adjusting your search criteria."
+            }}
+          >
             <Card className="overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-sm">
+
             <Table
                 embedded
                 caption={`Directory of current and former resident records — ${listMeta?.total ?? sortedRows.length} matching`}
@@ -403,8 +393,9 @@ export default function TenantsPage() {
                 disabled={loading}
               />
             </Card>
-          )}
+          </ResourceView>
         </div>
+
       </motion.div>
     </AppMain>
   );

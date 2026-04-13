@@ -22,6 +22,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { formatPHP } from "../../../lib/formatters";
 import Alert from "../../_components/ui/Alert";
 import { AppMain } from "../../_components/ui/AppShell";
+import Button from "../../_components/ui/Button";
 import { Card } from "../../_components/ui/Card";
 import PageHeader from "../../_components/ui/PageHeader";
 import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
@@ -145,13 +146,32 @@ export default function RoomDetailsPage() {
                 <ArrowLeft size={18} aria-hidden />
               </button>
               {canManageRooms(currentUser) && (
-                <Link
-                  href={`/rooms/${roomId}/edit`}
-                  className={secondaryOutlineLinkClass + " px-6"}
-                >
-                  <Edit2 size={16} aria-hidden />
-                  Update Details
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/rooms/${roomId}/edit`}
+                    className={secondaryOutlineLinkClass + " px-6"}
+                  >
+                    <Edit2 size={16} aria-hidden />
+                    Update Details
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (confirm("Decommission Room: Are you sure you want to archive this unit? It will be removed from active inventory but its historical occupancy data will be preserved.")) {
+                        try {
+                          await apiRequest(`/api/rooms/${roomId}/archive`, { method: "POST" });
+                          router.push("/rooms");
+                        } catch (err) {
+                          alert(err.message || "Failed to archive room.");
+                        }
+                      }
+                    }}
+                    className="!h-11 rounded-xl border border-rose-100 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50"
+                  >
+                    Archive
+                  </Button>
+                </div>
               )}
               <div className="border-l border-stone-200 pl-3">
                 <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />

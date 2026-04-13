@@ -178,13 +178,13 @@ export default function NewTenantPage() {
                               })}
                            />
                         </Field>
-                        <Field label="Email" error={errors.email?.message}>
+                        <Field label="Email" required error={errors.email?.message}>
                            <Input
                               disabled={readOnly}
                               type="email"
                               placeholder="juan@example.ph"
                               className="!h-11 border-stone-200 focus:border-teal-500/50"
-                              {...register("email")}
+                              {...register("email", { required: "Email is required." })}
                            />
                         </Field>
                         <div className="sm:col-span-2">

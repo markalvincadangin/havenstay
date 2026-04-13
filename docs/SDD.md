@@ -112,7 +112,7 @@ graph TD
 
 ### 4.1 Design Summary
 
-The database is normalized around a core operational chain: `roles → users`, `rooms → bed_spaces`, `tenants → contracts (via bed_space) → billing → billing_line_items → payments`. The schema uses foreign keys, check constraints, performance indexes, triggers, and reporting views. There are no stored procedures in the current schema — all transaction control is handled by the PHP application layer via `DB::transaction()`.
+The database is normalized around a core operational chain: `roles → users`, `rooms → bed_spaces`, `tenants → contracts (via bed_space) → billing → billing_line_items → payments`. The schema uses foreign keys, check constraints, performance indexes, triggers, and reporting views. **Forensic Integrity:** Core entities (`users`, `tenants`, `rooms`, `contracts`) utilize database-level **Soft Deletes** (`deleted_at`) to ensure historical records are never hard-deleted, maintaining a permanent referential audit trail. There are no stored procedures in the current schema.
 
 ### 4.2 Core Entities (CCR-001: 11 tables)
 
@@ -262,7 +262,7 @@ return DB::transaction(function () use (...) {
 
 `users` (3) + `tenants` (3) + `rooms` (3) + `bed_spaces` (3) + `contracts` (3) + `billing` (3) + `payments` (3) + `billing_line_items` (3) = **24 triggers total**
 
-Each trigger writes to `audit_logs`: `entity_name`, `entity_id`, `action`, `old_values_json`, `new_values_json`, `created_at`, and `user_id` from `@app_user_id`.
+Each trigger writes to `audit_logs`: `entity_name`, `entity_id`, `action`, `old_values_json`, `new_values_json`, `created_at`, and `user_id` from `@app_user_id`. **Archive/Restore:** Triggers on soft-deletable tables are enhanced to detect `deleted_at` transitions, logging these specifically as `archive` or `restore` actions rather than generic updates.
 
 **Dual-logging note:** Service methods also call `AuditService::log*()` which directly inserts into `audit_logs`. This produces two entries per CRUD operation: one from the trigger (database layer, fires even on direct DB writes) and one from the service (application layer, includes workflow context). This is intentional defense-in-depth.
 
@@ -276,12 +276,12 @@ Six views are defined in `db/havenstay_schema.sql`. All report endpoints query t
 
 | View | Tables Joined | Purpose |
 | :--- | :--- | :--- |
-| `vw_billing_summary` | `billing` INNER JOIN `contracts`, `tenants`, `bed_spaces`, `rooms` | Billing with void-aware `total_amount` and `total_paid` |
-| `vw_active_contracts` | `contracts` INNER JOIN `tenants`, `bed_spaces`, `rooms` | Active contracts with full entity context |
-| `vw_room_occupancy` | `rooms` LEFT JOIN `bed_spaces` (aggregated) | Per-room occupancy counts |
-| `vw_occupancy_status` | `bed_spaces` INNER JOIN `rooms`, LEFT JOIN `contracts`, `tenants` | Per-bed occupancy with current tenant |
-| `vw_collections_summary` | `payments` INNER JOIN `billing`, `contracts`, `tenants`, `rooms` | Payment collections tracking (FR-032b) |
-| `vw_tenant_contract_history` | `contracts` INNER JOIN `tenants`, `bed_spaces`, `rooms` | Historical record of all contracts (FR-031) |
+| `vw_billing_summary` | `billing` INNER JOIN `contracts`, `tenants`, `bed_spaces`, `rooms` | Billing with void-aware `total_amount` and `total_paid`; names standardized to "Last, First" |
+| `vw_active_contracts` | `contracts` INNER JOIN `tenants`, `bed_spaces`, `rooms` | Active contracts with full entity context; filters `contracts.deleted_at IS NULL` |
+| `vw_room_occupancy` | `rooms` LEFT JOIN `bed_spaces` (aggregated) | Per-room occupancy counts; filters `rooms.deleted_at IS NULL` |
+| `vw_occupancy_status` | `bed_spaces` INNER JOIN `rooms`, LEFT JOIN `contracts`, `tenants` | Per-bed occupancy with current tenant; filters soft-deleted contracts |
+| `vw_collections_summary` | `payments` INNER JOIN `billing`, `contracts`, `tenants`, `rooms` | Payment collections tracking (FR-032b); names standardized to "Last, First" |
+| `vw_tenant_contract_history` | `contracts` INNER JOIN `tenants`, `bed_spaces`, `rooms` | Historical record of all contracts (FR-031); forensic record including archived entries |
 
 ### 6.2 SQL Operator Usage (CCR-004)
 
@@ -384,6 +384,7 @@ Items deliberately deferred or recently resolved.
 | v2.1 | 2026-04-11 | Audit & Nomenclature Parity: Standardized `audit_logs` to capture full snapshots; expanded `transaction_logs` to cover tenant lifecycle; implemented 24 triggers total; achieved 100% nomenclature alignment. |
 | v2.2 | 2026-04-11 | Synchronization Finalization: Updated reporting view count to 6 and audit trigger count to 24; synchronized SRS/SDD/CLAUDE version alignment. |
 | **v2.3** | **2026-04-11** | **User Entity Hardening:** Synchronized `users` table with the `email` attribute; updated `UserController`, `DemoUatSeeder`, and UI registries to support unified contact logging. |
+| **v2.4** | **2026-04-13** | **Architecture Hardening:** Formalized Soft Deletes (`deleted_at`) for master data units; implemented `archive`/`restore` trigger logic; standardized reporting views with professional "Last, First" nomenclature. |
 
 ---
 

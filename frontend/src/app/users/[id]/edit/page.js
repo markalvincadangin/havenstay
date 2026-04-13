@@ -375,6 +375,25 @@ export default function EditUserPage() {
           )}
 
           <div className="flex items-center justify-end gap-3 pt-6 pb-12">
+            {!isSelf && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={async () => {
+                  if (confirm("Forensic Archival: Are you sure you want to archive this user account? Access will be revoked immediately and the record will be hidden, but identity remains for historical audit logs.")) {
+                    try {
+                      await apiRequest(`/api/users/${userId}/archive`, { method: "POST" });
+                      router.push("/users");
+                    } catch (err) {
+                      alert(err.message || "Failed to archive user.");
+                    }
+                  }
+                }}
+                className="!h-11 rounded-xl border border-rose-100 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 px-8"
+              >
+                Archive User
+              </Button>
+            )}
             <Button type="button" variant="secondary" onClick={() => router.push("/users")} className="!h-11 rounded-xl px-8 text-[10px] font-bold uppercase tracking-widest">
               Cancel
             </Button>

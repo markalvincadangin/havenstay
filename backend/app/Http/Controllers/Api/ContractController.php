@@ -83,7 +83,7 @@ class ContractController extends Controller
             'room_id' => ['required', 'integer', 'exists:rooms,room_id'],
             'bed_space_id' => ['nullable', 'integer', 'exists:bed_spaces,bed_space_id'],
             'move_in_date' => ['required', 'date'],
-            'expected_move_out' => ['nullable', 'date'],
+            'expected_move_out' => ['required', 'date'],
             'deposit_amount' => ['nullable', 'numeric', 'min:0'],
             'monthly_rate' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
@@ -167,6 +167,41 @@ class ContractController extends Controller
 
         return response()->json([
             'message' => 'Contract updated successfully.',
+            'contract' => $contract,
+        ]);
+    }
+
+    /**
+     * Archive a contract (Soft Delete)
+     */
+    public function archive(Request $request, Contract $contract): JsonResponse
+    {
+        if (! AuthorizationService::canManageContracts($request->user())) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $contract->delete();
+
+        return response()->json([
+            'message' => 'Contract agreement archived for forensic retention.',
+            'contract' => $contract,
+        ]);
+    }
+
+    /**
+     * Restore an archived contract
+     */
+    public function restore(Request $request, int $id): JsonResponse
+    {
+        if (! AuthorizationService::canManageContracts($request->user())) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $contract = Contract::withTrashed()->findOrFail($id);
+        $contract->restore();
+
+        return response()->json([
+            'message' => 'Contract agreement restored to operational history.',
             'contract' => $contract,
         ]);
     }

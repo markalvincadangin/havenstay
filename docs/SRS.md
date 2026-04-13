@@ -152,13 +152,13 @@ HavenStay BHMS replaces fragmented paper records and spreadsheets with a single 
 - **FR-004:** The system shall reject login attempts from deactivated users (`is_active = 0`).
 
 ### 4.2 User Management
-- **FR-005:** Admin users shall be able to create (with username, password, role, and email), deactivate, and reactivate system user accounts.
+- **FR-005:** Admin users shall be able to create (with username, password, role, and **required** email), deactivate, and reactivate system user accounts.
 - **FR-006:** Admin users shall be able to assign and change user roles.
 - **FR-007:** Usernames shall be unique across all user accounts.
 
 ### 4.3 Tenant Management
-- **FR-008:** The system shall support creating and updating tenant profiles (name, contact, email, emergency contact, address).
-- **FR-009:** Tenant records shall never be hard-deleted; they shall be soft-deactivated with status `moved_out` or `archived`.
+- **FR-008:** The system shall support creating and updating tenant profiles (name, contact, **required** email, emergency contact, address).
+- **FR-009:** Tenant records shall never be hard-deleted; they shall use database-level **Soft Deletes** (`deleted_at`) to preserve referential history.
 - **FR-010:** The system shall maintain full tenant history including all past contracts.
 - **FR-011:** The system shall support searching tenants by name, contact number, or status using LIKE pattern matching (CCR-004).
 
@@ -170,7 +170,7 @@ HavenStay BHMS replaces fragmented paper records and spreadsheets with a single 
 - **FR-015a:** `rooms.status` ENUM values are `available`, `unavailable`, and `maintenance`. The value `occupied` is NOT valid for the `rooms` table (use `unavailable` instead), but it IS valid for the `bed_spaces` table.
 
 ### 4.5 Contract Management
-- **FR-016:** The system shall create rental contracts linking a tenant to a specific bed space.
+- **FR-016:** The system shall create rental contracts linking a tenant to a specific bed space. All contracts **MUST** specify an `expected_move_out_date` for occupancy forecasting.
 - **FR-016a:** Contracts link to a `bed_space_id`, not a `room_id`. Room context is derived via the bed space relationship.
 - **FR-017:** The system shall prevent double-occupancy: one active contract per tenant and one active contract per bed space.
 - **FR-018:** The system shall support viewing full contract details including tenant, bed space, room, move-in date, and deposit.
@@ -178,7 +178,7 @@ HavenStay BHMS replaces fragmented paper records and spreadsheets with a single 
 
 ### 4.6 Billing Management
 - **FR-020:** The system shall generate billing cycle records for active contracts.
-- **FR-021:** Billing entries shall support itemized charges via `billing_line_items` (types: `base_rent`, `utility`, `add_on`, `penalty`, `adjustment`).
+- **FR-021:** Billing entries shall support itemized charges via `billing_line_items`. All line items **MUST** include an `item_description` to ensure ledger transparency.
 - **FR-021a:** The `billing` table has no `amount_due` or `amount_paid` columns. Both values are computed dynamically from `billing_line_items` and non-voided `payments` respectively.
 - **FR-021b:** Adjustment line items may have negative values (deductions), but the calculated total amount for a billing record MUST NOT be negative.
 - **FR-022:** The system shall prevent duplicate billing cycles for the same contract and period.
@@ -187,7 +187,7 @@ HavenStay BHMS replaces fragmented paper records and spreadsheets with a single 
 ### 4.7 Payment Processing
 - **FR-024:** The system shall record payments against a billing record within an atomic transaction (CCR-006).
 - **FR-025:** The system shall recompute billing status after every payment post and payment void via `BillingService::autoUpdateStatus()`.
-- **FR-026:** The system shall support soft-voiding a payment. Voided payments set `voided_at`, `voided_by`, and `void_reason`; the row is never deleted.
+- **FR-026:** The system shall support soft-voiding a payment. Voided payments set `voided_at`, `voided_by`, and `void_reason`; the row is never hard-deleted.
 - **FR-026a:** All balance computations must exclude voided payments (`WHERE voided_at IS NULL`).
 - **FR-027:** The system shall maintain a history of all payments including voided records, filterable by tenant, contract, or billing ID.
 
@@ -266,7 +266,7 @@ See `docs/SDD.md` Section 4.2 for the complete entity table.
 | `contracts` | `status` | `active`, `completed`, `terminated` |
 | `billing` | `status` | `unpaid`, `partial`, `paid`, `overdue` |
 | `payments` | `payment_method` | `cash`, `gcash`, `bank_transfer`, `other` |
-| `audit_logs` | `action` | `create`, `update`, `delete`, `login`, `logout`, `access_denied`, `status_change` |
+| `audit_logs` | `action` | `create`, `update`, `delete`, `login`, `logout`, `access_denied`, `status_change`, `archive`, `restore` |
 | `transaction_logs` | `status` | `started`, `committed`, `rolled_back`, `failed` |
 
 ---
@@ -278,7 +278,7 @@ See `docs/SDD.md` Section 4.2 for the complete entity table.
 - **BR-003:** Utilities and add-ons are added per billing cycle as separate line items.
 - **BR-004:** A billing record is `overdue` when `total_paid = 0` and `due_date < today`.
 - **BR-005:** Move-out requires the contract to have `status = active`; the process atomically completes the contract and releases the bed space.
-- **BR-006:** Historical records (tenants, contracts, payments) are never hard-deleted.
+- **BR-006:** Historical records (Tenants, Rooms, Users, Contracts) are never hard-deleted; they utilize `deleted_at` to maintain forensic referential integrity.
 - **BR-007:** Voiding a payment sets `voided_at` and triggers a billing status recalculation.
 - **BR-008:** `BillingService::autoUpdateStatus()` is the single source of truth for billing status. The `Billing::updateStatus()` model method is deprecated and must not be called.
 
@@ -352,6 +352,7 @@ Tests are defined in `docs/TEST_PLAN.md`. Critical test IDs that must pass:
 | v1.9 | 2026-04-11 | Reporting Expansion: Added Collections Performance report (FR-032b); CCR-005 reporting views expanded (final counts in v2.1). |
 | v2.0 | 2026-04-11 | Audit & Nomenclature Parity: Upgraded `audit_logs` to capture full attribute snapshots; implemented 24 triggers total; achieved 100% nomenclature parity (Resident -> Tenant) across codebase and documentation. |
 | **v2.1** | **2026-04-11** | **Synchronization Finalization:** Corrected CCR counts to 6 views and 24 triggers; verified billing line item triggers as complete and traceable. |
+| **v2.2** | **2026-04-13** | **Integrity Hardening:** Formalized Soft Deletes (`deleted_at`); mandated emails and contract move-out planning; standardized reporting nomenclature to "Last, First". |
 
 ---
 

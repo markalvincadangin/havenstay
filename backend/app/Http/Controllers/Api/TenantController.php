@@ -40,8 +40,9 @@ class TenantController extends Controller
     public function store(Request $request): JsonResponse
     {
         // Check authorization: only admin/staff
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageTenants($request->user())) {
             AuditService::logAccessDenied($request->user(), 'tenants.create');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can create tenants.',
@@ -52,7 +53,7 @@ class TenantController extends Controller
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'contact_number' => ['required', 'string', 'max:20'],
-            'email' => ['nullable', 'email', 'max:150'],
+            'email' => ['required', 'email', 'max:150'],
             'emergency_contact_name' => ['required', 'string', 'max:200'],
             'emergency_contact_number' => ['required', 'string', 'max:20'],
             'address' => ['required', 'string'],
@@ -81,8 +82,9 @@ class TenantController extends Controller
     public function update(Request $request, Tenant $tenant): JsonResponse
     {
         // Check authorization
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageTenants($request->user())) {
             AuditService::logAccessDenied($request->user(), 'tenants.update');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can update tenants.',
@@ -93,7 +95,7 @@ class TenantController extends Controller
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'contact_number' => ['required', 'string', 'max:20'],
-            'email' => ['nullable', 'email', 'max:150'],
+            'email' => ['required', 'email', 'max:150'],
             'emergency_contact_name' => ['required', 'string', 'max:200'],
             'emergency_contact_number' => ['required', 'string', 'max:20'],
             'address' => ['required', 'string'],
@@ -115,8 +117,9 @@ class TenantController extends Controller
     public function deactivate(Request $request, Tenant $tenant): JsonResponse
     {
         // Check authorization
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageTenants($request->user())) {
             AuditService::logAccessDenied($request->user(), 'tenants.deactivate');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can deactivate tenants.',
@@ -138,8 +141,9 @@ class TenantController extends Controller
     public function reactivate(Request $request, Tenant $tenant): JsonResponse
     {
         // Check authorization
-        if (! AuthorizationService::canManageUsers($request->user()) && ! $request->user()->canStaff()) {
+        if (! AuthorizationService::canManageTenants($request->user())) {
             AuditService::logAccessDenied($request->user(), 'tenants.reactivate');
+
 
             return response()->json([
                 'message' => 'Unauthorized: only Admin or Staff can reactivate tenants.',
@@ -174,5 +178,44 @@ class TenantController extends Controller
             ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
 
         return PaginationResponse::fromPaginator($paginator);
+    }
+
+    /**
+     * FR-009: Archive a tenant (Soft Delete)
+     */
+    public function archive(Request $request, Tenant $tenant): JsonResponse
+    {
+        if (! AuthorizationService::canManageTenants($request->user())) {
+            AuditService::logAccessDenied($request->user(), 'tenants.archive');
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+
+        $tenant->delete(); // Eloquent SoftDeletes
+
+        return response()->json([
+            'message' => 'Tenant profile archived for forensic retention.',
+            'tenant' => $tenant,
+        ]);
+    }
+
+    /**
+     * FR-009: Restore an archived tenant
+     */
+    public function restore(Request $request, int $tenantId): JsonResponse
+    {
+        if (! AuthorizationService::canManageTenants($request->user())) {
+            AuditService::logAccessDenied($request->user(), 'tenants.restore');
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+
+        $tenant = Tenant::withTrashed()->findOrFail($tenantId);
+        $tenant->restore();
+
+        return response()->json([
+            'message' => 'Tenant profile restored to active operations.',
+            'tenant' => $tenant,
+        ]);
     }
 }

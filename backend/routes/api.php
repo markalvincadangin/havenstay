@@ -34,6 +34,8 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('users')->group(functi
     Route::put('{user}', [UserController::class, 'update']);
     Route::post('{user}/deactivate', [UserController::class, 'deactivate']);
     Route::post('{user}/reactivate', [UserController::class, 'reactivate']);
+    Route::post('{user}/archive', [UserController::class, 'archive']);
+    Route::post('{id}/restore', [UserController::class, 'restore']);
     Route::post('{user}/assign-role', [UserController::class, 'assignRole']);
 });
 
@@ -46,6 +48,8 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('tenants')->group(func
     Route::put('{tenant}', [TenantController::class, 'update']);
     Route::post('{tenant}/deactivate', [TenantController::class, 'deactivate']);
     Route::post('{tenant}/reactivate', [TenantController::class, 'reactivate']);
+    Route::post('{tenant}/archive', [TenantController::class, 'archive']);
+    Route::post('{id}/restore', [TenantController::class, 'restore']);
 });
 
 // FR-012..FR-015: Room and bed-space management endpoints (Admin/Staff)
@@ -55,6 +59,8 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('rooms')->group(functi
     Route::get('availability', [RoomController::class, 'availability']);
     Route::get('{room}', [RoomController::class, 'show']);
     Route::put('{room}', [RoomController::class, 'update']);
+    Route::post('{room}/archive', [RoomController::class, 'archive']);
+    Route::post('{id}/restore', [RoomController::class, 'restore']);
     Route::post('{room}/bed-spaces', [RoomController::class, 'addBedSpace']);
     Route::post('bed-spaces/{bedSpace}/occupy', [RoomController::class, 'occupyBedSpace']);
 });
@@ -65,6 +71,8 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('contracts')->group(fu
     Route::post('/', [ContractController::class, 'store']);
     Route::get('{contract}', [ContractController::class, 'show']);
     Route::put('{contract}', [ContractController::class, 'update']);
+    Route::post('{contract}/archive', [ContractController::class, 'archive']);
+    Route::post('{id}/restore', [ContractController::class, 'restore']);
     Route::post('{contract}/move-out', [ContractController::class, 'moveOut']);
 });
 

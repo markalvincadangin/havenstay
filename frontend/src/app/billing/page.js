@@ -201,7 +201,7 @@ export default function BillingListPage() {
 
   const canGenerateBilling = useMemo(() => canManageBilling(currentUser), [currentUser]);
 
-  if (authLoading || loading) {
+  if (authLoading || (loading && currentUser)) {
     return (
       <AppMain>
         <SkeletonListPage />

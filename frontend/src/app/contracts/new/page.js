@@ -359,13 +359,14 @@ export default function NewContractPage() {
                       {...register("move_in_date", { required: "Inception date is required." })}
                     />
                   </Field>
-                  <Field label="Expected Move-Out" error={errors.expected_move_out?.message}>
+                  <Field label="Expected Move-Out" required error={errors.expected_move_out?.message}>
                     <Input
                       type="date"
                       hasError={Boolean(errors.expected_move_out)}
                       disabled={readOnly}
                       className="!h-11 border-stone-200"
                       {...register("expected_move_out", {
+                        required: "Expected move-out date is required for planning.",
                         validate: (val) => !val || new Date(val) > new Date(watch("move_in_date")) || "Must be after inception.",
                       })}
                     />

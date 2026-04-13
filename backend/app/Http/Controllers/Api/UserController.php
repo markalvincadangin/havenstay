@@ -252,4 +252,48 @@ class UserController extends Controller
 
         return response()->json(Role::all());
     }
+
+    /**
+     * Archive a user (Soft Delete)
+     */
+    public function archive(Request $request, User $user): JsonResponse
+    {
+        if (! AuthorizationService::canManageUsers($request->user())) {
+            AuditService::logAccessDenied($request->user(), 'users.archive');
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+
+        // Safety: Prevent self-archival
+        if ($user->user_id === $request->user()->user_id) {
+            return response()->json(['message' => 'You cannot archive your own account.'], 400);
+        }
+
+        $user->delete();
+
+        return response()->json([
+            'message' => 'User archived successfully.',
+            'user' => $user,
+        ]);
+    }
+
+    /**
+     * Restore an archived user
+     */
+    public function restore(Request $request, int $id): JsonResponse
+    {
+        if (! AuthorizationService::canManageUsers($request->user())) {
+            AuditService::logAccessDenied($request->user(), 'users.restore');
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+
+        $user = User::withTrashed()->findOrFail($id);
+        $user->restore();
+
+        return response()->json([
+            'message' => 'User restored successfully.',
+            'user' => $user,
+        ]);
+    }
 }

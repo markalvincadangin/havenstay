@@ -35,8 +35,9 @@ import UserRoleBadge from "../_components/ui/UserRoleBadge";
 import { StatusBadge } from "../_components/ui/StatusBadge";
 import { KpiCard } from "../_components/ui/KpiCard";
 import { Table } from "../_components/ui/Table";
-import EmptyState from "../_components/ui/EmptyState";
+import ResourceView from "../_components/ui/ResourceView";
 import { primaryLinkCtaClass } from "../_components/ui/LinkTokens";
+
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -252,7 +253,9 @@ export default function DashboardPage() {
             progress={occupancyPct}
             href="/reports/occupancy"
             isLoading={segments.occupancy.loading}
+            error={segments.occupancy.error}
           />
+
           <KpiCard
             label="Active tenants"
             icon={Users}
@@ -260,7 +263,9 @@ export default function DashboardPage() {
             sub="Tenant profiles with status Active"
             href="/tenants"
             isLoading={segments.tenants.loading}
+            error={segments.tenants.error}
           />
+
           <KpiCard
             label="Bookable vacancies"
             icon={Bed}
@@ -268,7 +273,9 @@ export default function DashboardPage() {
             sub={`Vacant beds in Available rooms only · ${totalBeds} beds in inventory`}
             href="/rooms"
             isLoading={segments.occupancy.loading}
+            error={segments.occupancy.error}
           />
+
           <KpiCard
             label="Overdue billing cycles"
             icon={CreditCard}
@@ -281,7 +288,9 @@ export default function DashboardPage() {
             isDanger={stats.overdueCount > 0}
             href="/billing"
             isLoading={segments.billing.loading}
+            error={segments.billing.error}
           />
+
           <KpiCard
             label="Payments this month"
             icon={Receipt}
@@ -289,7 +298,9 @@ export default function DashboardPage() {
             sub="Posted collections · voided payments excluded"
             href="/payments"
             isLoading={segments.payments.loading}
+            error={segments.payments.error}
           />
+
           <KpiCard
             label="Unpaid (new periods)"
             icon={CreditCard}
@@ -297,7 +308,9 @@ export default function DashboardPage() {
             sub="Billings with period starting this month · unpaid balance only"
             href="/billing"
             isLoading={segments.billing.loading}
+            error={segments.billing.error}
           />
+
         </div>
 
         <div className="grid gap-6 lg:grid-cols-12">
@@ -335,11 +348,15 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="p-0">
-                    {segments.payments.loading ? (
-                      <div className="p-6 space-y-3">
-                        {[1, 2].map(i => <div key={i} className="h-10 w-full animate-pulse rounded-lg bg-stone-50" />)}
-                      </div>
-                    ) : recentActivityPayments.length > 0 ? (
+                    <ResourceView
+                      isLoading={segments.payments.loading}
+                      isEmpty={recentActivityPayments.length === 0}
+                      error={segments.payments.error}
+                      emptyProps={{
+                        title: "No collections",
+                        message: "Recent payments will appear here once recorded in the ledger."
+                      }}
+                    >
                       <Table
                         embedded
                         columns={[
@@ -362,16 +379,9 @@ export default function DashboardPage() {
                           </tr>
                         ))}
                       />
-                    ) : (
-                      <div className="p-8">
-                        <EmptyState
-                          icon={Receipt}
-                          title="No collections"
-                          message="Recent payments will appear here once recorded in the ledger."
-                        />
-                      </div>
-                    )}
+                    </ResourceView>
                   </div>
+
                 </Card>
               </div>
             </div>
@@ -389,7 +399,15 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="p-0">
-                {stats.dueToday.length > 0 ? (
+                <ResourceView
+                  isLoading={segments.billing.loading}
+                  isEmpty={stats.dueToday.length === 0}
+                  error={segments.billing.error}
+                  emptyProps={{
+                    title: "All clear for today",
+                    message: "There are no billing records reaching their due date today."
+                  }}
+                >
                   <Table
                     embedded
                     columns={[
@@ -413,15 +431,7 @@ export default function DashboardPage() {
                       </tr>
                     ))}
                   />
-                ) : (
-                  <div className="p-12">
-                    <EmptyState
-                      icon={PlusCircle}
-                      title="All clear for today"
-                      message="There are no billing records reaching their due date today."
-                    />
-                  </div>
-                )}
+                </ResourceView>
               </div>
             </Card>
           </div>
@@ -441,11 +451,15 @@ export default function DashboardPage() {
               </div>
 
               <div className="p-0">
-                {segments.billing.loading ? (
-                  <div className="p-6 space-y-3">
-                    {[1, 2].map(i => <div key={i} className="h-10 w-full animate-pulse rounded-lg bg-stone-50" />)}
-                  </div>
-                ) : billingList.length > 0 ? (
+                <ResourceView
+                  isLoading={segments.billing.loading}
+                  isEmpty={billingList.length === 0}
+                  error={segments.billing.error}
+                  emptyProps={{
+                    title: "No billing yet",
+                    message: "Records will appear here once billing is generated."
+                  }}
+                >
                   <div className="divide-y divide-stone-50">
                     {billingList.slice(0, 5).map((b) => (
                       <div
@@ -470,16 +484,9 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <div className="p-8">
-                    <EmptyState
-                      icon={Search}
-                      title="No billing yet"
-                      message="Records will appear here once billing is generated."
-                    />
-                  </div>
-                )}
+                </ResourceView>
               </div>
+
             </Card>
           </div>
         </div>

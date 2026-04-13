@@ -51,16 +51,18 @@ CREATE TABLE users (
     first_name     VARCHAR(100)  NOT NULL,
     last_name      VARCHAR(100)  NOT NULL,
     username       VARCHAR(100)  NOT NULL,
-    email          VARCHAR(150),
+    email          VARCHAR(150)  NOT NULL,
     password_hash  VARCHAR(255)  NOT NULL,
     is_active      TINYINT(1)    NOT NULL DEFAULT 1,
     last_login_at  DATETIME,
     created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at     DATETIME      NULL,
     PRIMARY KEY (user_id),
     UNIQUE KEY uq_users_username (username),
     CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles (role_id),
-    INDEX idx_users_role (role_id)
+    INDEX idx_users_role (role_id),
+    INDEX idx_users_name (last_name, first_name)
 ) ENGINE=InnoDB;
 
 CREATE TABLE tenants (
@@ -68,13 +70,14 @@ CREATE TABLE tenants (
     first_name                 VARCHAR(100)  NOT NULL,
     last_name                  VARCHAR(100)  NOT NULL,
     contact_number             VARCHAR(20)   NOT NULL,
-    email                      VARCHAR(150),
+    email                      VARCHAR(150)  NOT NULL,
     emergency_contact_name     VARCHAR(200)  NOT NULL,
     emergency_contact_number   VARCHAR(20)   NOT NULL,
     address                    TEXT          NOT NULL,
     status                     ENUM('active','moved_out','archived') NOT NULL DEFAULT 'active',
     created_at                 DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                 DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at                 DATETIME      NULL,
     PRIMARY KEY (tenant_id),
     INDEX idx_tenants_name (last_name, first_name),
     INDEX idx_tenants_status (status)
@@ -91,6 +94,7 @@ CREATE TABLE rooms (
     description        TEXT,
     created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at         DATETIME      NULL,
     PRIMARY KEY (room_id),
     UNIQUE KEY uq_rooms_code (room_code),
     CONSTRAINT chk_rooms_capacity CHECK (capacity >= 1),
@@ -117,7 +121,7 @@ CREATE TABLE contracts (
     bed_space_id           INT           NOT NULL,
     created_by             INT           NOT NULL,
     move_in_date           DATE          NOT NULL,
-    expected_move_out_date DATE          NULL,
+    expected_move_out_date DATE          NOT NULL,
     actual_move_out_date   DATE          NULL,
     deposit_amount         DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     monthly_rate           DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -125,6 +129,7 @@ CREATE TABLE contracts (
     notes                  TEXT,
     created_at             DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at             DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at             DATETIME      NULL,
     PRIMARY KEY (contract_id),
     CONSTRAINT fk_contracts_tenant     FOREIGN KEY (tenant_id)    REFERENCES tenants (tenant_id),
     CONSTRAINT fk_contracts_bed        FOREIGN KEY (bed_space_id) REFERENCES bed_spaces (bed_space_id),
@@ -155,7 +160,7 @@ CREATE TABLE billing_line_items (
     billing_line_item_id INT           NOT NULL AUTO_INCREMENT,
     billing_id           INT           NOT NULL,
     item_type            ENUM('base_rent','utility','add_on','penalty','adjustment') NOT NULL,
-    item_description     VARCHAR(255),
+    item_description     VARCHAR(255)  NOT NULL,
     amount               DECIMAL(10,2) NOT NULL,
     created_at           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -196,7 +201,7 @@ CREATE TABLE audit_logs (
     user_id         INT           NULL,
     entity_name     VARCHAR(100)  NOT NULL,
     entity_id       VARCHAR(100)  NOT NULL,
-    action          ENUM('create','update','delete','login','logout','access_denied','status_change') NOT NULL,
+    action          ENUM('create','update','delete','login','logout','access_denied','status_change','archive','restore') NOT NULL,
     old_values_json JSON          NULL,
     new_values_json JSON          NULL,
     correlation_id  CHAR(36)      NULL,
@@ -250,10 +255,15 @@ END;
 
 CREATE TRIGGER trg_users_au AFTER UPDATE ON users FOR EACH ROW
 BEGIN
+    DECLARE v_action VARCHAR(20) DEFAULT 'update';
+    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN SET v_action = 'archive';
+    ELSEIF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN SET v_action = 'restore';
+    END IF;
+
     INSERT INTO audit_logs (user_id, entity_name, entity_id, action, old_values_json, new_values_json, correlation_id)
-    VALUES (CAST(@app_user_id AS UNSIGNED), 'users', CAST(NEW.user_id AS CHAR), 'update',
-            JSON_OBJECT('role_id', OLD.role_id, 'is_active', OLD.is_active, 'first_name', OLD.first_name, 'last_name', OLD.last_name, 'email', OLD.email),
-            JSON_OBJECT('role_id', NEW.role_id, 'is_active', NEW.is_active, 'first_name', NEW.first_name, 'last_name', NEW.last_name, 'email', NEW.email), NULLIF(TRIM(@app_correlation_id), ''));
+    VALUES (CAST(@app_user_id AS UNSIGNED), 'users', CAST(NEW.user_id AS CHAR), v_action,
+            JSON_OBJECT('username', OLD.username, 'is_active', OLD.is_active, 'deleted_at', OLD.deleted_at),
+            JSON_OBJECT('username', NEW.username, 'is_active', NEW.is_active, 'deleted_at', NEW.deleted_at), NULLIF(TRIM(@app_correlation_id), ''));
 END;
 
 CREATE TRIGGER trg_users_ad AFTER DELETE ON users FOR EACH ROW
@@ -273,10 +283,15 @@ END;
 
 CREATE TRIGGER trg_contracts_au AFTER UPDATE ON contracts FOR EACH ROW
 BEGIN
+    DECLARE v_action VARCHAR(20) DEFAULT 'update';
+    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN SET v_action = 'archive';
+    ELSEIF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN SET v_action = 'restore';
+    END IF;
+
     INSERT INTO audit_logs (user_id, entity_name, entity_id, action, old_values_json, new_values_json, correlation_id)
-    VALUES (CAST(@app_user_id AS UNSIGNED), 'contracts', CAST(NEW.contract_id AS CHAR), 'update',
-            JSON_OBJECT('status', OLD.status, 'monthly_rate', OLD.monthly_rate, 'expected_move_out_date', OLD.expected_move_out_date),
-            JSON_OBJECT('status', NEW.status, 'monthly_rate', NEW.monthly_rate, 'expected_move_out_date', NEW.expected_move_out_date), NULLIF(TRIM(@app_correlation_id), ''));
+    VALUES (CAST(@app_user_id AS UNSIGNED), 'contracts', CAST(NEW.contract_id AS CHAR), v_action,
+            JSON_OBJECT('status', OLD.status, 'deleted_at', OLD.deleted_at, 'expected_move_out_date', OLD.expected_move_out_date),
+            JSON_OBJECT('status', NEW.status, 'deleted_at', NEW.deleted_at, 'expected_move_out_date', NEW.expected_move_out_date), NULLIF(TRIM(@app_correlation_id), ''));
 END;
 
 CREATE TRIGGER trg_contracts_ad AFTER DELETE ON contracts FOR EACH ROW
@@ -366,10 +381,15 @@ END;
 
 CREATE TRIGGER trg_tenants_au AFTER UPDATE ON tenants FOR EACH ROW
 BEGIN
+    DECLARE v_action VARCHAR(20) DEFAULT 'update';
+    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN SET v_action = 'archive';
+    ELSEIF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN SET v_action = 'restore';
+    END IF;
+
     INSERT INTO audit_logs (user_id, entity_name, entity_id, action, old_values_json, new_values_json, correlation_id)
-    VALUES (CAST(@app_user_id AS UNSIGNED), 'tenants', CAST(NEW.tenant_id AS CHAR), 'update',
-            JSON_OBJECT('status', OLD.status, 'first_name', OLD.first_name, 'last_name', OLD.last_name, 'contact_number', OLD.contact_number, 'email', OLD.email),
-            JSON_OBJECT('status', NEW.status, 'first_name', NEW.first_name, 'last_name', NEW.last_name, 'contact_number', NEW.contact_number, 'email', NEW.email), NULLIF(TRIM(@app_correlation_id), ''));
+    VALUES (CAST(@app_user_id AS UNSIGNED), 'tenants', CAST(NEW.tenant_id AS CHAR), v_action,
+            JSON_OBJECT('status', OLD.status, 'deleted_at', OLD.deleted_at, 'email', OLD.email),
+            JSON_OBJECT('status', NEW.status, 'deleted_at', NEW.deleted_at, 'email', NEW.email), NULLIF(TRIM(@app_correlation_id), ''));
 END;
 
 CREATE TRIGGER trg_tenants_ad AFTER DELETE ON tenants FOR EACH ROW
@@ -389,10 +409,15 @@ END;
 
 CREATE TRIGGER trg_rooms_au AFTER UPDATE ON rooms FOR EACH ROW
 BEGIN
+    DECLARE v_action VARCHAR(20) DEFAULT 'update';
+    IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN SET v_action = 'archive';
+    ELSEIF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN SET v_action = 'restore';
+    END IF;
+
     INSERT INTO audit_logs (user_id, entity_name, entity_id, action, old_values_json, new_values_json, correlation_id)
-    VALUES (CAST(@app_user_id AS UNSIGNED), 'rooms', CAST(NEW.room_id AS CHAR), 'update',
-            JSON_OBJECT('status', OLD.status, 'monthly_rate', OLD.monthly_rate, 'room_code', OLD.room_code),
-            JSON_OBJECT('status', NEW.status, 'monthly_rate', NEW.monthly_rate, 'room_code', NEW.room_code), NULLIF(TRIM(@app_correlation_id), ''));
+    VALUES (CAST(@app_user_id AS UNSIGNED), 'rooms', CAST(NEW.room_id AS CHAR), v_action,
+            JSON_OBJECT('status', OLD.status, 'deleted_at', OLD.deleted_at, 'room_code', OLD.room_code),
+            JSON_OBJECT('status', NEW.status, 'deleted_at', NEW.deleted_at, 'room_code', NEW.room_code), NULLIF(TRIM(@app_correlation_id), ''));
 END;
 
 CREATE TRIGGER trg_rooms_ad AFTER DELETE ON rooms FOR EACH ROW
@@ -440,7 +465,7 @@ SELECT
     b.status AS billing_status,
     c.contract_id,
     t.tenant_id,
-    CONCAT(t.first_name, ' ', t.last_name) AS tenant_name,
+    CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
     t.email,
     r.room_id,
     r.room_code,
@@ -460,7 +485,7 @@ SELECT
     c.contract_id,
     c.move_in_date,
     t.tenant_id,
-    CONCAT(t.first_name, ' ', t.last_name) AS tenant_name,
+    CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
     t.contact_number,
     t.email,
     r.room_id,
@@ -473,7 +498,8 @@ FROM contracts c
 INNER JOIN tenants t ON c.tenant_id = t.tenant_id
 INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
 INNER JOIN rooms r ON bs.room_id = r.room_id
-WHERE c.status = 'active';
+WHERE c.status = 'active'
+  AND c.deleted_at IS NULL;
 
 -- View 3: Room occupancy with aggregation
 CREATE VIEW vw_room_occupancy AS
@@ -486,9 +512,10 @@ SELECT
     r.capacity,
     COUNT(bs.bed_space_id) AS total_beds,
     SUM(CASE WHEN bs.status = 'occupied' THEN 1 ELSE 0 END) AS occupied_beds,
-    SUM(CASE WHEN bs.status = 'vacant' AND r.status = 'available' THEN 1 ELSE 0 END) AS vacant_beds
+    SUM(CASE WHEN bs.status = 'vacant' AND r.status = 'available' AND r.deleted_at IS NULL THEN 1 ELSE 0 END) AS vacant_beds
 FROM rooms r
 LEFT JOIN bed_spaces bs ON r.room_id = bs.room_id
+WHERE r.deleted_at IS NULL
 GROUP BY r.room_id, r.room_code, r.room_type, r.monthly_rate, r.status, r.capacity;
 
 -- View 4: Detailed occupancy status (Added for completeness with migration)
@@ -500,11 +527,11 @@ SELECT
     r.room_id,
     r.room_code,
     t.tenant_id,
-    CONCAT(t.first_name, ' ', t.last_name) AS tenant_name,
+    CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
     c.contract_id
 FROM bed_spaces bs
 INNER JOIN rooms r ON bs.room_id = r.room_id
-LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status = 'active'
+LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status = 'active' AND c.deleted_at IS NULL
 LEFT JOIN tenants t ON c.tenant_id = t.tenant_id;
 
 -- View 5: Collections Performance (FR-032b)
@@ -516,7 +543,7 @@ SELECT
     p.payment_method,
     p.reference_number,
     t.tenant_id,
-    CONCAT(t.first_name, ' ', t.last_name) AS tenant_name,
+    CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
     b.billing_id,
     r.room_code
 FROM payments p

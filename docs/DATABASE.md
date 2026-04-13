@@ -13,7 +13,7 @@ SQLite test/dev builds use the migration’s `createTables()` / `createViews()` 
 
 ## Schema Overview
 
-The database consists of **11 tables**, **6 views**, and **24 audit triggers**. It uses the InnoDB engine for transactional support and referential integrity.
+The database consists of **11 tables**, **6 views**, and **24 audit triggers**. It uses the InnoDB engine for transactional support and referential integrity. Core master entities (`users`, `tenants`, `rooms`, `contracts`) utilize **Soft Deletes** (`deleted_at`) for historical retention.
 
 ### Primary Database Entities
 
@@ -42,18 +42,19 @@ The system includes six core views designed to simplify complex reporting joins 
 
 | View Name | Purpose | Key Joins |
 | :--- | :--- | :--- |
-| **`vw_billing_summary`** | Provides a complete financial profile for each billing cycle, including tenant name and room details. | 5-table join |
-| **`vw_active_contracts`** | Lists all current occupants with contact info and room rates. | 5-table join |
-| **`vw_room_occupancy`** | Real-time aggregation of room capacity, occupied beds, and vacancy levels. | Aggregation |
-| **`vw_occupancy_status`** | Per-bed occupancy tracking with current tenant and contract context. | 5-table join |
-| **`vw_collections_summary`** | Detailed payment collections tracking with entity context (FR-032b). | 5-table join |
+| **`vw_billing_summary`** | Provides a complete financial profile for each billing cycle; names standardized to "Last, First". | 5-table join |
+| **`vw_active_contracts`** | Lists all current occupants; filters out soft-deleted records. | 5-table join |
+| **`vw_room_occupancy`** | Real-time aggregation of room capacity and vacancy; ignores archived rooms. | Aggregation |
+| **`vw_occupancy_status`** | Per-bed occupancy tracking; ignores soft-deleted contracts. | 5-table join |
+| **`vw_collections_summary`** | Detailed payment collections tracking; names standardized to "Last, First". | 5-table join |
 | **`vw_tenant_contract_history`** | Complete historical record of all contracts for all tenants (FR-031). | 4-table join |
 
 ## Compliance & Audit (CCR-008)
 
 To ensure strict compliance with audit requirements, the database implements **24 dedicated triggers**.
 
-- **Scope**: Every `INSERT`, `UPDATE`, and `DELETE` on the 8 core tables (including billing line items) is automatically logged to `audit_logs`.
+- **Scope**: Every `INSERT`, `UPDATE`, and `DELETE` on the 8 core tables is automatically logged to `audit_logs`.
+- **Soft Delete Monitoring**: Triggers on master tables are logic-aware; they detect `deleted_at` changes and log specific `archive` or `restore` actions.
 - **Logic Isolation**: Triggers are strictly for auditing. Business logic and status transitions are handled at the Application (Service) layer to ensure maintainability.
 - **Context Injection**: The `audit_logs` table captures the `user_id` of the operator responsible for the change by referencing the `@app_user_id` session variable set by the `AuditService`.
 

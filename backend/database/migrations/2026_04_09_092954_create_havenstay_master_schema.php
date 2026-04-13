@@ -65,14 +65,15 @@ return new class extends Migration
             $table->string('first_name', 100);
             $table->string('last_name', 100);
             $table->string('username', 100)->unique();
-            // Canonical DDL: email is not UNIQUE (see havenstay_schema.sql)
-            $table->string('email', 150)->nullable();
+            $table->string('email', 150)->nullable(false);
             $table->string('password_hash');
             $table->boolean('is_active')->default(true);
             $table->timestamp('last_login_at')->nullable();
             $table->timestamps();
+            $table->softDeletes();
             $table->foreign('role_id')->references('role_id')->on('roles');
             $table->index('role_id', 'idx_users_role');
+            $table->index(['last_name', 'first_name'], 'idx_users_name');
         });
 
         Schema::create('tenants', function (Blueprint $table) {
@@ -80,12 +81,13 @@ return new class extends Migration
             $table->string('first_name', 100);
             $table->string('last_name', 100);
             $table->string('contact_number', 20);
-            $table->string('email', 150)->nullable();
-            $table->string('emergency_contact_name', 200);
-            $table->string('emergency_contact_number', 20);
+            $table->string('email', 150)->nullable(false);
+            $table->string('emergency_contact_name', 200)->nullable(false);
+            $table->string('emergency_contact_number', 20)->nullable(false);
             $table->text('address');
             $table->string('status', 20)->default('active');
             $table->timestamps();
+            $table->softDeletes();
             $table->index(['last_name', 'first_name'], 'idx_tenants_name');
             $table->index('status', 'idx_tenants_status');
         });
@@ -100,6 +102,7 @@ return new class extends Migration
             $table->text('amenities')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
+            $table->softDeletes();
             $table->index('status', 'idx_rooms_status');
         });
 
@@ -120,13 +123,14 @@ return new class extends Migration
             $table->unsignedInteger('bed_space_id');
             $table->unsignedInteger('created_by');
             $table->date('move_in_date');
-            $table->date('expected_move_out_date')->nullable();
+            $table->date('expected_move_out_date')->nullable(false);
             $table->date('actual_move_out_date')->nullable();
             $table->decimal('deposit_amount', 10, 2)->default(0.00);
             $table->decimal('monthly_rate', 10, 2)->default(0.00);
             $table->string('status', 20)->default('active');
             $table->text('notes')->nullable();
             $table->timestamps();
+            $table->softDeletes();
             $table->foreign('tenant_id')->references('tenant_id')->on('tenants');
             $table->foreign('bed_space_id')->references('bed_space_id')->on('bed_spaces');
             $table->foreign('created_by')->references('user_id')->on('users');
@@ -152,7 +156,7 @@ return new class extends Migration
             $table->increments('billing_line_item_id');
             $table->unsignedInteger('billing_id');
             $table->string('item_type', 50);
-            $table->string('item_description')->nullable();
+            $table->string('item_description');
             $table->decimal('amount', 10, 2);
             $table->timestamps();
             $table->foreign('billing_id')->references('billing_id')->on('billing');
@@ -198,7 +202,6 @@ return new class extends Migration
         Schema::create('transaction_logs', function (Blueprint $table) {
             $table->bigIncrements('tx_log_id');
             $table->string('tx_name', 150);
-            // No DB default — matches havenstay_schema.sql (application sets on insert)
             $table->dateTime('started_at');
             $table->timestamp('completed_at')->nullable();
             $table->string('status', 20)->default('started');
@@ -211,17 +214,10 @@ return new class extends Migration
             $table->index(['status', 'started_at'], 'idx_tx_status_started');
             $table->index('correlation_id', 'idx_tx_correlation');
         });
-
-        // CHECK constraints from havenstay_schema.sql (chk_rooms_capacity, chk_line_item_amount, etc.) are enforced
-        // in MySQL via the raw SQL path above. SQLite builds vary; automated tests rely on app validation + FKs.
-
-        // CCR-008: Note - Triggers are skipped for SQLite due to engine limitations.
-        // All CCR evidence is verified against the MySQL primary instance.
     }
 
     private function createViews(): void
     {
-        // View 1: vw_billing_summary
         DB::statement("
             CREATE VIEW vw_billing_summary AS
             SELECT 
@@ -232,7 +228,7 @@ return new class extends Migration
                 b.status AS billing_status,
                 c.contract_id,
                 t.tenant_id,
-                t.first_name || ' ' || t.last_name AS tenant_name,
+                t.last_name || ', ' || t.first_name AS tenant_name,
                 t.email,
                 r.room_id,
                 r.room_code,
@@ -247,14 +243,13 @@ return new class extends Migration
             INNER JOIN rooms r ON bs.room_id = r.room_id
         ");
 
-        // View 2: vw_active_contracts
         DB::statement("
             CREATE VIEW vw_active_contracts AS
             SELECT 
                 c.contract_id,
                 c.move_in_date,
                 t.tenant_id,
-                t.first_name || ' ' || t.last_name AS tenant_name,
+                t.last_name || ', ' || t.first_name AS tenant_name,
                 t.contact_number,
                 t.email,
                 r.room_id,
@@ -268,9 +263,9 @@ return new class extends Migration
             INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
             INNER JOIN rooms r ON bs.room_id = r.room_id
             WHERE c.status = 'active'
+              AND c.deleted_at IS NULL
         ");
 
-        // View 3: vw_room_occupancy (Hardened to exclude maintenance ghost vacancy)
         DB::statement("
             CREATE VIEW vw_room_occupancy AS
             SELECT 
@@ -282,11 +277,11 @@ return new class extends Migration
                 r.capacity,
                 (SELECT COUNT(*) FROM bed_spaces bs WHERE bs.room_id = r.room_id) as total_beds,
                 (SELECT COUNT(*) FROM bed_spaces bs WHERE bs.room_id = r.room_id AND bs.status = 'occupied') as occupied_beds,
-                (SELECT COUNT(*) FROM bed_spaces bs WHERE bs.room_id = r.room_id AND bs.status = 'vacant' AND r.status = 'available') as vacant_beds
+                (SELECT COUNT(*) FROM bed_spaces bs WHERE bs.room_id = r.room_id AND bs.status = 'vacant' AND r.status = 'available' AND r.deleted_at IS NULL) as vacant_beds
             FROM rooms r
+            WHERE r.deleted_at IS NULL
         ");
 
-        // View 4: vw_occupancy_status
         DB::statement("
             CREATE VIEW vw_occupancy_status AS
             SELECT 
@@ -296,15 +291,14 @@ return new class extends Migration
                 r.room_id,
                 r.room_code,
                 t.tenant_id,
-                t.first_name || ' ' || t.last_name as tenant_name,
+                t.last_name || ', ' || t.first_name as tenant_name,
                 c.contract_id
             FROM bed_spaces bs
             INNER JOIN rooms r ON bs.room_id = r.room_id
-            LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status = 'active'
+            LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status = 'active' AND c.deleted_at IS NULL
             LEFT JOIN tenants t ON c.tenant_id = t.tenant_id
         ");
 
-        // View 5: vw_collections_summary (FR-032b)
         DB::statement("
             CREATE VIEW vw_collections_summary AS
             SELECT 
@@ -314,7 +308,7 @@ return new class extends Migration
                 p.payment_method,
                 p.reference_number,
                 t.tenant_id,
-                t.first_name || ' ' || t.last_name AS tenant_name,
+                t.last_name || ', ' || t.first_name AS tenant_name,
                 b.billing_id,
                 r.room_code
             FROM payments p
@@ -326,7 +320,6 @@ return new class extends Migration
             WHERE p.voided_at IS NULL
         ");
 
-        // View 6: vw_tenant_contract_history (FR-031 tenant history report; parity with MySQL havenstay_schema.sql)
         DB::statement("
             CREATE VIEW vw_tenant_contract_history AS
             SELECT
@@ -349,7 +342,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Views reference base tables — drop views first (MySQL + SQLite).
         DB::statement('DROP VIEW IF EXISTS vw_billing_summary');
         DB::statement('DROP VIEW IF EXISTS vw_active_contracts');
         DB::statement('DROP VIEW IF EXISTS vw_room_occupancy');

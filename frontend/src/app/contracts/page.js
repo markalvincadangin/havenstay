@@ -169,7 +169,7 @@ export default function ContractsListPage() {
     });
   }, [contracts, sortColumn, sortDirection]);
 
-  if (authLoading || loading) {
+  if (authLoading || (loading && currentUser)) {
     return (
       <AppMain>
         <SkeletonListPage rows={10} />

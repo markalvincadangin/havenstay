@@ -57,7 +57,7 @@ class ContractService
                     'bed_space_id' => $data['bed_space_id'],
                     'created_by' => $actor->user_id,
                     'move_in_date' => $data['move_in_date'],
-                    'expected_move_out_date' => $data['expected_move_out'] ?? null,
+                    'expected_move_out_date' => $data['expected_move_out'],
                     'deposit_amount' => $data['deposit_amount'] ?? 0,
                     'monthly_rate' => $data['monthly_rate'] ?? (Room::find($data['room_id'])->monthly_rate ?? 0.00),
                     'status' => 'active',
@@ -225,7 +225,13 @@ class ContractService
             ]);
         }
 
-        if (! empty($data['expected_move_out']) && $data['expected_move_out'] <= $data['move_in_date']) {
+        if (empty($data['expected_move_out'])) {
+            throw ValidationException::withMessages([
+                'expected_move_out' => ['Expected move-out date is required for contract planning.'],
+            ]);
+        }
+
+        if ($data['expected_move_out'] <= $data['move_in_date']) {
             throw ValidationException::withMessages([
                 'expected_move_out' => ['Expected move-out date must be after move-in date.'],
             ]);
