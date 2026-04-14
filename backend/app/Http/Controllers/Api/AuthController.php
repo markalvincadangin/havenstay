@@ -15,28 +15,38 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $credentials = $request->validate([
-            'username' => ['required', 'string'],
+            'username' => ['nullable', 'string'],
+            'email' => ['nullable', 'string', 'email'],
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('username', $credentials['username'])->first();
+        $identifier = trim((string) ($credentials['username'] ?? $credentials['email'] ?? ''));
+        if ($identifier === '') {
+            throw ValidationException::withMessages([
+                'username' => ['The username or email field is required.'],
+            ]);
+        }
 
-        // FR-007: Reject deactivated users
+        $loginField = filter_var($identifier, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+
+        $user = User::where($loginField, $identifier)->first();
         if ($user && ! $user->isActive()) {
             throw ValidationException::withMessages([
                 'username' => ['This account has been deactivated.'],
             ]);
         }
 
-        if (! Auth::attempt($credentials)) {
+        if (! Auth::attempt([
+            $loginField => $identifier,
+            'password' => $credentials['password'],
+        ])) {
             throw ValidationException::withMessages([
                 'username' => ['The provided credentials are incorrect.'],
             ]);
         }
 
         $authenticatedUser = Auth::user();
-
-        // FR-003: Log login event
+        $authenticatedUser->update(['last_login_at' => now()]);
         AuditService::logLogin($authenticatedUser);
 
         // Create API token for stateless auth
@@ -70,8 +80,6 @@ class AuthController extends Controller
                 // Token may not be deletable (e.g., TransientToken in tests)
             }
         }
-
-        // FR-003: Log logout event
         AuditService::logLogout($user);
 
         return response()->json([

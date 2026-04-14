@@ -8,13 +8,13 @@ import { useAuth } from "../_context/AuthContext";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import KeyboardHelpModal from "./ui/KeyboardHelpModal";
 
-const AUTH_FREE_PAGES = new Set(["/login", "/signin"]);
+const AUTH_FREE_PAGES = new Set(["/login"]);
 
 export default function AppFrame({ children }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
 
   const handleToggleHelp = () => setShowHelp((prev) => !prev);
 
@@ -38,11 +38,11 @@ export default function AppFrame({ children }) {
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text)] md:flex max-w-[1600px] mx-auto">
       {/* Desktop Sidebar */}
-      <Sidebar pathname={pathname} user={user} onLogout={logout} onToggleHelp={handleToggleHelp} />
+      <Sidebar pathname={pathname} user={user} loading={loading} onLogout={logout} onToggleHelp={handleToggleHelp} />
 
       <div className="flex-1">
         {/* Mobile Header & Nav */}
-        <MobileNav pathname={pathname} user={user} onLogout={logout} onToggleHelp={handleToggleHelp} />
+        <MobileNav pathname={pathname} user={user} loading={loading} onLogout={logout} onToggleHelp={handleToggleHelp} />
 
         {/* Page Content */}
         <main className="mx-auto w-full max-w-[1200px] p-4 lg:p-8">

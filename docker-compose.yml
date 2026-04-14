@@ -7,17 +7,28 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: havenstay_db
-    command: 
+      # Dedicated replication user created on init
+      MYSQL_USER: replica_user
+      MYSQL_PASSWORD: replica_pass
+    command:
       - --server-id=1
       - --log-bin=mysql-bin
       - --gtid-mode=ON
       - --enforce-gtid-consistency=ON
       - --log-replica-updates=ON
       - --binlog-expire-logs-seconds=604800
+      - --mysql-native-password=ON
     ports:
       - "3306:3306"
     volumes:
       - db-primary-data:/var/lib/mysql
+      - ./docker/primary-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -proot || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   # Replica Database (3307)
   db-replica:
@@ -26,17 +37,28 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
-    command: 
+    command:
       - --server-id=2
       - --gtid-mode=ON
       - --enforce-gtid-consistency=ON
       - --log-replica-updates=ON
+      - --relay-log-recovery=ON
+      - --read-only=ON
+      - --mysql-native-password=ON
     ports:
       - "3307:3306"
     depends_on:
-      - db-primary
+      db-primary:
+        condition: service_healthy
     volumes:
       - db-replica-data:/var/lib/mysql
+      - ./docker/replica-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -proot || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   # Backend (Laravel)
   backend:
@@ -46,6 +68,12 @@ services:
     restart: always
     ports:
       - "8000:80"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -fsS http://127.0.0.1/api/health >/dev/null || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
     volumes:
       - ./backend:/var/www/html
     environment:
@@ -57,23 +85,34 @@ services:
       - DB_DATABASE=havenstay_db
       - DB_USERNAME=root
       - DB_PASSWORD=root
-      - DB_READ_HOST=db-primary # Initially set to primary to allow migration
+      - DB_WRITE_HOST=db-primary
+      - DB_WRITE_PORT=3306
+      - DB_READ_HOST=db-primary
       - DB_READ_PORT=3306
+      - DB_STICKY=true
     depends_on:
-      - db-primary
+      db-primary:
+        condition: service_healthy
+      db-replica:
+        condition: service_healthy
 
   # Frontend (Next.js)
   frontend:
     build:
       context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ""
+        BACKEND_INTERNAL_URL: "http://backend"
     container_name: havenstay-frontend
     restart: always
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+      - BACKEND_INTERNAL_URL=http://backend:80
+      - NEXT_PUBLIC_API_BASE_URL=
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   db-primary-data:

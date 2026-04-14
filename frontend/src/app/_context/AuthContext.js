@@ -1,20 +1,31 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { fetchCurrentUser } from "../../lib/auth";
-import { clearAuthToken } from "../../lib/api";
+import { apiRequest, clearAuthToken, UNAUTHORIZED_EVENT } from "../../lib/api";
 
 const AuthContext = createContext({
   user: null,
   loading: true,
-  logout: () => {},
+  logout: () => { },
 });
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
   const pathname = usePathname();
+  const [user, setUser] = useState(() => {
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem("havenstay_user");
+      try {
+        return cached ? JSON.parse(cached) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isActive = true;
@@ -23,9 +34,18 @@ export function AuthProvider({ children }) {
         const me = await fetchCurrentUser();
         if (isActive) {
           setUser(me);
+          if (me) {
+            localStorage.setItem("havenstay_user", JSON.stringify(me));
+          } else {
+            localStorage.removeItem("havenstay_user");
+          }
         }
       } catch {
-        if (isActive) setUser(null);
+        if (isActive) {
+          setUser(null);
+          localStorage.removeItem("havenstay_user");
+          clearAuthToken();
+        }
       } finally {
         if (isActive) setLoading(false);
       }
@@ -35,16 +55,52 @@ export function AuthProvider({ children }) {
     return () => {
       isActive = false;
     };
-  }, [pathname]);
+  }, []);
 
-  const logout = () => {
-    clearAuthToken();
-    setUser(null);
-    window.location.href = "/login";
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setUser(null);
+      try {
+        localStorage.removeItem("havenstay_user");
+      } catch {
+        /* ignore */
+      }
+      if (pathname === "/login") return;
+      router.replace("/login");
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, [pathname, router]);
+
+  const login = (userData) => {
+    setUser(userData);
+    if (userData) {
+      localStorage.setItem("havenstay_user", JSON.stringify(userData));
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await apiRequest("/api/auth/logout", {
+        method: "POST",
+        skipAuthRedirect: true,
+      }).catch(() => { });
+    } finally {
+      try {
+        localStorage.removeItem("havenstay_user");
+      } catch {
+        /* ignore */
+      }
+      clearAuthToken();
+      setUser(null);
+      if (pathname !== "/login") {
+        router.replace("/login");
+      }
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider value={{ user, loading, logout, login }}>
       {children}
     </AuthContext.Provider>
   );

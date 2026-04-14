@@ -14,7 +14,6 @@ use Illuminate\Http\Request;
 class TenantController extends Controller
 {
     /**
-     * FR-008: List tenants (paginated). Optional filters: `q`, `status` (same semantics as {@see search()}).
      */
     public function index(Request $request): JsonResponse
     {
@@ -34,7 +33,6 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-008, FR-009: Create a new tenant
      * TC-TENANT-001
      */
     public function store(Request $request): JsonResponse
@@ -59,7 +57,7 @@ class TenantController extends Controller
             'address' => ['required', 'string'],
         ]);
 
-        $tenant = TenantService::create($validated);
+        $tenant = TenantService::create($request->user(), $validated);
 
         return response()->json([
             'message' => 'Tenant created successfully.',
@@ -68,7 +66,6 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-008: Get a specific tenant
      */
     public function show(Request $request, Tenant $tenant): JsonResponse
     {
@@ -76,7 +73,6 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-008, FR-009: Update a tenant
      * TC-TENANT-002
      */
     public function update(Request $request, Tenant $tenant): JsonResponse
@@ -102,7 +98,7 @@ class TenantController extends Controller
             'status' => ['sometimes', 'string', 'in:active,moved_out,archived'],
         ]);
 
-        $tenant = TenantService::update($tenant, $validated);
+        $tenant = TenantService::update($request->user(), $tenant, $validated);
 
         return response()->json([
             'message' => 'Tenant updated successfully.',
@@ -111,7 +107,6 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-010: Deactivate a tenant (move_out)
      * TC-TENANT-002
      */
     public function deactivate(Request $request, Tenant $tenant): JsonResponse
@@ -126,7 +121,7 @@ class TenantController extends Controller
             ], 403);
         }
 
-        $tenant = TenantService::deactivate($tenant);
+        $tenant = TenantService::deactivate($request->user(), $tenant);
 
         return response()->json([
             'message' => 'Tenant deactivated successfully.',
@@ -135,7 +130,6 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-010: Reactivate a tenant
      * TC-TENANT-002
      */
     public function reactivate(Request $request, Tenant $tenant): JsonResponse
@@ -150,7 +144,7 @@ class TenantController extends Controller
             ], 403);
         }
 
-        $tenant = TenantService::reactivate($tenant);
+        $tenant = TenantService::reactivate($request->user(), $tenant);
 
         return response()->json([
             'message' => 'Tenant reactivated successfully.',
@@ -159,9 +153,7 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-011: Search tenants by name, contact, status
      * TC-TENANT-003
-     * CCR-004: Use LIKE operator
      */
     public function search(Request $request): JsonResponse
     {
@@ -181,7 +173,6 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-009: Archive a tenant (Soft Delete)
      */
     public function archive(Request $request, Tenant $tenant): JsonResponse
     {
@@ -189,6 +180,8 @@ class TenantController extends Controller
             AuditService::logAccessDenied($request->user(), 'tenants.archive');
             return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        AuditService::setAuditUserContext($request->user()->user_id);
 
 
         $tenant->delete(); // Eloquent SoftDeletes
@@ -200,17 +193,17 @@ class TenantController extends Controller
     }
 
     /**
-     * FR-009: Restore an archived tenant
      */
-    public function restore(Request $request, int $tenantId): JsonResponse
+    public function restore(Request $request, int $id): JsonResponse
     {
         if (! AuthorizationService::canManageTenants($request->user())) {
             AuditService::logAccessDenied($request->user(), 'tenants.restore');
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        AuditService::setAuditUserContext($request->user()->user_id);
 
-        $tenant = Tenant::withTrashed()->findOrFail($tenantId);
+        $tenant = Tenant::withTrashed()->findOrFail($id);
         $tenant->restore();
 
         return response()->json([

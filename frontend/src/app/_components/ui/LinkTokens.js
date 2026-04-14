@@ -3,8 +3,9 @@
  * Uses --color-primary per MASTER.md Section 5.6.
  */
 export const primaryLinkCtaClass =
-  "inline-flex h-10 min-h-[40px] cursor-pointer items-center justify-center gap-2 rounded-lg " +
-  "bg-[var(--color-primary)] px-5 text-sm font-medium text-white " +
+  "inline-flex h-11 min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-xl " +
+  "bg-[var(--color-primary)] px-4 sm:px-6 text-[10px] font-black uppercase tracking-widest text-white " +
+  "shadow-lg shadow-teal-900/10 active:scale-95 " +
   "transition-[background-color,box-shadow] duration-150 " +
   "hover:bg-[var(--color-primary-dark)] " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]";
