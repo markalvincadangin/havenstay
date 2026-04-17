@@ -6,6 +6,7 @@ use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
 use App\Models\Contract;
+use App\Models\Payment;
 use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
@@ -37,6 +38,7 @@ class ReportsExportTest extends TestCase
             'first_name' => 'Admin',
             'last_name' => 'Reports',
             'username' => 'adminreports',
+            'email' => 'admin@example.com',
             'password_hash' => bcrypt('password123'),
             'role_id' => $adminRole->role_id,
             'is_active' => true,
@@ -46,6 +48,7 @@ class ReportsExportTest extends TestCase
             'first_name' => 'Viewer',
             'last_name' => 'Reports',
             'username' => 'viewerreports',
+            'email' => 'viewer@example.com',
             'password_hash' => bcrypt('password123'),
             'role_id' => $viewerRole->role_id,
             'is_active' => true,
@@ -62,7 +65,7 @@ class ReportsExportTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => 'available', // status updated via bed space usually but we set here
+            'status' => 'vacant', // status updated via bed space usually but we set here
         ]);
 
         Room::create([
@@ -70,7 +73,7 @@ class ReportsExportTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4800,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         $sharedRoom = Room::create([
@@ -78,7 +81,7 @@ class ReportsExportTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3200,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         BedSpace::create([
@@ -105,7 +108,7 @@ class ReportsExportTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         Room::create([
@@ -113,14 +116,14 @@ class ReportsExportTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         $soloOnly = $this->actingAs($this->viewerUser)
             ->getJson('/api/reports/occupancy?room_type=solo&page=1&per_page=25')
             ->assertOk();
 
-        foreach ($soloOnly->json('rows', []) as $row) {
+        foreach ($soloOnly->json()['rows'] as $row) {
             $this->assertSame('solo', $row['room_type']);
         }
 
@@ -128,7 +131,7 @@ class ReportsExportTest extends TestCase
             ->getJson('/api/reports/occupancy?room_type=shared&page=1&per_page=25')
             ->assertOk();
 
-        foreach ($sharedOnly->json('rows', []) as $row) {
+        foreach ($sharedOnly->json()['rows'] as $row) {
             $this->assertSame('shared', $row['room_type']);
         }
     }
@@ -147,7 +150,7 @@ class ReportsExportTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         $bed = BedSpace::create([
@@ -161,6 +164,7 @@ class ReportsExportTest extends TestCase
             'bed_space_id' => $bed->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-01-01',
+            'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 0,
             'status' => 'active',
         ]);
@@ -203,7 +207,7 @@ class ReportsExportTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5500,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         $bed = BedSpace::create([
@@ -217,6 +221,7 @@ class ReportsExportTest extends TestCase
             'bed_space_id' => $bed->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-31',
             'deposit_amount' => 1000,
             'status' => 'active',
         ]);
@@ -251,7 +256,7 @@ class ReportsExportTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'unavailable',
+            'status' => 'fully_occupied',
         ]);
 
         $bed = BedSpace::create([
@@ -267,7 +272,7 @@ class ReportsExportTest extends TestCase
             'move_in_date' => '2026-03-01',
             'expected_move_out_date' => '2027-02-28',
             'deposit_amount' => 0,
-            'monthly_rate' => 4000,
+            'monthly_rate_override' => 4000,
             'status' => 'active',
         ]);
 
@@ -280,6 +285,70 @@ class ReportsExportTest extends TestCase
         $this->actingAs($this->adminUser)
             ->get('/api/reports/tenant-history/export')
             ->assertOk();
+    }
+
+    public function test_collections_performance_json_and_export_share_expected_columns(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Collection',
+            'last_name' => 'Case',
+            'contact_number' => '09178888888',
+            'status' => 'active',
+        ]));
+
+        $room = Room::create([
+            'room_code' => 'COL-101',
+            'room_type' => 'solo',
+            'capacity' => 1,
+            'monthly_rate' => 4500,
+            'status' => 'vacant',
+        ]);
+
+        $bed = BedSpace::create([
+            'room_id' => $room->room_id,
+            'bed_label' => 'A',
+            'status' => 'occupied',
+        ]);
+
+        $contract = Contract::create([
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $this->adminUser->user_id,
+            'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-12-31',
+            'deposit_amount' => 0,
+            'status' => 'active',
+        ]);
+
+        $billing = $this->createBillingRecord($contract->contract_id, '2026-04-01', '2026-04-30', '2026-05-05', 4500, 'unpaid');
+
+        Payment::create([
+            'billing_id' => $billing->billing_id,
+            'processed_by' => $this->adminUser->user_id,
+            'amount_paid' => 4500,
+            'payment_date' => '2026-04-20',
+            'payment_method' => 'cash',
+        ]);
+
+        $json = $this->actingAs($this->adminUser)
+            ->getJson('/api/reports/collections-performance?start_date=2026-04-01&end_date=2026-04-30')
+            ->assertOk();
+
+        $json->assertJsonStructure([
+            'summary',
+            'rows' => [
+                '*' => ['payment_id', 'billing_id', 'tenant_name', 'payment_date', 'payment_method', 'amount_paid'],
+            ],
+        ]);
+
+        $csv = $this->actingAs($this->adminUser)
+            ->get('/api/reports/collections-performance/export?start_date=2026-04-01&end_date=2026-04-30')
+            ->assertOk();
+
+        $csv->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $content = (string) $csv->streamedContent();
+        $this->assertStringContainsString('payment_id,payment_date,amount_paid,payment_method,reference_number,tenant_name,room_code,billing_id', $content);
+        $this->assertStringContainsString((string) $billing->billing_id, $content);
     }
 
     private function createBillingRecord(

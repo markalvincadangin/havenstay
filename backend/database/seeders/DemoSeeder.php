@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\AuditService;
 use App\Services\RoomService;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -36,21 +37,20 @@ use Illuminate\Support\Facades\Hash;
  *
  * Login (demo only): admin / staff / viewer — password `HavenStay123!` (see `DEMO_PASSWORD` constant).
  */
-class DemoUatSeeder extends Seeder
+class DemoSeeder extends Seeder
 {
     private const DEMO_PASSWORD = 'HavenStay123!';
 
-    /** Standard room codes (`rooms.room_code`, max 20 chars) — HS-{floor}{unit}. */
-    private const ROOM_SHARED_FOUR_BED = 'HS-101';
+    /** Standard room codes (`rooms.room_code`, max 20 chars) — UNIT-{floor}{unit}. */
+    private const ROOM_SHARED_FOUR_BED = 'UNIT-101';
 
-    private const ROOM_SHARED_TWIN = 'HS-102';
+    private const ROOM_SHARED_TWIN = 'UNIT-102';
 
-    private const ROOM_SOLO_STANDARD = 'HS-201';
+    private const ROOM_SOLO_STANDARD = 'UNIT-201';
 
-    private const ROOM_SOLO_PREMIUM = 'HS-202';
+    private const ROOM_SOLO_PREMIUM = 'UNIT-202';
 
-    private const ROOM_SHARED_MAINTENANCE = 'HS-301';
-
+    private const ROOM_SHARED_MAINTENANCE = 'UNIT-301';
     public function run(): void
     {
         $adminRole = Role::where('role_name', 'admin')->firstOrFail();
@@ -60,14 +60,17 @@ class DemoUatSeeder extends Seeder
         $adminUser = User::updateOrCreate(
             ['username' => 'admin'],
             [
-                'first_name' => 'Juan',
-                'last_name' => 'Dela Cruz',
+                'first_name' => 'System',
+                'last_name' => 'Admin',
                 'email' => 'admin@havenstay.ph',
                 'password_hash' => Hash::make(self::DEMO_PASSWORD),
                 'role_id' => $adminRole->role_id,
                 'is_active' => true,
             ]
         );
+
+        // CCR-008: Set audit context so database triggers attribute seeder actions to the admin user
+        AuditService::setAuditUserContext($adminUser->user_id);
 
         $staffUser = User::updateOrCreate(
             ['username' => 'staff'],
@@ -100,7 +103,7 @@ class DemoUatSeeder extends Seeder
                 'room_type' => 'shared',
                 'capacity' => 4,
                 'monthly_rate' => 4500.00,
-                'status' => 'available',
+                'status' => 'vacant',
                 'amenities' => 'Wi‑Fi, ceiling fan, study desk, shared pantry access',
                 'description' => 'Ground floor quad — common for students and young professionals.',
             ]
@@ -117,8 +120,8 @@ class DemoUatSeeder extends Seeder
             [
                 'room_type' => 'shared',
                 'capacity' => 2,
-                'monthly_rate' => 5200.00,
-                'status' => 'available',
+                'monthly_rate' => 2600.00,
+                'status' => 'vacant',
                 'amenities' => 'Wi‑Fi, air‑con (evening hours), lockers',
                 'description' => 'Second floor twin — two beds, quieter wing.',
             ]
@@ -136,7 +139,7 @@ class DemoUatSeeder extends Seeder
                 'room_type' => 'solo',
                 'capacity' => 1,
                 'monthly_rate' => 8000.00,
-                'status' => 'available',
+                'status' => 'vacant',
                 'amenities' => 'Aircon, private toilet, Wi‑Fi',
                 'description' => 'Solo unit — rear building, garden view.',
             ]
@@ -152,7 +155,7 @@ class DemoUatSeeder extends Seeder
                 'room_type' => 'solo',
                 'capacity' => 1,
                 'monthly_rate' => 8500.00,
-                'status' => 'available',
+                'status' => 'vacant',
                 'amenities' => 'Aircon, private toilet, Wi‑Fi, water heater',
                 'description' => 'Premium solo with small balcony.',
             ]
@@ -210,7 +213,7 @@ class DemoUatSeeder extends Seeder
                 'move_in_date' => '2025-06-01',
                 'expected_move_out_date' => '2026-06-01',
                 'deposit_amount' => 4500.00,
-                'monthly_rate' => 4500.00,
+                'monthly_rate_override' => 4500.00,
                 'status' => 'active',
             ]
         );
@@ -262,7 +265,7 @@ class DemoUatSeeder extends Seeder
                 'move_in_date' => '2025-08-15',
                 'expected_move_out_date' => '2026-08-15',
                 'deposit_amount' => 8000.00,
-                'monthly_rate' => 8000.00,
+                'monthly_rate_override' => 8000.00,
                 'status' => 'active',
             ]
         );
@@ -317,7 +320,7 @@ class DemoUatSeeder extends Seeder
                 'move_in_date' => '2025-10-01',
                 'expected_move_out_date' => '2026-10-01',
                 'deposit_amount' => 8500.00,
-                'monthly_rate' => 8500.00,
+                'monthly_rate_override' => 8500.00,
                 'status' => 'active',
             ]
         );
@@ -378,7 +381,7 @@ class DemoUatSeeder extends Seeder
                 'move_in_date' => '2026-03-01',
                 'expected_move_out_date' => '2026-09-01',
                 'deposit_amount' => 4500.00,
-                'monthly_rate' => 4500.00,
+                'monthly_rate_override' => 4500.00,
                 'status' => 'active',
             ]
         );
@@ -429,7 +432,7 @@ class DemoUatSeeder extends Seeder
                 'move_in_date' => '2026-01-15',
                 'expected_move_out_date' => '2026-07-15',
                 'deposit_amount' => 2600.00,
-                'monthly_rate' => 2600.00,
+                'monthly_rate_override' => 2600.00,
                 'status' => 'active',
             ]
         );
@@ -476,7 +479,7 @@ class DemoUatSeeder extends Seeder
                 'expected_move_out_date' => '2025-12-30',
                 'actual_move_out_date' => '2025-05-30',
                 'deposit_amount' => 4500.00,
-                'monthly_rate' => 4500.00,
+                'monthly_rate_override' => 4500.00,
                 'status' => 'completed',
             ]
         );
@@ -551,9 +554,9 @@ class DemoUatSeeder extends Seeder
 
         $totalDue = $baseRent + array_sum(array_column($extraLineItems, 'amount'));
         $ref = match ($paymentMethod) {
-            'gcash' => 'GC-'.$from->format('Ym').'-'.random_int(100000, 999999),
-            'bank_transfer' => 'BTR-'.$from->format('Ym').'-'.random_int(100000, 999999),
-            default => 'REF-'.$from->format('Ym').'-'.random_int(100000, 999999),
+            'gcash' => 'GC-' . $from->format('Ym') . '-' . random_int(100000, 999999),
+            'bank_transfer' => 'BTR-' . $from->format('Ym') . '-' . random_int(100000, 999999),
+            default => 'REF-' . $from->format('Ym') . '-' . random_int(100000, 999999),
         };
         Payment::updateOrCreate(
             ['billing_id' => $bill->billing_id, 'reference_number' => $ref],

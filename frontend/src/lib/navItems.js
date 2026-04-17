@@ -15,5 +15,5 @@ export const OPERATIONS_NAV_ITEMS = [
 export const ADMIN_NAV_ITEMS = [
   { href: "/users", label: "Users" },
   { href: "/audit-logs", label: "Audit Logs" },
-  { href: "/transaction-logs", label: "Transaction logs" },
+  { href: "/transaction-logs", label: "Transaction Logs" },
 ];

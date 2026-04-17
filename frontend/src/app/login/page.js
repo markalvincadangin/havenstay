@@ -12,7 +12,7 @@ import Button from "../_components/ui/Button";
 import { Card } from "../_components/ui/Card";
 import { Field, Input } from "../_components/ui/Fields";
 import { useAuth } from "../_context/AuthContext";
-import { Eye, EyeOff, Lock } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -49,13 +49,14 @@ export default function LoginPage() {
           password: values.password,
         }),
       });
+      const payload = response;
 
-      if (response?.token) {
-        setAuthToken(response.token);
+      if (payload?.token) {
+        setAuthToken(payload.token);
       }
 
-      if (response?.user) {
-        login(response.user);
+      if (payload?.user) {
+        login(payload.user);
       }
 
       router.push("/dashboard");

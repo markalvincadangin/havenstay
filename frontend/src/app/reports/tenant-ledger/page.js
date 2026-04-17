@@ -1,36 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { apiRequest } from "../../../lib/api";
+import { useEffect, useState, useMemo } from "react";
+import { fetcher } from "../../../lib/api";
+import useSWR from "swr";
 import { canViewReports } from "../../../lib/auth";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
-import { downloadCsvWithAuth } from "../../../lib/downloads";
 import { flattenApiErrors } from "../../../lib/errors";
 import { formatDateString, formatPHP, formatReportTimestamp } from "../../../lib/formatters";
+import { exportReportCsv } from "../../../lib/reports";
 import Alert from "../../_components/ui/Alert";
-import { AppMain } from "../../_components/ui/AppShell";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import Button from "../../_components/ui/Button";
 import { Card } from "../../_components/ui/Card";
 import { Field, Select } from "../../_components/ui/Fields";
-import PageHeader from "../../_components/ui/PageHeader";
-import Spinner from "../../_components/ui/Spinner";
-import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import { SkeletonListPage } from "../../_components/ui/Skeleton";
 import { KpiCard } from "../../_components/ui/KpiCard";
 import { Table } from "../../_components/ui/Table";
 import { BookOpen, User, Landmark, DollarSign, Activity } from "lucide-react";
+import StandardPage from "../../_components/ui/StandardPage";
+import ReportHeaderActions from "../../_components/ui/ReportHeaderActions";
 import {
   buildReportListQuery,
   normalizePaginatedList,
   normalizeReportRows,
   readStoredPerPage,
 } from "../../../lib/pagination";
+import ResourceView from "../../_components/ui/ResourceView";
 import TablePagination from "../../_components/ui/TablePagination";
 
 export default function TenantLedgerReportPage() {
-  const { user: currentUser, authLoading } = useAuthGuard();
-  const [loading, setLoading] = useState(true);
-  const [fetchingLedger, setFetchingLedger] = useState(false);
+  const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [tenants, setTenants] = useState([]);
@@ -40,48 +39,46 @@ export default function TenantLedgerReportPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
-  const loadTenants = useCallback(async () => {
-    try {
-      const data = await apiRequest("/api/tenants?per_page=100", { method: "GET" });
-      const rows = normalizePaginatedList(data).rows;
-      setTenants(rows.filter(t => t.status !== 'archived').sort((a, b) => a.last_name.localeCompare(b.last_name)));
-    } catch (_error) {
-      setApiError("Failed to load tenants list.");
-    }
-  }, []);
+  const { data: tenantsData } = useSWR(
+    !authLoading && currentUser && canViewReports(currentUser) ? "/api/tenants?per_page=100" : null,
+    fetcher
+  );
 
-  const loadLedger = useCallback(async () => {
-    if (!selectedTenantId) return;
-    setFetchingLedger(true);
-    setApiError("");
-    try {
-      const qs = buildReportListQuery(page, perPage, { tenant_id: selectedTenantId });
-      const data = await apiRequest(`/api/reports/tenant-ledger${qs}`, { method: "GET" });
-      setReport(data);
-      setTableMeta(normalizeReportRows(data, "entries").meta);
-    } catch (error) {
-      setApiError(flattenApiErrors(error));
-    } finally {
-      setFetchingLedger(false);
+  useEffect(() => {
+    if (tenantsData) {
+      const rows = normalizePaginatedList(tenantsData).rows;
+      setTenants(rows.filter(t => t.status !== 'archived').sort((a, b) => a.last_name.localeCompare(b.last_name)));
     }
+  }, [tenantsData]);
+
+  const reportQs = useMemo(() => {
+    if (!selectedTenantId) return null;
+    return buildReportListQuery(page, perPage, { tenant_id: selectedTenantId });
   }, [selectedTenantId, page, perPage]);
 
-  useEffect(() => {
-    if (authLoading || !currentUser) return;
+  const { data: reportData, error: reportError, mutate: loadLedger, isValidating } = useSWR(
+    !authLoading && currentUser && canViewReports(currentUser) && reportQs ? `/api/reports/tenant-ledger${reportQs}` : null,
+    fetcher,
+    { keepPreviousData: true }
+  );
 
-    if (!canViewReports(currentUser)) {
+  const fetchingLedger = isValidating;
+  const loading = !currentUser || (!reportData && !reportError) && selectedTenantId && !authLoading && currentUser && canViewReports(currentUser);
+
+  useEffect(() => {
+    if (reportError) {
+      setApiError(flattenApiErrors(reportError));
+    } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
       setApiError("Unauthorized: you do not have permission to access financial records.");
-      setLoading(false);
-      return;
     }
-
-    loadTenants().finally(() => setLoading(false));
-  }, [authLoading, currentUser, loadTenants]);
+  }, [reportError, authLoading, currentUser]);
 
   useEffect(() => {
-    if (!selectedTenantId) return;
-    loadLedger();
-  }, [selectedTenantId, loadLedger]);
+    if (reportData && selectedTenantId) {
+      setReport(reportData);
+      setTableMeta(normalizeReportRows(reportData, "entries").meta);
+    }
+  }, [reportData, selectedTenantId]);
 
   const handleTenantChange = (id) => {
     setSelectedTenantId(id);
@@ -97,9 +94,12 @@ export default function TenantLedgerReportPage() {
     setApiError("");
     setExporting(true);
     try {
-      const stamp = new Date().toISOString().slice(0, 10);
       const tenantName = report.tenant?.name ? report.tenant.name.toLowerCase().replace(/ /g, '_') : 'tenant';
-      await downloadCsvWithAuth(`/api/reports/tenant-ledger/export?tenant_id=${selectedTenantId}`, `ledger-${tenantName}-${stamp}.csv`);
+      await exportReportCsv({
+        endpoint: "/api/reports/tenant-ledger/export",
+        filters: { tenant_id: selectedTenantId },
+        filenamePrefix: `ledger-${tenantName}`,
+      });
     } catch (error) {
       setApiError(flattenApiErrors(error));
     } finally {
@@ -107,13 +107,7 @@ export default function TenantLedgerReportPage() {
     }
   };
 
-  if (authLoading || loading) {
-    return (
-      <AppMain>
-        <Spinner label="Loading ledger history..." />
-      </AppMain>
-    );
-  }
+  if (isUnauthorized) return null;
 
   const { rows: entries } = normalizeReportRows(report, "entries");
   const totalEntries = tableMeta?.total ?? entries.length;
@@ -122,39 +116,29 @@ export default function TenantLedgerReportPage() {
     : "Select a tenant to view their itemized financial statement.";
 
   return (
-    <AppMain>
-      <PageHeader
-        title="Tenant Ledger"
-        subtitle={timestampLabel}
-        breadcrumbs={
-          <Breadcrumbs
-            items={[
-              { label: "Reports", href: "/reports" },
-              { label: "Tenant Ledger" },
-            ]}
-          />
-        }
-        actions={
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <UserRoleBadge
-              username={currentUser?.username}
-              roleName={currentUser?.role?.role_name}
-            />
-            {selectedTenantId && (
-              <Button
-                type="button"
-                variant="primary"
-                onClick={onExport}
-                loading={exporting}
-                disabled={exporting}
-                className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
-              >
-                Export CSV
-              </Button>
-            )}
-          </div>
-        }
-      />
+    <StandardPage
+      title="Tenant Ledger"
+      subtitle={timestampLabel}
+      loading={authLoading || loading}
+      skeleton={<SkeletonListPage rows={8} />}
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: "Reports", href: "/reports" },
+            { label: "Tenant Ledger" },
+          ]}
+        />
+      }
+      actions={
+        <ReportHeaderActions
+          user={currentUser}
+          onExport={onExport}
+          exporting={exporting}
+          exportDisabled={exporting}
+          showExport={Boolean(selectedTenantId)}
+        />
+      }
+    >
 
       {selectedTenantId && report.summary && (
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -162,11 +146,13 @@ export default function TenantLedgerReportPage() {
                 label="Total Billed" 
                 value={formatPHP(report.summary.total_billed)} 
                 icon={Activity}
+                isSyncing={isValidating}
             />
             <KpiCard 
                 label="Total Paid" 
                 value={formatPHP(report.summary.total_paid)} 
                 icon={DollarSign}
+                isSyncing={isValidating}
             />
             <KpiCard 
                 label="Current Balance" 
@@ -174,6 +160,7 @@ export default function TenantLedgerReportPage() {
                 isDanger={report.summary.current_balance > 0}
                 icon={Landmark}
                 sub={report.summary.current_balance > 0 ? "Amount Outstanding" : "Settled Balance"}
+                isSyncing={isValidating}
             />
         </div>
       )}
@@ -216,12 +203,19 @@ export default function TenantLedgerReportPage() {
       </Card>
 
       {selectedTenantId ? (
+        <ResourceView
+          isLoading={loading}
+          isSyncing={isValidating}
+          error={reportError}
+          isEmpty={entries.length === 0}
+          onRetry={() => loadLedger()}
+          skeleton={<SkeletonListPage rows={10} />}
+          emptyProps={{
+            title: "No financial records found",
+            message: "This tenant has no recorded transactions in the authoritative ledger."
+          }}
+        >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
-            {fetchingLedger ? (
-                <div className="py-20 flex flex-col items-center justify-center text-center">
-                    <Spinner label="Updating ledger records..." />
-                </div>
-            ) : (
                 <Table
                 embedded={true}
                 caption={`Financial statement for ${report.tenant?.name}`}
@@ -257,11 +251,9 @@ export default function TenantLedgerReportPage() {
                     </td>
                   </tr>
                 ))}
-                emptyTitle="No financial records found"
-                emptyDescription="This tenant has no recorded transactions in the authoritative ledger."
-              />
-            )}
-            {!fetchingLedger && selectedTenantId ? (
+            emptyTitle="No financial records found"
+            emptyDescription="This tenant has no recorded transactions in the authoritative ledger."
+          />
               <TablePagination
                 meta={tableMeta}
                 page={page}
@@ -271,10 +263,10 @@ export default function TenantLedgerReportPage() {
                   setPage(1);
                   setPerPage(n);
                 }}
-                disabled={fetchingLedger}
+                disabled={isValidating}
               />
-            ) : null}
-        </Card>
+          </Card>
+        </ResourceView>
       ) : (
         <div className="mt-12 flex flex-col items-center justify-center text-center py-20 border-2 border-dashed border-stone-200 rounded-3xl bg-stone-50/20">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm border border-stone-100 mb-6 text-stone-300">
@@ -284,6 +276,6 @@ export default function TenantLedgerReportPage() {
           <p className="text-[11px] font-medium text-stone-400 mt-2 max-w-xs leading-relaxed">Select a tenant from the selection panel above to view their itemized financial history and running balance.</p>
         </div>
       )}
-    </AppMain>
+    </StandardPage>
   );
 }

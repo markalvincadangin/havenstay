@@ -81,7 +81,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
@@ -94,6 +94,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_id' => $room->room_id,
             'bed_space_id' => $bed->bed_space_id,
             'move_in_date' => '2026-05-01',
+            'expected_move_out' => '2026-10-01',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['tenant_id']);
     }
@@ -112,7 +113,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
@@ -125,6 +126,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_id' => $room->room_id,
             'bed_space_id' => $bed->bed_space_id,
             'move_in_date' => '2026-05-01',
+            'expected_move_out' => '2026-10-01',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['tenant_id']);
     }
@@ -143,14 +145,14 @@ class ApiEdgeCasesTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
         $roomB = Room::create([
             'room_code' => 'ECB-'.uniqid(),
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         $bedInRoomB = BedSpace::create([
@@ -164,6 +166,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_id' => $roomA->room_id,
             'bed_space_id' => $bedInRoomB->bed_space_id,
             'move_in_date' => '2026-05-01',
+            'expected_move_out' => '2026-10-01',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['bed_space_id']);
     }
@@ -202,7 +205,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
@@ -215,6 +218,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_id' => $room->room_id,
             'bed_space_id' => $bed->bed_space_id,
             'move_in_date' => '2026-06-01',
+            'expected_move_out' => '2026-10-01',
         ])->assertForbidden();
     }
 
@@ -410,7 +414,7 @@ class ApiEdgeCasesTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4500,
-            'status' => 'occupied',
+            'status' => 'vacant',
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
@@ -423,6 +427,7 @@ class ApiEdgeCasesTest extends TestCase
             'bed_space_id' => $bed->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 500,
             'status' => 'active',
         ]);

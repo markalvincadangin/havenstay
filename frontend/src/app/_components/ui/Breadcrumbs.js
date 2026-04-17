@@ -8,7 +8,7 @@ export default function Breadcrumbs({ items = [] }) {
   return (
     <nav
       aria-label="Breadcrumb"
-      className="text-[10px] font-bold uppercase tracking-wide text-[var(--color-text)]/40 [word-spacing:0.12em]"
+      className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text)]/40 [word-spacing:0.12em]"
     >
       <ol className="flex flex-wrap items-center gap-1.5">
         {items.map((item, index) => {

@@ -42,16 +42,20 @@ class AuthenticationTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'message',
-                'user' => ['user_id', 'username', 'first_name', 'last_name', 'role'],
-                'token',
+                'data' => [
+                    'user' => ['user_id', 'username', 'first_name', 'last_name', 'role'],
+                    'token',
+                ],
             ])
             ->assertJson([
                 'message' => 'Authenticated.',
-                'user' => ['username' => 'admin_user'],
+                'data' => [
+                    'user' => ['username' => 'admin_user'],
+                ],
             ]);
 
         // Verify audit log entry
-        $this->assertDatabaseHas('audit_logs', [
+        $this->assertTriggerAuditLog([
             'user_id' => $user->user_id,
             'action' => 'login',
         ]);
@@ -62,9 +66,11 @@ class AuthenticationTest extends TestCase
      */
     public function test_invalid_login_credentials(): void
     {
+        $viewerRole = Role::where('role_name', 'viewer')->first();
         User::factory()->create([
             'username' => 'test_user',
             'password_hash' => bcrypt('correct_password'),
+            'role_id' => $viewerRole->role_id,
         ]);
 
         $response = $this->postJson('/api/auth/login', [
@@ -113,7 +119,7 @@ class AuthenticationTest extends TestCase
 
         $response->assertStatus(200)
             ->assertJson([
-                'user' => ['user_id' => $user->user_id],
+                'data' => ['user_id' => $user->user_id],
             ]);
     }
 
@@ -134,7 +140,7 @@ class AuthenticationTest extends TestCase
             ->assertJson(['message' => 'Logged out.']);
 
         // Verify audit log entry
-        $this->assertDatabaseHas('audit_logs', [
+        $this->assertTriggerAuditLog([
             'user_id' => $user->user_id,
             'action' => 'logout',
         ]);

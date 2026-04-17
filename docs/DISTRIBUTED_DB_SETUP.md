@@ -122,6 +122,4 @@ When Phase 2 is healthy, in **`backend/.env`** set **`DB_READ_PORT=3307`**, then
 php artisan config:clear
 ```
 
----
-
-Primary migration **1419** (triggers + binlog): [**MYSQL_LOCAL_MIGRATIONS.md**](MYSQL_LOCAL_MIGRATIONS.md). Application routing: [**SDD.md**](SDD.md).
+--- Standard database migrations are used for the primary instance. Application routing: [**SDD.md**](SDD.md).

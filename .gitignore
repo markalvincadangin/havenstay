@@ -21,14 +21,13 @@ public/build/
 .phpunit.cache/
 .phpunit.result.cache
 
-# AI planning / governance docs
-.ai-docs/
-ai/
+# AI planning /# Engineering Docs
+docs/temp/
 
 # Copilot / AI skill configuration
 .github/copilot-instructions.md
 .github/skills/
-CLAUDE.md
+!CLAUDE.md
 KIRO.md
 UI_PROMPTING_GUIDE.md
 

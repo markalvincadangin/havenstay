@@ -16,7 +16,7 @@
 
 ## Layout (registry + analytical)
 
-1. **`PageHeader`** — Title **Transaction logs**; subtitle per **MASTER §21**; breadcrumbs **System Administration → Transaction logs**; secondary outline link **Audit Trail** → `/audit-logs`; **`UserRoleBadge`**.
+1. **`PageHeader`** — Title **Transaction logs**; subtitle **Workflow runs and database transaction outcomes (started, committed, rolled back, or failed).**; breadcrumbs **System Administration → Transaction logs**; secondary outline link **Audit Trail** → `/audit-logs`; **`UserRoleBadge`**.
 2. **KPI row** — **One** `KpiCard`: **Runs after filters** — `meta.total` (all pages). Subcopy: *Same rules as the table below · all pages* (filters below the KPI row). Do **not** mix page-only stats unless the API exposes aggregates.
 3. **Filters `Card`** — Same registry pattern as **Audit Trail**: strip **Filters** + **Refresh** (ghost), body **`flex flex-col gap-6`** with **`form`**: row 1 **Search** (`lg:col-span-8`) + **Status** (`lg:col-span-4`); row 2 **From** / **To** (`lg:col-span-8` inner two-column grid) + **Apply filters** (`secondary`, `!h-12`, `lg:col-span-4`). **Apply-on-submit** (draft fields vs `applied*` state driving the API — mirrors audit). **`FilterChips`** reflect **applied** filters.
 4. **`Table` `embedded`** — Caption e.g. process runs; columns per **MASTER §5.8.2**: Transaction log ID (`#TX-{id}`), Started at, Transaction (`tx_name` humanized), Initiated by, Status (`StatusBadge`), Correlation (`CorrelationIdCell`), Reference.
@@ -57,6 +57,14 @@ There are **no** stored procedures in the HavenStay schema; do not document `sp_
 ## Access
 
 Admin-only (same RBAC as Audit Trail list). Read-only list; no destructive actions on this page.
+
+---
+
+## Page Titles and Subtitles (Master §21 Exact)
+
+| Route | Title (H1) | Subtitle |
+| :--- | :--- | :--- |
+| `/transaction-logs` | `Transaction logs` | `Workflow runs and database transaction outcomes (started, committed, rolled back, or failed).` |
 
 ---
 

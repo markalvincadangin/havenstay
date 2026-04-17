@@ -2,58 +2,63 @@
 
 namespace App\Services;
 
+use App\Services\Concerns\ManagesWorkflows;
 use App\Models\BedSpace;
 use App\Models\Contract;
 use App\Models\Room;
+use App\Models\User;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class RoomService
 {
+    use ManagesWorkflows;
+
     /**
-     * Create a new room record with integrated bed spaces
-     * FR-012, FR-013, FR-014
+     * Create a new room record with integrated bed spaces.
      */
-    public static function create(array $data): Room
+    public static function create(User $actor, array $data): Room
     {
         $roomData = collect($data)->except(['bed_spaces'])->toArray();
 
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'room_registration',
-            Auth::id() ?? 0,
-            'rooms',
-            $data['room_code'] ?? 'pending'
-        );
-        $txLogId = $started['tx_log_id'];
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'CREATE_ROOM',
+            txnReference: self::buildTxnReference('RM-CRT'),
+            payload: ['room_code' => $roomData['room_code'] ?? 'ERR'],
+            operation: function () use ($roomData, $data) {
+                // BR-018: Solo room manual bed management bypass
+                if (($roomData['room_type'] ?? null) === 'solo') {
+                    $roomData['capacity'] = 1;
+                }
 
-        // Set audit context for triggers
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
-            $result = DB::transaction(function () use ($roomData, $data) {
-                // CCR-003: INSERT room and bed spaces
                 $room = Room::create($roomData);
 
                 // Create initial bed spaces if provided
-                if (isset($data['bed_spaces']) && is_array($data['bed_spaces'])) {
-                    foreach ($data['bed_spaces'] as $bed) {
-                        $bedLabel = is_array($bed) ? ($bed['bed_label'] ?? null) : $bed;
-                        if ($bedLabel) {
-                            $room->bedSpaces()->create([
-                                'bed_label' => $bedLabel,
-                                'status' => 'vacant',
+                if ($room->room_type === 'shared') {
+                    if (isset($data['bed_spaces']) && is_array($data['bed_spaces'])) {
+                        // User constraint: Shared rooms must have >= 2 beds
+                        if (count($data['bed_spaces']) < 2) {
+                            throw ValidationException::withMessages([
+                                'bed_spaces' => ['Shared rooms must have at least 2 bed spaces.'],
                             ]);
                         }
+                        foreach ($data['bed_spaces'] as $bed) {
+                            $bedLabel = is_array($bed) ? ($bed['bed_label'] ?? null) : $bed;
+                            if ($bedLabel) {
+                                $room->bedSpaces()->create([
+                                    'bed_label' => $bedLabel,
+                                    'status' => 'vacant',
+                                ]);
+                            }
+                        }
+                    } else {
+                        throw ValidationException::withMessages([
+                            'bed_spaces' => ['Shared rooms require at least 2 bed spaces.'],
+                        ]);
                     }
                 } elseif ($room->room_type === 'solo') {
-                    // Ensure solo rooms have at least one bed space (SDD Sec. 10 Decision 2)
+                    // Ensure solo rooms have exactly one bed space (SDD Sec. 10 Decision 2)
                     $room->bedSpaces()->create([
                         'bed_label' => 'Solo Bed',
                         'status' => 'vacant',
@@ -63,52 +68,35 @@ class RoomService
                 self::syncStatusAndCapacity($room);
 
                 return $room->fresh(['bedSpaces']);
-            });
-
-            TransactionService::logCommitted($txLogId, [
-                'room_id' => $result->room_id,
-                'room_code' => $result->room_code,
-                'capacity' => $result->capacity,
-            ]);
-
-            return $result;
-        } catch (\Exception $e) {
-            TransactionService::logRolledBack($txLogId, $e->getMessage());
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
+            },
+            resultDetails: fn (Room $room) => ['room_id' => $room->room_id]
+        );
     }
 
     /**
-     * Update an existing room record with integrated bed space management
-     * FR-012, FR-013, FR-014
+     * Update an existing room record with integrated bed space management.
      */
-    public static function update(Room $room, array $data): Room
+    public static function update(User $actor, Room $room, array $data): Room
     {
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'room_configuration_update',
-            Auth::id() ?? 0,
-            'rooms',
-            (string) $room->room_id
-        );
-        $txLogId = $started['tx_log_id'];
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'UPDATE_ROOM',
+            txnReference: self::buildTxnReference('RM-UPD'),
+            payload: ['room_id' => $room->room_id],
+            operation: function () use ($room, $data) {
+                $roomType = $data['room_type'] ?? $room->room_type;
 
-        // Set audit context for triggers
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
-            $result = DB::transaction(function () use ($room, $data) {
-                // CCR-003: UPDATE room and manage bed spaces
                 // Handle integrated bed spaces if provided
                 if (isset($data['bed_spaces']) && is_array($data['bed_spaces'])) {
                     $incomingBeds = collect($data['bed_spaces']);
                     $currentBeds = $room->bedSpaces;
+
+                    // Validation for Shared rooms
+                    if ($roomType === 'shared' && $incomingBeds->count() < 2) {
+                        throw ValidationException::withMessages([
+                            'bed_spaces' => ['Shared rooms must maintain at least 2 bed spaces.'],
+                        ]);
+                    }
 
                     // 1. Identify beds to delete (those in current but not in incoming)
                     $incomingIds = $incomingBeds->pluck('bed_space_id')->filter()->toArray();
@@ -152,46 +140,48 @@ class RoomService
                 }
 
                 $roomData = collect($data)->except(['bed_spaces'])->toArray();
+                if ($roomType === 'solo') {
+                    $roomData['capacity'] = 1;
+                }
                 $room->update($roomData);
 
                 self::syncStatusAndCapacity($room);
 
                 return $room->fresh(['bedSpaces']);
-            });
-
-            TransactionService::logCommitted($txLogId, [
-                'room_id' => $result->room_id,
-                'room_code' => $result->room_code,
-                'new_capacity' => $result->capacity,
-            ]);
-
-            return $result;
-        } catch (\Exception $e) {
-            TransactionService::logRolledBack($txLogId, $e->getMessage());
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
+            },
+            resultDetails: fn (Room $room) => ['room_id' => $room->room_id]
+        );
     }
 
     /**
      * Add bed spaces to a shared room (Atomic legacy support)
      */
-    public static function addBedSpace(Room $room, string $bedLabel): BedSpace
+    public static function addBedSpace(User $actor, Room $room, string $bedLabel): BedSpace
     {
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'ADD_BED_SPACE',
+            txnReference: self::buildTxnReference('BED-ADD'),
+            payload: [
+                'room_id' => $room->room_id,
+                'bed_label' => $bedLabel,
+            ],
+            operation: function () use ($room, $bedLabel): BedSpace {
+                $bedSpace = BedSpace::create([
+                    'room_id' => $room->room_id,
+                    'bed_label' => $bedLabel,
+                    'status' => 'vacant',
+                ]);
 
-        $bedSpace = BedSpace::create([
-            'room_id' => $room->room_id,
-            'bed_label' => $bedLabel,
-            'status' => 'vacant',
-        ]);
+                self::syncStatusAndCapacity($room);
 
-        self::syncStatusAndCapacity($room);
-
-        return $bedSpace;
+                return $bedSpace;
+            },
+            resultDetails: fn (BedSpace $bed) => [
+                'room_id' => $room->room_id,
+                'bed_space_id' => $bed->bed_space_id,
+            ]
+        );
     }
 
     /**
@@ -204,7 +194,7 @@ class RoomService
         // 1. Derive Capacity
         if ($room->room_type === 'solo') {
             $room->capacity = 1;
-            // Ensure solo rooms have at least one bed space (FR-013 compliance)
+            // Ensure solo rooms have at least one bed space
             if ($room->bedSpaces->isEmpty()) {
                 $room->bedSpaces()->create([
                     'bed_label' => 'Solo Bed',
@@ -216,16 +206,20 @@ class RoomService
             $room->capacity = $room->bedSpaces()->count();
         }
 
-        // 2. Derive Status (unless specifically set to maintenance)
+        // 2. Derive Status from usable inventory (unless manually set to maintenance)
         if ($room->status !== Room::STATUS_MAINTENANCE) {
-            $totalBeds = $room->bedSpaces()->count();
             $vacantCount = $room->bedSpaces()->where('status', 'vacant')->count();
+            $occupiedCount = $room->bedSpaces()->where('status', 'occupied')->count();
+            $maintenanceCount = $room->bedSpaces()->where('status', 'maintenance')->count();
 
-            // IF rooms have zero beds OR zero beds are vacant -> Unavailable
-            if ($totalBeds === 0 || $vacantCount === 0) {
-                $room->status = Room::STATUS_UNAVAILABLE;
-            } else {
-                $room->status = Room::STATUS_AVAILABLE;
+            if ($vacantCount === 0 && $occupiedCount > 0) {
+                $room->status = Room::STATUS_FULLY_OCCUPIED;
+            } elseif ($occupiedCount > 0 && $vacantCount > 0) {
+                $room->status = Room::STATUS_PARTIALLY_OCCUPIED;
+            } elseif ($occupiedCount === 0 && $vacantCount > 0) {
+                $room->status = Room::STATUS_VACANT;
+            } elseif ($occupiedCount === 0 && $vacantCount === 0 && $maintenanceCount > 0) {
+                $room->status = Room::STATUS_MAINTENANCE;
             }
         }
 
@@ -235,7 +229,7 @@ class RoomService
     /**
      * Mark a bed space as occupied
      */
-    public static function occupyBedSpace(BedSpace $bedSpace): BedSpace
+    public static function occupyBedSpace(User $actor, BedSpace $bedSpace): BedSpace
     {
         if ($bedSpace->status === 'occupied') {
             throw ValidationException::withMessages([
@@ -243,17 +237,25 @@ class RoomService
             ]);
         }
 
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'OCCUPY_BED_SPACE',
+            txnReference: self::buildTxnReference('BED-OCCUPY'),
+            payload: ['bed_space_id' => $bedSpace->bed_space_id],
+            operation: function () use ($bedSpace): BedSpace {
+                $bedSpace->update(['status' => 'occupied']);
 
-        $bedSpace->update(['status' => 'occupied']);
+                if ($bedSpace->room) {
+                    self::syncStatusAndCapacity($bedSpace->room);
+                }
 
-        if ($bedSpace->room) {
-            self::syncStatusAndCapacity($bedSpace->room);
-        }
-
-        return $bedSpace;
+                return $bedSpace;
+            },
+            resultDetails: fn (BedSpace $bed) => [
+                'bed_space_id' => $bed->bed_space_id,
+                'room_id' => $bed->room_id,
+            ]
+        );
     }
 
     /**
@@ -281,7 +283,7 @@ class RoomService
      */
     public static function getAllAvailability(): Collection
     {
-        $rooms = Room::all();
+        $rooms = Room::with(['bedSpaces'])->get();
 
         return $rooms->map(fn (Room $room) => self::getAvailability($room));
     }
@@ -293,4 +295,151 @@ class RoomService
     {
         return Room::find($id);
     }
+
+    /**
+     * Compose room detail payload with occupancy and active contract context.
+     *
+     * @return array<string,mixed>
+     */
+    public static function detailPayload(Room $room): array
+    {
+        $room->load('bedSpaces');
+
+        $bedSpaceIds = $room->bedSpaces->pluck('bed_space_id')->all();
+        $activeContractsByBed = empty($bedSpaceIds)
+            ? collect()
+            : Contract::query()
+                ->with('tenant')
+                ->where('status', Contract::STATUS_ACTIVE)
+                ->whereNull('deleted_at')
+                ->whereIn('bed_space_id', $bedSpaceIds)
+                ->get()
+                ->keyBy('bed_space_id');
+
+        $bedSpaces = $room->bedSpaces->map(function (BedSpace $bed) use ($activeContractsByBed): array {
+            $contract = $activeContractsByBed->get($bed->bed_space_id);
+
+            return array_merge($bed->toArray(), [
+                'active_contract' => $contract ? [
+                    'contract_id' => $contract->contract_id,
+                    'move_in_date' => $contract->move_in_date,
+                    'tenant' => $contract->tenant ? [
+                        'tenant_id' => $contract->tenant->tenant_id,
+                        'first_name' => $contract->tenant->first_name,
+                        'last_name' => $contract->tenant->last_name,
+                    ] : null,
+                ] : null,
+            ]);
+        });
+
+        return array_merge($room->toArray(), [
+            'bed_spaces' => $bedSpaces,
+            'has_occupied_beds' => self::hasOccupiedBeds($room),
+            'has_active_contracts' => self::hasActiveContracts($room),
+        ]);
+    }
+
+    /**
+     * Aggregate room inventory KPI stats.
+     *
+     * @return array<string,int>
+     */
+    public static function statsSummary(): array
+    {
+        $totalRooms = Room::count();
+        $totalBeds = BedSpace::count();
+        $occupiedBeds = BedSpace::where('status', BedSpace::STATUS_OCCUPIED)->count();
+
+        // Bookable vacant beds: vacant beds in rooms that still have usable inventory.
+        $bookableVacantBeds = BedSpace::where('status', BedSpace::STATUS_VACANT)
+            ->whereHas('room', function ($q): void {
+                $q->whereIn('status', [Room::STATUS_VACANT, Room::STATUS_PARTIALLY_OCCUPIED]);
+            })
+            ->count();
+
+        $occupancyPct = $totalBeds > 0 ? (int) round(($occupiedBeds / $totalBeds) * 100) : 0;
+
+        return [
+            'total_rooms' => $totalRooms,
+            'total_beds' => $totalBeds,
+            'occupied_beds' => $occupiedBeds,
+            'bookable_vacant_beds' => $bookableVacantBeds,
+            'occupancy_pct' => $occupancyPct,
+        ];
+    }
+
+    /**
+     * True when any bed in the room is currently occupied.
+     */
+    public static function hasOccupiedBeds(Room $room): bool
+    {
+        return BedSpace::query()
+            ->where('room_id', $room->room_id)
+            ->where('status', 'occupied')
+            ->exists();
+    }
+
+    /**
+     * True when any active contract references this room's bed spaces.
+     */
+    public static function hasActiveContracts(Room $room): bool
+    {
+        return Contract::query()
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->whereHas('bedSpace', function ($q) use ($room): void {
+                $q->where('room_id', $room->room_id);
+            })
+            ->exists();
+    }
+
+    /**
+     * Archive a room for forensic retention (FR-012a).
+     */
+    public static function archive(User $actor, Room $room): Room
+    {
+        if (self::hasOccupiedBeds($room)) {
+            throw ValidationException::withMessages([
+                'room' => ['Room cannot be archived while one or more bed spaces are occupied.'],
+            ]);
+        }
+
+        if (self::hasActiveContracts($room)) {
+            throw ValidationException::withMessages([
+                'room' => ['Room cannot be archived while active contracts are linked to its bed spaces.'],
+            ]);
+        }
+
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'ARCHIVE_ROOM',
+            txnReference: self::buildTxnReference('RM-ARC'),
+            payload: ['room_id' => $room->room_id],
+            operation: function () use ($room) {
+                $room->delete();
+                return $room;
+            }
+        );
+    }
+
+    /**
+     * Restore an archived room (FR-012a).
+     */
+    public static function restore(User $actor, int $id): Room
+    {
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'RESTORE_ROOM',
+            txnReference: self::buildTxnReference('RM-RES'),
+            payload: ['room_id' => $id],
+            operation: function () use ($id): Room {
+                $room = Room::withTrashed()->findOrFail($id);
+                $room->restore();
+                self::syncStatusAndCapacity($room);
+
+                return $room;
+            }
+        );
+    }
+
 }

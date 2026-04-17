@@ -172,35 +172,35 @@ class PreservationPropertyTest extends TestCase
      *
      * **Validates: Requirements BUG-003 preservation**
      *
-     * This test verifies that syncStatusAndCapacity() correctly sets 'available' and 'maintenance' status.
+     * This test verifies that syncStatusAndCapacity() correctly sets 'vacant' and 'maintenance' status.
      * This behavior should work correctly on unfixed code and must be preserved after the fix.
      *
-     * Property: For rooms with no occupancy, status is 'available'; manually set 'maintenance' is preserved
+     * Property: For rooms with no occupancy, status is 'vacant'; manually set 'maintenance' is preserved
      *
      * Test Strategy:
      * 1. Create rooms with various configurations
-     * 2. Verify 'available' status is set correctly for vacant rooms
+     * 2. Verify 'vacant' status is set correctly for vacant rooms
      * 3. Verify 'maintenance' status is preserved when manually set
      * 4. Test both solo and shared room types
      *
      * EXPECTED OUTCOME: Test PASSES on unfixed code
-     * - This confirms the correct behavior for 'available' and 'maintenance' status is working
+     * - This confirms the correct behavior for 'vacant' and 'maintenance' status is working
      * - This behavior must be preserved after fixing BUG-003
      */
-    public function test_preservation_room_status_for_available_and_maintenance(): void
+    public function test_preservation_room_status_for_vacancy_lifecycle_and_maintenance(): void
     {
         // Property test: Test with various room configurations
         $testCases = [
-            // Case 1: Solo room with no occupancy should be 'available'
+            // Case 1: Solo room with no occupancy should be 'vacant'
             [
                 'room_type' => 'solo',
                 'bed_spaces' => [
                     ['bed_label' => 'Bed 1', 'status' => 'vacant'],
                 ],
-                'expected_status' => Room::STATUS_AVAILABLE,
+                'expected_status' => Room::STATUS_VACANT,
                 'description' => 'Solo room with vacant bed should be available',
             ],
-            // Case 2: Shared room with no occupancy should be 'available'
+            // Case 2: Shared room with no occupancy should be 'vacant'
             [
                 'room_type' => 'shared',
                 'bed_spaces' => [
@@ -208,18 +208,18 @@ class PreservationPropertyTest extends TestCase
                     ['bed_label' => 'Bed B', 'status' => 'vacant'],
                     ['bed_label' => 'Bed C', 'status' => 'vacant'],
                 ],
-                'expected_status' => Room::STATUS_AVAILABLE,
+                'expected_status' => Room::STATUS_VACANT,
                 'description' => 'Shared room with all vacant beds should be available',
             ],
-            // Case 3: Shared room with partial occupancy should be 'available'
+            // Case 3: Shared room with partial occupancy should be 'partially_occupied'
             [
                 'room_type' => 'shared',
                 'bed_spaces' => [
                     ['bed_label' => 'Bed A', 'status' => 'occupied'],
                     ['bed_label' => 'Bed B', 'status' => 'vacant'],
                 ],
-                'expected_status' => Room::STATUS_AVAILABLE,
-                'description' => 'Shared room with partial occupancy should be available',
+                'expected_status' => Room::STATUS_PARTIALLY_OCCUPIED,
+                'description' => 'Shared room with partial occupancy should be partially occupied',
             ],
             // Case 4: Room with maintenance status should preserve it
             [
@@ -251,7 +251,7 @@ class PreservationPropertyTest extends TestCase
                 'room_type' => $testCase['room_type'],
                 'capacity' => count($testCase['bed_spaces']),
                 'monthly_rate' => 5000,
-                'status' => $testCase['manual_status'] ?? Room::STATUS_AVAILABLE,
+                'status' => $testCase['manual_status'] ?? Room::STATUS_VACANT,
             ]);
 
             // Create bed spaces
@@ -347,10 +347,8 @@ class PreservationPropertyTest extends TestCase
 
             // Assert: transaction_logs entry should exist
             $txLog = DB::table('transaction_logs')
-                ->where('reference_entity', 'billing')
-                ->where('reference_id', (string) $billing->billing_id)
-                ->where('tx_name', 'payment_posting')
-                ->latest('tx_log_id')
+                ->where('action', 'POST_PAYMENT')
+                ->latest('id')
                 ->first();
 
             $this->assertNotNull(
@@ -615,7 +613,7 @@ class PreservationPropertyTest extends TestCase
 
         // Check audit_logs for the payment INSERT
         $auditLog = DB::table('audit_logs')
-            ->where('table_name', 'payments')
+            ->where('target_table', 'payments')
             ->where('record_id', (string) $payment->payment_id)
             ->where('action', 'INSERT')
             ->first();
@@ -625,8 +623,8 @@ class PreservationPropertyTest extends TestCase
         // We're testing the preservation of correct behavior, not the bug
         if ($auditLog) {
             $this->assertNotNull(
-                $auditLog->user_id,
-                'Preservation test: When audit context is set, user_id should be captured in audit_logs. '.
+                $auditLog->changed_by,
+                'Preservation test: When audit context is set, changed_by should be captured in audit_logs. '.
                 'This behavior must be preserved after fixing BUG-009.'
             );
         }
@@ -679,7 +677,7 @@ class PreservationPropertyTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => 'occupied',
+            'status' => 'vacant',
         ]);
 
         $bedSpace = BedSpace::create([
@@ -693,6 +691,7 @@ class PreservationPropertyTest extends TestCase
             'bed_space_id' => $bedSpace->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 1000,
             'status' => 'active',
         ]);

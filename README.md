@@ -26,30 +26,34 @@ If you prefer not to use Docker, see the **[QUICK_START.md](./QUICK_START.md)** 
 
 ## Key Features
 
-- **Tenant Lifecycle Management**: Seamless journey from onboarding to move-out, including contract automation.
-- **Granular Financial Control**: Multi-line billing items (Rent, Utilities, Adjustments) with integrated payment tracking and receipting.
-- **High-Trust Audit Compliance**: Core tables use 24 dedicated `AFTER` triggers (eight entities × insert/update/delete) writing to `audit_logs`, plus application-level `AuditService` and `transaction_logs` for workflows.
-- **Enterprise RBAC**: Rigid Role-Based Access Control implementing **Admin**, **Staff**, and **Viewer** levels, decoupled from generic framework policies for maximum security.
-- **Operational Intelligence**: Real-time dashboards and professional CSV reports for occupancy, revenue, and outstanding balances.
+- **Distributed Architecture**: Multi-node database strategy using a **MySQL Primary-Replica** topology on Docker/Render/Aiven, ensuring high availability and read-heavy optimization.
+- **Forensic UI/UX**: A professional, high-trust interface using **Structural Skeletons** instead of generic loading spinners, providing instantaneous layout stability and analytical clarity.
+- **Forensic Auditing**: Complete row-level audit trail powered by 24 MySQL database triggers.
+- **Transaction Reliability**: Robust workflow logging (started, committed, failed) for all financial operations.
+- **Relational Integrity**: Strict schema enforcement with foreign keys and multi-table reporting views.
+- **Distributed Architecture**: Containerized deployment with Primary-Replica database replication.
+- **Role-Based Security**: Fine-grained access control with explicit Authorization Services. Admin, Staff, and Viewer levels, decoupled from generic framework policies for maximum security.
+- **Operational Intelligence**: Real-time dashboards and professional CSV reports for occupancy, revenue, and outstanding balances using SQL Joins and Views.
 
 ## Technical Architecture
 
-HavenStay is built on a modern, decoupled architecture designed for stability and scalability.
+HavenStay is built on a mission-critical stack designed for data integrity and performance.
 
-- **Frontend**: [Next.js 16](https://nextjs.org/) (App Router) + [React 19](https://react.dev/) + [Tailwind CSS](https://tailwindcss.com/).
-- **Backend**: [Laravel 13](https://laravel.com/) (PHP 8.3+) with a RESTful Service-oriented architecture.
-- **Security**: [Laravel Sanctum](https://laravel.com/docs/sanctum) for API authentication.
-- **Database**: [MySQL 8.4](https://www.mysql.com/) (Authoritative Schema with Views and Audit Triggers).
+- **Frontend**: [Next.js 16](https://nextjs.org/) (App Router) + [React 19](https://react.dev/) + [Tailwind CSS](https://tailwindcss.com/) (Forensic UX Standard).
+- **Backend**: [Laravel 13](https://laravel.com/) (PHP 8.3+) with a Service-Oriented Architecture and Read/Write DB splitting.
+- **Infrastructure**: [Docker](https://www.docker.com/) (Local) | [Render](https://render.com/) (Backend) | [Vercel](https://vercel.com/) (Frontend).
+- **Database**: [MySQL 8.4](https://www.mysql.com/) Primary (Read/Write) + MySQL 8.4 Replica (Read-Only).
 
 ## Documentation
 
-- [**docs/DATABASE.md**](docs/DATABASE.md): Schema overview, six reporting views, and 24 audit triggers.
+- [**docs/DATABASE.md**](docs/DATABASE.md): Schema overview, reporting views, and audit triggers.
 - [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md): Endpoint listing and authentication guide.
-- [**CONTRIBUTING.md**](CONTRIBUTING.md): Guidelines for developers joining the project.
+- [**DOCKER_SETUP.md**](DOCKER_SETUP.md): Start the full distributed stack in 5 minutes.
+- [**CONTRIBUTING.md**](CONTRIBUTING.md): Guidelines for development standards.
 
 ## Demo Credentials (Development)
 The local seeder provides the following credentials for evaluation:
-- **Admin**: `admin@havenstay.local` / `HavenStay123!`
+- **Admin**: `admin@havenstay.ph` / `HavenStay123!`
 - **Staff**: `staff@havenstay.local` / `HavenStay123!`
 - **Viewer**: `viewer@havenstay.local` / `HavenStay123!`
 
@@ -58,10 +62,10 @@ The local seeder provides the following credentials for evaluation:
 ### Repository Standards
 
 *   **`docs/`**: Technical documentation, SRS, and architecture (SDD).
-*   **`design-system/`**: Authoritative UI/UX specifications and component library.
 *   **`backend/`**: Laravel core, API services, and migrations.
 *   **`frontend/`**: Next.js source and design tokens.
-- **Audit Logging**: Mandatory for all transactional writes via the `AuditService`.
+*   **Forensic UX**: All loading states must use structural Skeletons (`_components/ui/Skeleton.js`).
+*   **Data Integrity**: Explicit `DB::transaction()` with `AuditService` context is mandatory for all writes.
 
 ---
 

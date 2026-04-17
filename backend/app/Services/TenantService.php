@@ -2,172 +2,206 @@
 
 namespace App\Services;
 
+use App\Services\Concerns\ManagesWorkflows;
+use App\Models\Contract;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TenantService
 {
+    use ManagesWorkflows;
+
     /**
-     * Create a new tenant record
-     * FR-008, FR-009: Create and update tenant profiles
+     * Create a new tenant record.
      */
-    public static function create(array $data): Tenant
+    public static function create(User $actor, array $data): Tenant
     {
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'tenant_registration',
-            auth()->id() ?? 0,
-            'tenants',
-            $data['last_name'] ?? 'pending'
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'CREATE_TENANT',
+            txnReference: (string) ($data['email'] ?? 'tenant:create'),
+            payload: ['email' => $data['email'] ?? null],
+            operation: fn (): Tenant => Tenant::create($data),
+            resultDetails: fn (Tenant $tenant): array => ['tenant_id' => $tenant->tenant_id]
         );
-        $txLogId = $started['tx_log_id'];
-
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            $tenant = Tenant::create($data);
-
-            TransactionService::logCommitted($txLogId, [
-                'tenant_id' => $tenant->tenant_id,
-                'name' => "{$tenant->first_name} {$tenant->last_name}",
-                'email' => $tenant->email,
-            ]);
-
-            return $tenant;
-        } catch (\Exception $e) {
-            TransactionService::logFailed($txLogId, $e->getMessage());
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
     }
 
     /**
-     * Update an existing tenant record
-     * FR-008: Update tenant profiles
+     * Update an existing tenant record.
      */
-    public static function update(Tenant $tenant, array $data): Tenant
+    public static function update(User $actor, Tenant $tenant, array $data): Tenant
     {
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'tenant_profile_update',
-            auth()->id() ?? 0,
-            'tenants',
-            (string) $tenant->tenant_id
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'UPDATE_TENANT',
+            txnReference: (string) $tenant->tenant_id,
+            payload: ['tenant_id' => $tenant->tenant_id],
+            operation: function () use ($tenant, $data): Tenant {
+                $hasStatusChange = array_key_exists('status', $data) && $data['status'] !== $tenant->status;
+
+                // BR-005b (SRS): 'moved_out' is a system-managed state reached only via move-out workflow.
+                if ($hasStatusChange && $data['status'] === Tenant::STATUS_MOVED_OUT) {
+                    throw ValidationException::withMessages([
+                        'status' => ['Tenant status cannot be manually set to "Moved Out". Use the move-out process on the contract instead.'],
+                    ]);
+                }
+
+                if ($hasStatusChange && self::hasActiveContract($tenant->tenant_id)) {
+                    throw ValidationException::withMessages([
+                        'status' => ['Tenant status cannot be changed while an active contract exists. Process move-out first.'],
+                    ]);
+                }
+
+                $tenant->update($data);
+
+                return $tenant;
+            },
+            resultDetails: fn (Tenant $updatedTenant): array => ['tenant_id' => $updatedTenant->tenant_id]
         );
-        $txLogId = $started['tx_log_id'];
-
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            $tenant->update($data);
-
-            TransactionService::logCommitted($txLogId, [
-                'tenant_id' => $tenant->tenant_id,
-                'email' => $tenant->email,
-                'fields_updated' => array_keys($data),
-            ]);
-
-            return $tenant;
-        } catch (\Exception $e) {
-            TransactionService::logFailed($txLogId, $e->getMessage());
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
-    }
-
-    /**
-     * Deactivate a tenant (mark as moved_out)
-     * FR-010: Maintain tenant history
-     */
-    public static function deactivate(Tenant $tenant): Tenant
-    {
-        $tenant->update(['status' => 'moved_out']);
-
-        return $tenant;
     }
 
     /**
      * Reactivate a tenant (mark as active)
      */
-    public static function reactivate(Tenant $tenant): Tenant
+    public static function reactivate(User $actor, Tenant $tenant): Tenant
     {
-        $tenant->update(['status' => 'active']);
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'REACTIVATE_TENANT',
+            txnReference: (string) $tenant->tenant_id,
+            payload: ['tenant_id' => $tenant->tenant_id],
+            operation: function () use ($tenant): Tenant {
+                $tenant->update(['status' => Tenant::STATUS_ACTIVE]);
 
-        return $tenant;
+                return $tenant;
+            },
+            resultDetails: fn (Tenant $reactivatedTenant): array => ['tenant_id' => $reactivatedTenant->tenant_id]
+        );
     }
 
     /**
-     * Get all tenants with richness (Current Room & Outstanding Balance)
-     * Leveraging optimized views: vw_active_contracts, vw_billing_summary
+     * Archive a tenant (mark as archived)
      */
+    public static function archive(User $actor, Tenant $tenant): Tenant
+    {
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'ARCHIVE_TENANT',
+            txnReference: (string) $tenant->tenant_id,
+            payload: ['tenant_id' => $tenant->tenant_id],
+            operation: function () use ($tenant): Tenant {
+                if (self::hasActiveContract($tenant->tenant_id)) {
+                    throw ValidationException::withMessages([
+                        'status' => ['Tenant cannot be archived while an active contract exists. Process move-out first.'],
+                    ]);
+                }
+
+                $tenant->update(['status' => Tenant::STATUS_ARCHIVED]);
+                $tenant->delete();
+
+                return $tenant;
+            },
+            resultDetails: fn (Tenant $archivedTenant): array => ['tenant_id' => $archivedTenant->tenant_id]
+        );
+    }
+
+    public static function restore(User $actor, int $tenantId): Tenant
+    {
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'RESTORE_TENANT',
+            txnReference: (string) $tenantId,
+            payload: ['tenant_id' => $tenantId],
+            operation: function () use ($tenantId): Tenant {
+                $tenant = Tenant::withTrashed()->findOrFail($tenantId);
+                $tenant->restore();
+
+                // BR-005b (SRS): Determine status based on contract history context.
+                $newStatus = self::hasActiveContract($tenant->tenant_id)
+                    ? Tenant::STATUS_ACTIVE
+                    : Tenant::STATUS_MOVED_OUT;
+
+                $tenant->update(['status' => $newStatus]);
+
+                return $tenant;
+            },
+            resultDetails: fn (Tenant $restoredTenant): array => ['tenant_id' => $restoredTenant->tenant_id]
+        );
+    }
+
+
     public static function allRich(): Collection
     {
         return self::searchRich();
     }
 
     /**
-     * Search tenants with richness
-     * Leveraging optimized views: vw_active_contracts, vw_billing_summary
-     */
-    /**
      * Search tenants with richness (query builder for pagination).
      *
      * @return Builder<Tenant>
      */
-    public static function searchRichBuilder(string $query = '', string $status = ''): Builder
+    public static function searchRichBuilder(string $query = '', string $status = '', string $sortBy = 'last_name', string $sortOrder = 'asc'): Builder
     {
-        // CCR-003: SELECT query with joins
-        // CCR-005: Multi-table JOIN via views
-        $q = Tenant::query()
-            ->select('tenants.*')
-            // Join with Active Contracts view (Room/Bed)
-            ->leftJoin('vw_active_contracts', 'tenants.tenant_id', '=', 'vw_active_contracts.tenant_id')
-            ->addSelect([
-                'vw_active_contracts.room_code',
-                'vw_active_contracts.bed_label',
-            ])
-            // Join with Billing Summary (Outstanding Balance)
-            ->leftJoin('vw_billing_summary', 'tenants.tenant_id', '=', 'vw_billing_summary.tenant_id')
-            ->addSelect([
-                DB::raw('COALESCE(SUM(vw_billing_summary.total_amount - vw_billing_summary.total_paid), 0) as outstanding_balance'),
-            ])
-            ->groupBy('tenants.tenant_id', 'vw_active_contracts.room_code', 'vw_active_contracts.bed_label');
-
-        if (! empty($query)) {
-            // CCR-004: LIKE operator for pattern matching
-            // CCR-004: OR operator for multi-condition search
-            $q->where(function ($builder) use ($query) {
-                $builder->where('tenants.first_name', 'LIKE', "%{$query}%")
-                    ->orWhere('tenants.last_name', 'LIKE', "%{$query}%")
-                    ->orWhere('tenants.contact_number', 'LIKE', "%{$query}%")
-                    ->orWhere('tenants.email', 'LIKE', "%{$query}%");
-                if (ctype_digit($query)) {
-                    $builder->orWhere('tenants.tenant_id', (int) $query);
-                }
-            });
-        }
+        $q = Tenant::withTrashed()
+            ->withRichContext()
+            ->search($query);
 
         if (! empty($status)) {
             $q->where('tenants.status', $status);
         }
 
+        $order = strtolower($sortOrder) === 'desc' ? 'desc' : 'asc';
+        $q->orderBy($sortBy, $order);
+
+        if ($sortBy !== 'tenant_id') {
+            $q->orderBy('tenant_id', 'asc');
+        }
+
         return $q;
     }
 
-    public static function searchRich(string $query = '', string $status = ''): Collection
+
+    public static function searchRich(string $query = '', string $status = '', string $sortBy = 'last_name', string $sortOrder = 'asc'): Collection
     {
-        return self::searchRichBuilder($query, $status)->get();
+        return self::searchRichBuilder($query, $status, $sortBy, $sortOrder)->get();
+    }
+
+    /**
+     * Summary metrics for tenant dashboard/list KPIs.
+     *
+     * @return array{active_tenants:int,pending_move_outs:int}
+     */
+    public static function summary(): array
+    {
+        $activeTenants = Tenant::query()
+            ->whereNull('deleted_at')
+            ->where('status', Tenant::STATUS_ACTIVE)
+            ->count();
+
+        $pendingMoveOuts = Contract::query()
+            ->whereNull('deleted_at')
+            ->where('status', Contract::STATUS_ACTIVE)
+            ->whereNotNull('expected_move_out_date')
+            ->whereBetween('expected_move_out_date', [now()->startOfDay(), now()->copy()->addDays(30)->endOfDay()])
+            ->count();
+
+        return [
+            'active_tenants' => $activeTenants,
+            'pending_move_outs' => $pendingMoveOuts,
+            'total_records' => Tenant::withTrashed()->count(),
+        ];
+    }
+
+    public static function hasActiveContract(int $tenantId): bool
+    {
+        return Contract::query()
+            ->where('tenant_id', $tenantId)
+            ->where('status', Contract::STATUS_ACTIVE)
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
     /**
@@ -176,5 +210,10 @@ class TenantService
     public static function findById(int $id): ?Tenant
     {
         return Tenant::find($id);
+    }
+
+    public static function findByIdWithTrashedOrFail(int $id): Tenant
+    {
+        return Tenant::withTrashed()->findOrFail($id);
     }
 }

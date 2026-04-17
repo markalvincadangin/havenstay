@@ -8,6 +8,12 @@
 > ⚠️ **IMPORTANT:** Rules in this file **override** the Master file (`../MASTER.md`) for Rooms pages only.
 > Only deviations from the Master are documented here. For all other rules, refer to the Master.
 
+## Form Contract Reference
+
+- Shared form theme and validation behavior: `FORM_PAGES.md` §1
+- Room form routes and allowed fields: `FORM_PAGES.md` §2.3
+- Source of truth: `docs/SRS.md` (FR-012 to FR-015a, BR-018), `docs/API_REFERENCE.md`, `backend/database/sql/havenstay_schema.sql`
+
 ---
 
 ## 1. Page Purpose
@@ -26,7 +32,7 @@ The Room Inventory manages real-time property capacity across four views:
 ## 2. Layout Structure (Master §4)
 
 ### 2.1 Rooms List Page (`/rooms`)
-1.  **Page Header**: `Room Inventory` with "Register Unit" Primary CTA.
+1.  **Page Header**: `Room Inventory` with "Register Room" Primary CTA.
 2.  **Summary KPIs**: 3-column `KpiCard` grid (Total Beds, Vacancies, Revenue).
 3.  **Filter Hub**: `Registry Card` with strip title **Filters** (**MASTER §5.8.3**).
 4.  **Unit Grid**: Standard `room-card` grid (§112).
@@ -35,15 +41,12 @@ The Room Inventory manages real-time property capacity across four views:
 1.  **Page Header**: `Unit {room_code}` with "Update Details" Secondary action.
 2.  **Status Well**: Standard `StatusBadge`.
 3.  **Split View**:
-    - **Sidebar (4)**: Room Profile (Monthly Rate, Floor, Amenities).
+    - **Sidebar (4)**: Room Profile (Monthly Rate, Capacity, Amenities).
     - **Main (8)**: Bed Assignments table with occupancy progress.
 
 ### 2.3 Unit Registration Form
-1.  **Form Shell**: Centered `max-w-4xl` column containing `PageHeader` and `Registry Cards`.  
-  [Cancel] [Save Changes / Register Room]
-```
-tn-primary)]
-```
+1.  **Form Shell**: Centered `max-w-4xl` column containing `PageHeader` and `Card` sections.
+2.  **Primary actions**: `Cancel` (secondary) and `Register Room` / `Save Changes` (primary).
 
 ---
 
@@ -148,10 +151,10 @@ tn-primary)]
 ```
 
 **Room Card Content:**
-- **Header**: Room number (large, mono font) + Status badge
+- **Header**: Room code (large, mono font) + Status badge
 - **Details**: 
   - Capacity: "X beds"
-  - Floor: "Floor X" or "—"
+  - Room Type: Solo or Shared
   - Monthly Rate: formatPHP(monthly_rate) per bed
 - **Occupancy**: Progress bar showing occupied/total beds with text "X of Y occupied"
 
@@ -162,7 +165,7 @@ tn-primary)]
 **Override Reason:** Room detail page has unique bed space management table.
 
 **Columns:**
-1. **Bed Number** - bed_number, DM Mono font, 14px
+1. **Bed Label** - `bed_label`, DM Mono font, 14px
 2. **Status** - StatusBadge component
 3. **Current Tenant** - tenant name (clickable link) or "—"
 4. **Move-In Date** - formatDateString(contract.move_in_date) or "—"
@@ -267,17 +270,18 @@ const handleBedClick = (bedSpace) => {
 **Override Reason:** Rooms form has specific validation requirements.
 
 **Required Fields:**
-- Room Number
+- Room Code
+- Room Type
 - Capacity
 - Monthly Rate
 
 **Validation Patterns:**
 
 ```javascript
-// Room Number Validation
-const validateRoomNumber = (value) => {
-  if (!value) return "Room number is required";
-  if (value.length > 10) return "Room number must be 10 characters or less";
+// Room Code Validation
+const validateRoomCode = (value) => {
+  if (!value) return "Room code is required";
+  if (value.length > 20) return "Room code must be 20 characters or less";
   return true;
 };
 
@@ -303,17 +307,22 @@ const validateMonthlyRate = (value) => {
   return true;
 };
 
-// Floor Validation (optional field)
-const validateFloor = (value) => {
-  if (!value) return true; // Optional
-  const num = Number(value);
-  if (!Number.isInteger(num)) {
-    return "Floor must be an integer";
-  }
-  if (num < 0 || num > 50) return "Floor must be between 0 and 50";
+// Room Type Validation
+const validateRoomType = (value) => {
+  if (!value) return "Room type is required";
+  if (!['solo', 'shared'].includes(value)) return "Room type must be solo or shared";
   return true;
 };
 ```
+
+### Exact Form Labels (Parity with `FORM_PAGES.md` §2.3)
+- Room Code (`room_code`)
+- Room Type (`room_type`)
+- Capacity (`capacity`)
+- Monthly Rate (`monthly_rate`)
+- Room Status (`status`)
+- Amenities (`amenities`)
+- Description (`description`)
 
 ---
 
@@ -333,17 +342,12 @@ const validateFloor = (value) => {
   min-width: 160px;
 }
 
-.floor-filter {
-  min-width: 140px;
-}
-
 @media (max-width: 768px) {
   .filter-container {
     flex-direction: column;
   }
   
-  .status-filter,
-  .floor-filter {
+  .status-filter {
     width: 100%;
   }
 }
@@ -351,14 +355,13 @@ const validateFloor = (value) => {
 
 **Filter Behavior:**
 ```javascript
-// Filter by status and floor
+// Filter by status
 const filteredRooms = useMemo(() => {
   return rooms.filter(room => {
     const matchesStatus = statusFilter === 'all' || room.status === statusFilter;
-    const matchesFloor = floorFilter === 'all' || room.floor === Number(floorFilter);
-    return matchesStatus && matchesFloor;
+    return matchesStatus;
   });
-}, [rooms, statusFilter, floorFilter]);
+}, [rooms, statusFilter]);
 ```
 
 ---
@@ -386,9 +389,9 @@ const deriveRoomStatus = (room, bedSpaces) => {
   
   const occupiedCount = bedSpaces.filter(b => b.status === 'occupied').length;
   
-  if (occupiedCount === 0) return 'available';
-  if (occupiedCount === room.capacity) return 'occupied';
-  return 'occupied'; // Partially occupied still shows as occupied
+  if (occupiedCount === 0) return 'vacant';
+  if (occupiedCount === room.capacity) return 'fully_occupied';
+  return 'partially_occupied';
 };
 ```
 
@@ -400,10 +403,10 @@ const deriveRoomStatus = (room, bedSpaces) => {
 
 1. **GET `/api/rooms`** - All room records with capacity and status
 2. **GET `/api/rooms/[id]`** - Single room with bed spaces
-3. **GET `/api/bed-spaces?room_id=[id]`** - Bed spaces for specific room
+3. **GET `/api/rooms/availability`** - Room/bed availability reference
 4. **POST `/api/rooms`** - Create new room
 5. **PUT `/api/rooms/[id]`** - Update room
-6. **DELETE `/api/rooms/[id]`** - Delete room (if no active contracts)
+6. **POST `/api/rooms/[id]/archive`** - Archive room (blocked when any bed is occupied or active contracts exist)
 
 ### Error Handling
 
@@ -494,6 +497,15 @@ const cardVariants = {
 - ❌ **Table layout on mobile** — Use card grid for better mobile UX
 - ❌ **No occupancy visualization** — Always show progress bar
 - ❌ **Empty state without guidance** — Provide next action
+
+---
+
+## Page Titles and Subtitles (Master §21 Exact)
+
+| Route | Title (H1) | Subtitle |
+| :--- | :--- | :--- |
+| `/rooms` | `Room Inventory` | `Review room capacity limits and current rate configurations.` |
+| `/rooms/[id]` | `*(Room code)*` | `Room profile — beds, status, and assignments.` |
 
 ---
 

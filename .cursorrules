@@ -3,18 +3,18 @@
 ## Project Identity
 - **HavenStay** is a Boarding House Management System (BHMS) for small-scale operations.
 - **Academic Context:** Strict adherence to Course Compliance Requirements (CCR-001 to CCR-008) is required.
-- **Authority:** Always refer to `CLAUDE.md`, `docs/SRS.md`, and `docs/SDD.md` before implementation.
+- **Authority:** Always refer to `CLAUDE.md`, `docs/SRS.md`, `docs/SDD.md`, `docs/BACKEND_CODING_BLUEPRINT.md`, and `docs/FRONTEND_CODING_BLUEPRINT.md` before implementation.
 
 ## Tech Stack
 - **Backend:** Laravel 13 (PHP 8.3+), Sanctum 4.x
 - **Frontend:** Next.js 16 (App Router, React 19), Tailwind CSS v4, React Hook Form 7.x
-- **Database:** MySQL 8.4+ (Production/Compliance), SQLite (Dev/Unit Testing)
+- **Database**: MySQL 8.4+ (Authoritative Source of Truth / Audit Triggers)
 - **API Style:** RESTful JSON
 
 ## Directory Structure
 - `backend/`: Laravel API
 - `frontend/`: Next.js Web App
-- `db/`: SQL schema, triggers, and views
+- **backend/database/sql/**: Canonical SQL schema, triggers, and views
 - `docs/`: Product and engineering documentation
 
 ## Core Constraints (Non-Negotiable)
@@ -26,6 +26,32 @@
 3. **Logic Placement:** Business logic MUST live in Service classes, NOT Controllers or Models.
 4. **Authorization:** Use `AuthorizationService` exclusively. NEVER use Laravel Gates/Policies.
 5. **Multi-Tenant Safety:** Call `AuditService::setAuditUserContext($actor->id)` before every transaction-based write to trigger-covered tables on MySQL.
+
+## Backend Blueprint Enforcement (Agent Rules)
+- Treat `docs/BACKEND_CODING_BLUEPRINT.md` as mandatory for all backend code generation/refactors.
+- Keep Controllers thin: authorize, validate, delegate to Service, map JSON response.
+- Do NOT perform direct Eloquent writes in Controllers (`create`, `update`, `delete`, `restore`).
+- Keep business logic and multi-table workflows in Services only.
+- Service write methods MUST accept `User $actor` as the first parameter.
+- Never use `Auth::id()` or `Auth::user()` inside Service methods.
+- For critical writes, follow the full transaction-audit sequence:
+  - `TransactionService::logStarted(...)`
+  - `AuditService::setAuditUserContext($actor->user_id)`
+  - `AuditService::setCorrelationContext(...)`
+  - `DB::transaction(...)`
+  - `TransactionService::logCommitted(...)` or `logRolledBack(...)`
+  - `AuditService::clearCorrelationContext()` in `finally`
+- Keep domain validation in Services (`ValidationException::withMessages()`), request-shape validation in Controllers.
+- Keep API status and error semantics consistent (`401`, `403`, `422`) with field-level validation errors.
+- Comments must explain intent/invariants, not obvious code narration.
+
+## Frontend Blueprint Enforcement (Agent Rules)
+- Treat `docs/FRONTEND_CODING_BLUEPRINT.md` as mandatory for all frontend code generation/refactors.
+- Keep pages thin: compose UI, validate route/search params, delegate data access to `apiRequest`.
+- Route backend communication through `frontend/src/lib/api.js` (`apiRequest`) only.
+- Keep domain labels/status mappings centralized in `frontend/src/lib/constants.js`.
+- Preserve role-aware UX (Admin/Staff/Viewer) and hide/disable unauthorized write actions.
+- Keep table/form patterns aligned to `design-system/havenstay/MASTER.md`.
 
 ## Workflow Rules
 - Check `docs/SRS.md` for Functional Requirements (FR-*).

@@ -1,33 +1,29 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Calendar, FileText, Wallet, ShieldCheck, TrendingUp } from "lucide-react";
+import { Calendar, FileText, Wallet, ShieldCheck, TrendingUp } from "lucide-react";
 
 import { apiRequest } from "../../../lib/api";
 import { canManageBilling } from "../../../lib/auth";
-import { flattenApiErrors } from "../../../lib/errors";
+import { applyServerFieldErrors } from "../../../lib/forms";
 import { formatPHP, formatDateString } from "../../../lib/formatters";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { useUnsavedChangesWarning } from "../../../lib/useUnsavedChangesWarning";
 import Alert from "../../_components/ui/Alert";
-import { AppMain } from "../../_components/ui/AppShell";
 import Button from "../../_components/ui/Button";
-import { Card } from "../../_components/ui/Card";
 import { Field, Input, Select } from "../../_components/ui/Fields";
-import PageHeader from "../../_components/ui/PageHeader";
-import Spinner from "../../_components/ui/Spinner";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
-import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import {
+  primaryLinkCtaClass,
+  secondaryOutlineLinkClass,
+} from "../../_components/ui/LinkTokens";
 import { normalizePaginatedList } from "../../../lib/pagination";
-
-const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.2, ease: "easeOut" },
-};
+import StandardPage from "../../_components/ui/StandardPage";
+import { FormSection } from "../../_components/ui/FormSection";
+import { useAuth } from "../../_context/AuthContext";
+import PageHeaderActions from "../../_components/ui/PageHeaderActions";
 
 function tenantLabel(t) {
   if (!t) return "—";
@@ -39,14 +35,14 @@ function tenantLabel(t) {
 function contractDisplayLabel(c) {
   const tenant = tenantLabel(c.tenant);
   const room = c.room?.room_code ?? c.room_id ?? "—";
+  const bedLabel = c.bed_space?.bed_label || c.bedSpace?.bed_label || "";
   const start = formatDateString(c.move_in_date);
-  return `${tenant} — Room ${room} (Start: ${start})`;
+  return `${tenant} — Room ${room}${bedLabel ? ` / ${bedLabel}` : ""} (Start: ${start})`;
 }
 
 export default function NewBillingPage() {
   const router = useRouter();
-  const { user: currentUser, authLoading } = useAuthGuard();
-  const shouldReduceMotion = useReducedMotion();
+  const { user: currentUser } = useAuth();
   const [activeContracts, setActiveContracts] = useState([]);
   const [loadingContracts, setLoadingContracts] = useState(true);
   const [contractsError, setContractsError] = useState("");
@@ -58,6 +54,7 @@ export default function NewBillingPage() {
     watch,
     setValue,
     getValues,
+    setError,
     formState: { errors, isSubmitting, isDirty },
   } = useForm({
     defaultValues: {
@@ -85,7 +82,7 @@ export default function NewBillingPage() {
 
   const totalDue = useMemo(() => {
     const parse = (v) => {
-      const n = parseFloat(String(v || "").replace(",", ""));
+      const n = parseFloat(String(v || "").replaceAll(",", ""));
       return Number.isFinite(n) ? n : 0;
     };
     let total = 0;
@@ -105,7 +102,7 @@ export default function NewBillingPage() {
   ]);
 
   useEffect(() => {
-    if (authLoading || !currentUser) return;
+    if (!currentUser) return;
     if (!canManageBilling(currentUser)) {
       setLoadingContracts(false);
       return;
@@ -118,7 +115,7 @@ export default function NewBillingPage() {
         if (cancelled) return;
         setActiveContracts(normalizePaginatedList(data).rows);
       } catch (e) {
-        if (!cancelled) setContractsError(flattenApiErrors(e));
+        if (!cancelled) setContractsError(e?.message || "Failed to load contracts.");
       } finally {
         if (!cancelled) setLoadingContracts(false);
       }
@@ -127,7 +124,7 @@ export default function NewBillingPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, currentUser]);
+  }, [currentUser]);
 
   useEffect(() => {
     if (activeContracts.length === 0) return;
@@ -162,7 +159,7 @@ export default function NewBillingPage() {
     }
 
     const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
-    const dueDate = new Date(startDate.getFullYear(), startDate.getMonth(), 15);
+    const dueDate = new Date(startDate.getFullYear(), startDate.getMonth(), 6);
 
     setValue("billing_period_from", toLocalIso(startDate));
     setValue("billing_period_to", toLocalIso(endDate));
@@ -174,7 +171,7 @@ export default function NewBillingPage() {
     setApiError("");
     const lineItems = [];
     const pushIfPositive = (amountStr, itemType, description) => {
-      const n = parseFloat(String(amountStr || "").replace(",", ""));
+      const n = parseFloat(String(amountStr || "").replaceAll(",", ""));
       if (Number.isFinite(n) && n !== 0) {
         lineItems.push({
           item_type: itemType,
@@ -185,11 +182,11 @@ export default function NewBillingPage() {
     };
 
     if (data.include_base_rent) {
-      const br = parseFloat(String(data.base_rent_amount || "").replace(",", ""));
+      const br = parseFloat(String(data.base_rent_amount || "").replaceAll(",", ""));
       if (Number.isFinite(br) && br > 0) {
         lineItems.push({
           item_type: "base_rent",
-          item_description: "Monthly Rent",
+          item_description: "Monthly Base Rent",
           amount: br,
         });
       }
@@ -200,7 +197,7 @@ export default function NewBillingPage() {
     pushIfPositive(data.adjustment_amount, "adjustment", "Adjustment");
 
     if (lineItems.length === 0) {
-      setApiError("Minimum protocol violation: Aggregate statement must contain at least one non-zero line item.");
+      setApiError("Add at least one non-zero charge before generating billing.");
       return;
     }
 
@@ -220,77 +217,51 @@ export default function NewBillingPage() {
       const id = result?.billing?.billing_id;
       if (id) router.push(`/billing/${id}`);
     } catch (e) {
-      setApiError(flattenApiErrors(e));
+      applyServerFieldErrors(e, setError, { setApiError });
     }
   };
 
-  if (authLoading || loadingContracts) {
-    return (
-      <AppMain>
-        <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
-          <Spinner className="size-10 text-teal-600" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Syncing active contracts…</p>
-        </div>
-      </AppMain>
-    );
-  }
-
-  if (!canManageBilling(currentUser)) {
-    return (
-      <AppMain>
-        <div className="mx-auto mt-8 w-full max-w-4xl space-y-6">
-          <Alert variant="warning" title="Protocol Restricted">
-            Administrative clearance required to generate statements.
-          </Alert>
-          <Button variant="secondary" onClick={() => router.push("/billing")} className="!h-11 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest">
-            Cancel
-          </Button>
-        </div>
-      </AppMain>
-    );
-  }
+  const readOnly = !canManageBilling(currentUser);
 
   return (
-    <AppMain>
-      <motion.div
-        className="mx-auto mt-8 w-full max-w-4xl space-y-6"
-        initial={shouldReduceMotion ? false : pageVariants.initial}
-        animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0.2 } : pageVariants.transition}
-      >
-        <PageHeader
-          title="Post Statement"
-          subtitle="Generate a monthly cycle statement for an active tenant contract."
-          breadcrumbs={
-            <Breadcrumbs
-              items={[
-                { label: "Billing", href: "/billing" },
-                { label: "Post Statement" },
-              ]}
-            />
-          }
-          actions={
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/billing")}
-                className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Billing"
-              >
-                <ArrowLeft size={18} aria-hidden />
-              </button>
-              <div className="border-l border-stone-200 pl-3">
-                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-              </div>
-            </div>
-          }
+    <StandardPage
+      title="Generate Bill"
+      subtitle="Create a monthly billing cycle for an active tenant contract."
+      loading={loadingContracts}
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: "Billing", href: "/billing" },
+            { label: "Generate Bill" },
+          ]}
         />
+      }
+      actions={
+        <PageHeaderActions
+          backHref="/billing"
+          backLabel="Back to Billing"
+          user={currentUser}
+        />
+      }
+    >
+      <div className="mx-auto w-full max-w-4xl space-y-6">
+        {readOnly && (
+          <Alert variant="warning" title="Access Restricted">
+            You do not have permission to generate billing.
+          </Alert>
+        )}
 
         {contractsError && <Alert variant="error" title="Could not load contracts">{contractsError}</Alert>}
 
-        {activeContracts.length === 0 && !contractsError ? (
+        <Alert variant="info" title="Manual amounts (BR-023)">
+          First and last billing cycles may be partial months. Release 1 does not auto-prorate: this form prefills
+          calendar month boundaries and the contract monthly rate for convenience only. Enter line-item amounts that
+          match your approved proration before posting.
+        </Alert>
+
+        {activeContracts.length === 0 && !contractsError && !loadingContracts ? (
           <div className="space-y-4">
-            <Alert variant="warning" title="Population Empty">
+            <Alert variant="warning" title="No active contracts">
               No active tenant contracts found for billing.
             </Alert>
             <Button variant="secondary" onClick={() => router.push("/contracts")} className="!h-11 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest">
@@ -299,80 +270,59 @@ export default function NewBillingPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                  <FileText size={16} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Tenant & Room</h2>
-              </div>
-              <div className="space-y-6 p-8">
-                <Field
-                  label="Target Contract"
-                  required
-                  error={errors.contract_id?.message}
+            <FormSection title="Tenant & Room" icon={FileText}>
+              <Field
+                label="Active Contract"
+                required
+                error={errors.contract_id?.message}
+              >
+                <Select
+                  id="contract_id"
+                  className="!h-12 border-stone-200 font-bold"
+                  hasError={Boolean(errors.contract_id)}
+                  {...register("contract_id", { required: "Select an active contract for this billing cycle." })}
                 >
-                  <Select
-                    id="contract_id"
-                    className="!h-12 border-stone-200 font-bold"
-                    hasError={Boolean(errors.contract_id)}
-                    {...register("contract_id", { required: "Mandatory: Select an active resident contract." })}
-                  >
-                    <option value="">Select Contract…</option>
-                    {activeContracts.map((c) => (
-                      <option key={c.contract_id} value={c.contract_id}>
-                        {contractDisplayLabel(c)}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-            </Card>
+                  <option value="">Select Contract…</option>
+                  {activeContracts.map((c) => (
+                    <option key={c.contract_id} value={c.contract_id}>
+                      {contractDisplayLabel(c)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </FormSection>
 
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-stone-50 text-stone-600">
-                  <Calendar size={16} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Billing Dates</h2>
-              </div>
-              <div className="grid gap-6 p-8 sm:grid-cols-3">
-                <Field label="Cycle Start" required error={errors.billing_period_from?.message}>
+            <FormSection title="Billing Dates" icon={Calendar}>
+              <div className="grid gap-6 sm:grid-cols-3">
+                <Field label="Billing period from" required error={errors.billing_period_from?.message}>
                   <Input
                     type="date"
                     className="!h-12 border-stone-200 font-bold"
-                    {...register("billing_period_from", { required: "Mandatory." })}
+                    {...register("billing_period_from", { required: "Billing period start is required." })}
                   />
                 </Field>
-                <Field label="Cycle End" required error={errors.billing_period_to?.message}>
+                <Field label="Billing period to" required error={errors.billing_period_to?.message}>
                   <Input
                     type="date"
                     className="!h-12 border-stone-200 font-bold"
-                    {...register("billing_period_to", { required: "Mandatory." })}
+                    {...register("billing_period_to", { required: "Billing period end is required." })}
                   />
                 </Field>
-                <Field label="Payment Deadline" required error={errors.due_date?.message}>
+                <Field label="Due date" required error={errors.due_date?.message}>
                   <Input
                     type="date"
                     className="!h-12 border-stone-200 font-bold"
-                    {...register("due_date", { required: "Mandatory." })}
+                    {...register("due_date", { required: "Due date is required." })}
                   />
                 </Field>
               </div>
-            </Card>
+            </FormSection>
 
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                  <Wallet size={16} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Charges & Fees</h2>
-              </div>
-              <div className="space-y-8 p-8">
+            <FormSection title="Charges & Fees" icon={Wallet}>
+              <div className="space-y-8">
                 <Alert variant="info" title="Charges" className="!py-3">
-                  Rent is normally billed as a <span className="font-mono text-xs">base_rent</span> line (BR-001). Security
-                  deposits belong on the contract record, not as billing line items (BR-002). The statement total must not
-                  be negative (FR-021b).
+                  Monthly rent should be billed as a base rent line item. Security deposits stay on the contract record,
+                  and the total billing amount must stay at zero or above.
                 </Alert>
                 <div className="rounded-2xl border border-stone-100 bg-stone-50/30 p-6">
                   <label className="flex cursor-pointer items-start gap-3">
@@ -384,13 +334,13 @@ export default function NewBillingPage() {
                     <div>
                       <span className="block text-xs font-black uppercase tracking-widest text-stone-900">Include Monthly Rent</span>
                       <span className="mt-1 block text-xs font-medium text-stone-400">
-                        Include monthly rent as defined in the master contract.
+                        Include the monthly rent saved on the active contract.
                       </span>
                     </div>
                   </label>
                   {includeBaseRent && (
                     <div className="mt-6 pt-6 border-t border-stone-100">
-                      <Field label="Contracted Monthly Yield (₱)">
+                      <Field label="Monthly rate (PHP)">
                         <Input
                           type="number"
                           readOnly
@@ -441,54 +391,52 @@ export default function NewBillingPage() {
                   </Field>
                 </div>
 
-                {totalDue < 0 ? (
+                {totalDue < 0 && (
                   <Alert variant="warning" title="Invalid total">
                     Preview total is negative. Adjust line items so the cycle total is zero or positive before submitting.
                   </Alert>
-                ) : null}
+                )}
 
                 <div className="flex flex-col justify-between gap-4 rounded-2xl border border-teal-600/10 bg-teal-50/30 p-8 sm:flex-row sm:items-center">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                         <TrendingUp size={14} className="text-teal-700" />
-                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-800/70">Statement Aggregate Yield</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-800/70">Total billing amount</p>
                     </div>
                     <p className="font-mono text-4xl font-black text-teal-900 tabular-nums">{formatPHP(totalDue)}</p>
                   </div>
                   <div className="flex items-start gap-3 max-w-sm rounded-xl bg-white/50 p-4 border border-teal-600/5">
                      <ShieldCheck size={16} className="text-teal-600 mt-0.5" />
                      <p className="text-[11px] font-medium text-teal-900/60 leading-relaxed">
-                       Postings to the authoritative ledger are permanent. Finalize all cycle items before confirming the statement.
+                       Billing is saved to the ledger as a new cycle. Review the line items before generating the bill.
                      </p>
                   </div>
                 </div>
               </div>
-            </Card>
+            </FormSection>
 
-            {apiError && <Alert variant="error" title="Post Failed">{apiError}</Alert>}
+            {apiError && <Alert variant="error" title="Could not generate billing">{apiError}</Alert>}
 
             <div className="flex flex-col-reverse gap-3 border-t border-stone-100 pt-8 sm:flex-row sm:items-center sm:justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => router.push("/billing")}
-                className="!h-11 rounded-xl px-8 text-[10px] font-bold uppercase tracking-widest"
+              <Link
+                href="/billing"
+                className={secondaryOutlineLinkClass + " px-10"}
               >
                 Cancel
-              </Button>
+              </Link>
               <Button
                 type="submit"
                 variant="primary"
                 loading={isSubmitting}
-                disabled={totalDue < 0}
-                className="!h-11 rounded-xl bg-teal-600 px-12 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700 active:scale-95"
+                disabled={totalDue < 0 || isSubmitting || readOnly}
+                className={primaryLinkCtaClass + " px-12 border-0"}
               >
                 Generate Bill
               </Button>
             </div>
           </form>
         )}
-      </motion.div>
-    </AppMain>
+      </div>
+    </StandardPage>
   );
 }

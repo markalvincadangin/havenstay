@@ -9,20 +9,27 @@ class TransactionLog extends Model
 {
     protected $table = 'transaction_logs';
 
-    protected $primaryKey = 'tx_log_id';
+    protected $primaryKey = 'id';
 
     public $timestamps = false;
 
     protected $fillable = [
-        'tx_name',
-        'started_at',
-        'completed_at',
+        'txn_reference',
+        'action',
         'status',
         'initiated_by',
-        'reference_entity',
-        'reference_id',
-        'details_json',
+        'details',
+        'error_message',
         'correlation_id',
+        'created_at',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'details' => 'array',
+        'created_at' => 'datetime',
     ];
 
     /**

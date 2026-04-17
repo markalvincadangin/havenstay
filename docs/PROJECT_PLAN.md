@@ -34,7 +34,7 @@ This Project Plan defines the execution strategy for designing, developing, and 
 | **[SRS.md](SRS.md)** | Product Requirements Specification |
 | **[SDD.md](SDD.md)** | System Design & Architecture Document |
 | **[TEST_PLAN.md](TEST_PLAN.md)** | Verification & Validation Strategy |
-| **[havenstay_schema.sql](../db/havenstay_schema.sql)** | Authoritative Database Schema |
+| **[havenstay_schema.sql](../backend/database/sql/havenstay_schema.sql)** | Authoritative Database Schema |
 
 ---
 

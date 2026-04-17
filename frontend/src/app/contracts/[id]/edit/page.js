@@ -1,28 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Calendar, RefreshCw, Wallet, ShieldCheck } from "lucide-react";
+import { Calendar, RefreshCw, Wallet, ShieldCheck } from "lucide-react";
 
-import { apiRequest } from "../../../../lib/api";
+import { apiRequest, fetcher } from "../../../../lib/api";
 import { canManageContracts } from "../../../../lib/auth";
 import { useAuthGuard } from "../../../../hooks/useAuthGuard";
 import { flattenApiErrors } from "../../../../lib/errors";
 import { parseMoneyInput } from "../../../../lib/money";
 import { useUnsavedChangesWarning } from "../../../../lib/useUnsavedChangesWarning";
 import Alert from "../../../_components/ui/Alert";
-import { AppMain } from "../../../_components/ui/AppShell";
 import Button from "../../../_components/ui/Button";
-import { Card } from "../../../_components/ui/Card";
 import { Field, Input, Select, Textarea } from "../../../_components/ui/Fields";
-import PageHeader from "../../../_components/ui/PageHeader";
 import Spinner from "../../../_components/ui/Spinner";
-import UserRoleBadge from "../../../_components/ui/UserRoleBadge";
 import Breadcrumbs from "../../../_components/ui/Breadcrumbs";
-import { CONTRACT_STATUS_LABELS } from "../../../../lib/constants";
+import {
+  primaryLinkCtaClass,
+  secondaryOutlineLinkClass,
+} from "../../../_components/ui/LinkTokens";
+import { CONTRACT_STATUS_LABELS, isContractActive } from "../../../../lib/constants";
 import { formatTenantDirectoryName } from "../../../../lib/formatters";
+import StandardPage from "../../../_components/ui/StandardPage";
+import PageHeaderActions from "../../../_components/ui/PageHeaderActions";
+import SectionCard from "../../../_components/ui/SectionCard";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -35,11 +39,9 @@ export default function EditContractPage() {
   const router = useRouter();
   const contractId = params?.id;
 
-  const { user: currentUser, authLoading } = useAuthGuard();
+  const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
-  const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
-  const [contract, setContract] = useState(null);
 
   const {
     register,
@@ -60,35 +62,31 @@ export default function EditContractPage() {
 
   useUnsavedChangesWarning(isDirty && !isSubmitting);
 
-  const loadContract = useCallback(async () => {
-    try {
-      const data = await apiRequest(`/api/contracts/${contractId}`, { method: "GET" });
-      setContract(data);
-      reset({
-        move_in_date: data.move_in_date?.split("T")[0] || "",
-        expected_move_out: data.expected_move_out_date?.split("T")[0] || "",
-        actual_move_out: data.actual_move_out_date?.split("T")[0] || "",
-        deposit_amount: data.deposit_amount ?? "",
-        monthly_rate: data.monthly_rate ?? "",
-        status: data.status || "active",
-        notes: data.notes || "",
-      });
-    } catch (error) {
-      setApiError(error?.message || "Failed to load contract.");
-    }
-  }, [contractId, reset]);
+  const { data: contractData, error: contractError } = useSWR(
+    !authLoading && currentUser && contractId ? `/api/contracts/${contractId}` : null,
+    fetcher
+  );
+
+  const loading = !contractData && !contractError;
+  const pageTitle = "Update Details";
+  const defaultSubtitle = "Edit contract registry record.";
+
+  const derivedApiError = contractError ? (contractError?.message || "Failed to load contract.") : "";
+  const apiErrorToShow = derivedApiError || apiError;
 
   useEffect(() => {
-    if (authLoading || !currentUser) return;
-    const fetchData = async () => {
-      try {
-        if (contractId) await loadContract();
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [authLoading, currentUser, contractId, loadContract]);
+    if (contractData) {
+      reset({
+        move_in_date: contractData.move_in_date?.split("T")[0] || "",
+        expected_move_out: contractData.expected_move_out_date?.split("T")[0] || "",
+        actual_move_out: contractData.actual_move_out_date?.split("T")[0] || "",
+        deposit_amount: contractData.deposit_amount ?? "",
+        monthly_rate: contractData.monthly_rate ?? "",
+        status: contractData.status || "active",
+        notes: contractData.notes || "",
+      });
+    }
+  }, [contractData, reset]);
 
   const onSubmit = async (values) => {
     setApiError("");
@@ -104,13 +102,14 @@ export default function EditContractPage() {
         setApiError("Enter valid amounts for deposit and monthly rate.");
         return;
       }
+      const isActiveContract = isContractActive(contractData?.status);
       const payload = {
         expected_move_out: values.expected_move_out || null,
-        actual_move_out: values.actual_move_out || null,
         deposit_amount: depositParsed,
         monthly_rate: monthlyParsed,
-        status: values.status,
         notes: values.notes || null,
+        // Active contracts must be completed via the move-out workflow.
+        ...(isActiveContract ? {} : { actual_move_out: values.actual_move_out || null, status: values.status }),
       };
 
       await apiRequest(`/api/contracts/${contractId}`, {
@@ -124,14 +123,19 @@ export default function EditContractPage() {
     }
   };
 
+  if (isUnauthorized) return null;
   if (authLoading || loading) {
     return (
-      <AppMain>
-        <Spinner label="Accessing agreement record…" />
-      </AppMain>
+      <StandardPage
+        title={pageTitle}
+        subtitle={defaultSubtitle}
+        loading
+        skeleton={<Spinner label="Accessing agreement record…" />}
+      />
     );
   }
 
+  const contract = contractData ?? null;
   const readOnly = !canManageContracts(currentUser);
   const recordLabel = contract ? `#CONTRACT-${contract.contract_id}` : "Agreement";
 
@@ -139,46 +143,36 @@ export default function EditContractPage() {
     contract?.bed_space?.bed_label || contract?.bedSpace?.bed_label || "—";
 
   return (
-    <AppMain>
+    <StandardPage
+      title={pageTitle}
+      subtitle={
+        contract
+          ? `Update agreement details for ${recordLabel}.`
+          : defaultSubtitle
+      }
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: "Contract Ledger", href: "/contracts" },
+            { label: recordLabel, href: `/contracts/${contractId}` },
+            { label: "Update Terms" },
+          ]}
+        />
+      }
+      actions={
+        <PageHeaderActions
+          backHref={`/contracts/${contractId}`}
+          backLabel="Back to Profile"
+          user={currentUser}
+        />
+      }
+    >
       <motion.div
         className="mx-auto mt-8 w-full max-w-4xl space-y-6"
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
-        <PageHeader
-          title="Update Details"
-          subtitle={
-            contract
-              ? `Edit operational lease fields for active agreement ${recordLabel}.`
-              : "Edit contract registry record."
-          }
-          breadcrumbs={
-            <Breadcrumbs
-              items={[
-                { label: "Contract Ledger", href: "/contracts" },
-                { label: recordLabel, href: `/contracts/${contractId}` },
-                { label: "Update Terms" },
-              ]}
-            />
-          }
-          actions={
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => router.push(`/contracts/${contractId}`)}
-                className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Agreement Profile"
-              >
-                <ArrowLeft size={18} aria-hidden />
-              </button>
-              <div className="border-l border-stone-200 pl-3">
-                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-              </div>
-            </div>
-          }
-        />
-
         <div className="space-y-6">
         {readOnly && (
           <Alert variant="warning" title="Restricted Access">
@@ -186,49 +180,45 @@ export default function EditContractPage() {
           </Alert>
         )}
 
-        {apiError && (
+        {apiErrorToShow && (
           <Alert variant="error" title="Submission Error">
-            {apiError}
+            {apiErrorToShow}
           </Alert>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600 shadow-sm">
-                  <RefreshCw size={16} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Basic Information</h2>
-              </div>
+          <SectionCard
+            title="Basic Information"
+            icon={RefreshCw}
+            iconClassName="bg-stone-100 text-stone-600"
+            rightElement={(
               <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-teal-600">
                 {recordLabel}
               </p>
-            </div>
-            <div className="grid gap-6 p-8 sm:grid-cols-2">
-              <Field label="Linked Resident (read-only)">
+            )}
+          >
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Resident (read-only)">
                 <div className="flex h-11 items-center rounded-xl border border-stone-100 bg-stone-50/50 px-4 text-sm font-bold text-stone-700">
                   {contract?.tenant ? formatTenantDirectoryName(contract.tenant) : "—"}
                 </div>
               </Field>
-              <Field label="Inventory Assignment (read-only)">
+              <Field label="Assigned Room (read-only)">
                 <div className="flex h-11 items-center rounded-xl border border-stone-100 bg-stone-50/50 px-4 text-sm font-bold text-stone-700">
                   {contract?.room?.room_code ? `${contract.room.room_code} · ${bedLabel}` : "—"}
                 </div>
               </Field>
             </div>
-          </Card>
+          </SectionCard>
 
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm">
-                <Calendar size={16} aria-hidden />
-              </div>
-              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Lease Terms</h2>
-            </div>
-            <div className="space-y-8 p-8">
+          <SectionCard
+            title="Lease Terms"
+            icon={Calendar}
+            iconClassName="bg-teal-50 text-teal-600"
+          >
+            <div className="space-y-8">
               <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Inception Date (read-only)">
+                <Field label="Move-in Date (read-only)">
                   <Input
                     disabled
                     className="!h-11 border-stone-100 bg-stone-50/50 font-bold"
@@ -238,7 +228,7 @@ export default function EditContractPage() {
                 </Field>
                 <Field label="Operational Status" error={errors.status?.message}>
                   <Select
-                    disabled={readOnly}
+                    disabled={readOnly || isContractActive(contract?.status)}
                     className="!h-11 border-stone-200 font-black text-teal-700 uppercase tracking-widest text-[10px]"
                     hasError={Boolean(errors.status)}
                     {...register("status")}
@@ -272,7 +262,7 @@ export default function EditContractPage() {
                 <Field label="Actual Move-Out" error={errors.actual_move_out?.message}>
                   <Input
                     type="date"
-                    disabled={readOnly}
+                    disabled={readOnly || isContractActive(contract?.status)}
                     className="!h-11 border-stone-200"
                     hasError={Boolean(errors.actual_move_out)}
                     {...register("actual_move_out")}
@@ -280,17 +270,15 @@ export default function EditContractPage() {
                 </Field>
               </div>
             </div>
-          </Card>
+          </SectionCard>
 
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shadow-sm">
-                <Wallet size={16} aria-hidden />
-              </div>
-              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Financial Terms</h2>
-            </div>
-            <div className="grid gap-6 p-8 sm:grid-cols-2">
-              <Field label="Lease Monthly Rate" required error={errors.monthly_rate?.message}>
+          <SectionCard
+            title="Financial Terms"
+            icon={Wallet}
+            iconClassName="bg-emerald-50 text-emerald-600"
+          >
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Monthly Rent" required error={errors.monthly_rate?.message}>
                 <Input
                   type="number"
                   step="0.01"
@@ -303,7 +291,7 @@ export default function EditContractPage() {
                   })}
                 />
               </Field>
-              <Field label="Security Deposit" required error={errors.deposit_amount?.message}>
+              <Field label="Deposit" required error={errors.deposit_amount?.message}>
                 <Input
                   type="number"
                   step="0.01"
@@ -316,33 +304,30 @@ export default function EditContractPage() {
                 />
               </Field>
             </div>
-          </Card>
+          </SectionCard>
 
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Notes</h2>
-            </div>
-            <div className="p-8">
-              <Field label="Internal Protocol Notes">
-                <Textarea
-                  rows={3}
-                  disabled={readOnly}
-                  placeholder="Lease notes, specific conditions, etc."
-                  className="border-stone-200"
-                  {...register("notes", {
-                    maxLength: { value: 1000, message: "Max 1,000 characters" },
-                  })}
-                />
-              </Field>
-            </div>
-          </Card>
+          <SectionCard
+            title="Notes"
+          >
+            <Field label="Special Notes">
+              <Textarea
+                rows={3}
+                disabled={readOnly}
+                placeholder="Lease notes, specific conditions, etc."
+                className="border-stone-200"
+                {...register("notes", {
+                  maxLength: { value: 1000, message: "Max 1,000 characters" },
+                })}
+              />
+            </Field>
+          </SectionCard>
 
-          <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="secondary"
               onClick={() => router.push(`/contracts/${contractId}`)}
-              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              className={secondaryOutlineLinkClass + " px-10 border-stone-200"}
             >
               Cancel
             </Button>
@@ -351,7 +336,7 @@ export default function EditContractPage() {
               variant="primary"
               loading={isSubmitting}
               disabled={readOnly || isSubmitting}
-              className="!h-12 min-w-[180px] rounded-xl bg-teal-600 text-[10px] font-black uppercase tracking-widest shadow-xl shadow-teal-900/20 hover:bg-teal-700 active:scale-95"
+              className={primaryLinkCtaClass + " px-12 border-0"}
             >
               Save Changes
             </Button>
@@ -366,6 +351,6 @@ export default function EditContractPage() {
           </p>
         </div>
       </motion.div>
-    </AppMain>
+    </StandardPage>
   );
 }

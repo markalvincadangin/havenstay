@@ -47,8 +47,9 @@ const ADMIN_NAV = ADMIN_NAV_ITEMS.map((item) => ({
 
 
 
-export default function Sidebar({ pathname, user, onLogout, onToggleHelp }) {
+export default function Sidebar({ pathname, user, loading: _loading, onLogout, onToggleHelp }) {
   const isAdmin = canManageUsers(user);
+  const showAdminNav = isAdmin;
 
   return (
     <aside className="hidden md:flex md:w-20 lg:w-64 shrink-0 bg-slate-900 text-white flex-col shadow-2xl z-20 sticky top-0 h-screen overflow-y-auto scrollbar-hide">
@@ -67,7 +68,7 @@ export default function Sidebar({ pathname, user, onLogout, onToggleHelp }) {
             <NavItem key={item.href} item={item} active={matchesPath(pathname, item.href)} />
           ))}
         </nav>
-        {isAdmin && (
+        {showAdminNav && (
           <>
             <div className="mt-3 border-t border-white/10 pt-3" />
             <nav className="space-y-0.5">
@@ -97,7 +98,11 @@ export default function Sidebar({ pathname, user, onLogout, onToggleHelp }) {
           type="button"
           title="Logout"
           className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white/60 transition-all hover:bg-white/5 hover:text-rose-400 hover:border-rose-400/30"
-          onClick={onLogout}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onLogout();
+          }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
           <span className="hidden lg:block">Logout</span>

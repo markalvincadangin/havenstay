@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Room\StoreRoomRequest;
+use App\Http\Requests\Room\UpdateRoomRequest;
 use App\Models\BedSpace;
 use App\Models\Room;
-use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\RoomService;
 use App\Support\PaginationResponse;
@@ -14,27 +16,43 @@ use Illuminate\Http\Request;
 
 class RoomController extends Controller
 {
+    use HandlesAuthorization;
+
     /**
-     * FR-012: List all rooms
+     * FR-012: List all rooms with bed space relationships.
      */
     public function index(Request $request): JsonResponse
     {
+        if (! AuthorizationService::canViewReports($request->user())) {
+            return $this->forbidden($request, 'rooms.index', 'Unauthorized: you do not have permission to view rooms.');
+        }
+
         $validated = $request->validate(array_merge([
             'q' => ['nullable', 'string', 'max:200'],
-            'status' => ['nullable', 'string', 'in:available,unavailable,maintenance'],
+            'status' => ['nullable', 'string', 'in:vacant,partially_occupied,fully_occupied,maintenance,archived'],
+            'type' => ['nullable', 'string', 'in:solo,shared'],
             'room_type' => ['nullable', 'string', 'in:solo,shared'],
         ], PaginationResponse::queryRules()));
 
         $pageParams = PaginationResponse::normalizePageParams($validated);
 
-        $query = Room::with('bedSpaces')->orderBy('room_code');
+        $query = Room::query()->with('bedSpaces')->orderBy('room_code');
 
         if (! empty($validated['status'])) {
-            $query->where('status', $validated['status']);
+            if ($validated['status'] === 'archived') {
+                $query->onlyTrashed();
+            } else {
+                $query->where('status', $validated['status']);
+            }
+        } else {
+            // "All Statuses" or default includes archived rooms for forensic integrity, 
+            // similar to the Tenant module.
+            $query->withTrashed();
         }
 
-        if (! empty($validated['room_type'])) {
-            $query->where('room_type', $validated['room_type']);
+        $type = $validated['type'] ?? $validated['room_type'] ?? null;
+        if (! empty($type)) {
+            $query->where('room_type', $type);
         }
 
         if (! empty($validated['q'])) {
@@ -52,100 +70,63 @@ class RoomController extends Controller
     }
 
     /**
-     * FR-012, FR-013: Create a new room
      * TC-ROOM-001
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreRoomRequest $request): JsonResponse
     {
-        // Check authorization: only admin/staff
         if (! AuthorizationService::canManageRooms($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'rooms.create');
-
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin or Staff can create rooms.',
-            ], 403);
+            return $this->forbidden($request, 'rooms.create', 'Unauthorized: only Admin or Staff can create rooms.');
         }
 
-        $validated = $request->validate([
-            'room_code' => ['required', 'string', 'max:20', 'unique:rooms'],
-            'room_type' => ['required', 'in:solo,shared'],
-            'capacity' => ['sometimes', 'integer', 'min:1'],
-            'monthly_rate' => ['required', 'numeric', 'min:0'],
-            'status' => ['sometimes', 'in:available,unavailable,maintenance'],
-            'amenities' => ['nullable', 'string'],
-            'description' => ['nullable', 'string'],
-            'bed_spaces' => ['sometimes', 'array'],
-            'bed_spaces.*.bed_label' => ['required_with:bed_spaces', 'string', 'max:20'],
-            'bed_spaces.*.status' => ['sometimes', 'in:vacant,occupied,maintenance'],
-        ]);
+        $validated = $request->validated();
 
-        $room = RoomService::create($validated);
+        $room = RoomService::create($request->user(), $validated);
 
         return response()->json([
             'message' => 'Room created successfully.',
-            'room' => $room->load('bedSpaces'),
+            'data' => $room->load('bedSpaces'),
         ], 201);
     }
 
     /**
-     * FR-012: Get a specific room
      */
     public function show(Request $request, Room $room): JsonResponse
     {
-        return response()->json($room->load('bedSpaces'));
+        if (! AuthorizationService::canViewReports($request->user())) {
+            return $this->forbidden($request, 'rooms.show', 'Unauthorized: you do not have permission to view room details.');
+        }
+
+        return response()->json([
+            'message' => 'Room retrieved successfully.',
+            'data' => RoomService::detailPayload($room),
+        ]);
     }
 
     /**
-     * FR-012, FR-013: Update a room
      */
-    public function update(Request $request, Room $room): JsonResponse
+    public function update(UpdateRoomRequest $request, Room $room): JsonResponse
     {
-        // Check authorization
         if (! AuthorizationService::canManageRooms($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'rooms.update');
-
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin or Staff can update rooms.',
-            ], 403);
+            return $this->forbidden($request, 'rooms.update', 'Unauthorized: only Admin or Staff can update rooms.');
         }
 
-        $validated = $request->validate([
-            'room_type' => ['sometimes', 'in:solo,shared'],
-            'capacity' => ['sometimes', 'integer', 'min:1'],
-            'monthly_rate' => ['sometimes', 'numeric', 'min:0'],
-            'status' => ['sometimes', 'in:available,unavailable,maintenance'],
-            'amenities' => ['sometimes', 'nullable', 'string'],
-            'description' => ['sometimes', 'nullable', 'string'],
-            'bed_spaces' => ['sometimes', 'array'],
-            'bed_spaces.*.bed_space_id' => ['sometimes', 'nullable', 'integer', 'exists:bed_spaces,bed_space_id'],
-            'bed_spaces.*.bed_label' => ['required_with:bed_spaces', 'string', 'max:20'],
-            'bed_spaces.*.status' => ['sometimes', 'in:vacant,occupied,maintenance'],
-        ]);
+        $validated = $request->validated();
 
-        $room = RoomService::update($room, $validated);
+        $room = RoomService::update($request->user(), $room, $validated);
 
         return response()->json([
             'message' => 'Room updated successfully.',
-            'room' => $room->load('bedSpaces'),
+            'data' => $room->load('bedSpaces'),
         ]);
     }
 
     /**
-     * FR-014: Add bed spaces to a shared room
      * TC-BED-001
      */
     public function addBedSpace(Request $request, Room $room): JsonResponse
     {
-        // Check authorization
         if (! AuthorizationService::canManageRooms($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'bed_spaces.create');
-
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin or Staff can add bed spaces.',
-            ], 403);
+            return $this->forbidden($request, 'bed_spaces.create', 'Unauthorized: only Admin or Staff can add bed spaces.');
         }
 
         $validated = $request->validate([
@@ -153,11 +134,11 @@ class RoomController extends Controller
         ]);
 
         try {
-            $bedSpace = RoomService::addBedSpace($room, $validated['bed_label']);
+            $bedSpace = RoomService::addBedSpace($request->user(), $room, $validated['bed_label']);
 
             return response()->json([
                 'message' => 'Bed space added successfully.',
-                'bed_space' => $bedSpace,
+                'data' => $bedSpace,
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -167,27 +148,20 @@ class RoomController extends Controller
     }
 
     /**
-     * FR-014, TC-BED-002: Mark a bed space as occupied
      * Used by tests to verify double-occupancy prevention
      */
     public function occupyBedSpace(Request $request, BedSpace $bedSpace): JsonResponse
     {
-        // Check authorization
         if (! AuthorizationService::canManageRooms($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'bed_spaces.occupy');
-
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin or Staff can occupy bed spaces.',
-            ], 403);
+            return $this->forbidden($request, 'bed_spaces.occupy', 'Unauthorized: only Admin or Staff can occupy bed spaces.');
         }
 
         try {
-            $bedSpace = RoomService::occupyBedSpace($bedSpace);
+            $bedSpace = RoomService::occupyBedSpace($request->user(), $bedSpace);
 
             return response()->json([
                 'message' => 'Bed space occupied successfully.',
-                'bed_space' => $bedSpace,
+                'data' => $bedSpace,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -197,52 +171,69 @@ class RoomController extends Controller
         }
     }
     /**
-     * FR-012: Room availability summary
+     * Provide aggregate stats for Room Inventory dashboard.
      */
-    public function availability(): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
+        if (! AuthorizationService::canViewReports($request->user())) {
+            return $this->forbidden($request, 'rooms.stats', 'Unauthorized: you do not have permission to view room statistics.');
+        }
+
+        return response()->json([
+            'message' => 'Room statistics retrieved successfully.',
+            'data' => RoomService::statsSummary(),
+        ]);
+    }
+
+    /**
+     * FR-015: Check bed availability.
+     */
+    public function availability(Request $request): JsonResponse
+    {
+        if (! AuthorizationService::canViewReports($request->user())) {
+            return $this->forbidden($request, 'rooms.availability', 'Unauthorized: you do not have permission to view room availability.');
+        }
+
         $availability = RoomService::getAllAvailability();
 
         return response()->json([
-            'availability' => $availability,
+            'message' => 'Room availability retrieved successfully.',
+            'data' => $availability,
         ]);
     }
 
 
     /**
-     * Archive a room (Soft Delete)
+     * Archive a room (Soft Delete) - FR-012a
      */
     public function archive(Request $request, Room $room): JsonResponse
     {
         if (! AuthorizationService::canManageRooms($request->user())) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return $this->forbidden($request, 'rooms.archive', 'Unauthorized: only Admin or Staff can archive rooms.');
         }
 
-        $room->delete(); // Eloquent SoftDeletes
+        $room = RoomService::archive($request->user(), $room);
 
         return response()->json([
             'message' => 'Room archived successfully.',
-            'room' => $room,
+            'data' => $room,
         ]);
     }
 
-
     /**
-     * Restore an archived room
+     * Restore an archived room - FR-012a
      */
     public function restore(Request $request, int $id): JsonResponse
     {
         if (! AuthorizationService::canManageRooms($request->user())) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return $this->forbidden($request, 'rooms.restore', 'Unauthorized: only Admin or Staff can restore rooms.');
         }
 
-
-        $room = Room::withTrashed()->findOrFail($id);
-        $room->restore();
+        $room = RoomService::restore($request->user(), $id);
 
         return response()->json([
             'message' => 'Room restored successfully.',
-            'room' => $room,
+            'data' => $room,
         ]);
     }
 }

@@ -19,29 +19,64 @@ function getToken() {
     return localToken;
   }
 
-  const cookieToken = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("havenstay_token="))
-    ?.split("=")[1];
+  return null;
+}
 
-  return cookieToken ? decodeURIComponent(cookieToken) : null;
+/** Dispatched once per 401 burst so React can redirect without full reload or parallel storms. */
+export const UNAUTHORIZED_EVENT = "havenstay:unauthorized";
+
+/**
+ * Normalize API success envelopes to a single consumer contract.
+ * Backend standard: { message, data }. We unwrap to `data`.
+ */
+function unwrapSuccessBody(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return body;
+  }
+
+  // Keep top-level pagination meta shape used by list endpoints.
+  if (
+    Object.prototype.hasOwnProperty.call(body, "data") &&
+    Object.prototype.hasOwnProperty.call(body, "meta")
+  ) {
+    return body;
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(body, "data") &&
+    Object.prototype.hasOwnProperty.call(body, "message")
+  ) {
+    return body.data;
+  }
+
+  return body;
 }
 
 export async function apiRequest(path, options = {}) {
+  const { skipAuthRedirect = false, ...fetchOptions } = options;
   const token = getToken();
   const headers = {
     "Content-Type": "application/json",
-    ...(options.headers || {}),
+    ...(fetchOptions.headers || {}),
   };
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+    });
+  } catch (networkError) {
+    throw new ApiError(
+      networkError?.message || "Network error — backend may be unreachable.",
+      0,
+      null,
+    );
+  }
 
   const contentType = response.headers.get("content-type") || "";
   const isJson = contentType.includes("application/json");
@@ -50,8 +85,15 @@ export async function apiRequest(path, options = {}) {
   if (!response.ok) {
     if (response.status === 401) {
       clearAuthToken();
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        window.location.href = "/login";
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("havenstay_user");
+        } catch {
+          /* ignore */
+        }
+        if (!skipAuthRedirect) {
+          window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+        }
       }
     }
 
@@ -62,23 +104,23 @@ export async function apiRequest(path, options = {}) {
     );
   }
 
-  return body;
+  return unwrapSuccessBody(body);
 }
 
 export function setAuthToken(token) {
   if (typeof window !== "undefined") {
     localStorage.setItem("havenstay_token", token);
-    document.cookie = `havenstay_token=${encodeURIComponent(token)}; Path=/; Max-Age=2592000; SameSite=Lax`;
   }
 }
 
 export function clearAuthToken() {
   if (typeof window !== "undefined") {
     localStorage.removeItem("havenstay_token");
-    document.cookie = "havenstay_token=; Path=/; Max-Age=0; SameSite=Lax";
   }
 }
 
 export function hasAuthToken() {
   return Boolean(getToken());
 }
+
+export const fetcher = (url) => apiRequest(url, { method: "GET" });

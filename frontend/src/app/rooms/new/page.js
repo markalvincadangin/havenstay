@@ -3,38 +3,28 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
-import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ShieldCheck, Box, RefreshCw, Trash2, Plus } from "lucide-react";
+import { ShieldCheck, Box, RefreshCw, Trash2, Plus } from "lucide-react";
 
 import { apiRequest } from "../../../lib/api";
 import { canManageRooms } from "../../../lib/auth";
-import { useAuthGuard } from "../../../hooks/useAuthGuard";
-import { flattenApiErrors } from "../../../lib/errors";
+import { applyServerFieldErrors } from "../../../lib/forms";
 import { parseMoneyInput } from "../../../lib/money";
 import { useUnsavedChangesWarning } from "../../../lib/useUnsavedChangesWarning";
 import Alert from "../../_components/ui/Alert";
-import { AppMain } from "../../_components/ui/AppShell";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import Button from "../../_components/ui/Button";
-import { Card } from "../../_components/ui/Card";
 import { Field, Input, Select, Textarea } from "../../_components/ui/Fields";
-import PageHeader from "../../_components/ui/PageHeader";
-import Spinner from "../../_components/ui/Spinner";
-import UserRoleBadge from "../../_components/ui/UserRoleBadge";
-import { primaryLinkCtaClass, secondaryOutlineLinkClass } from "../../_components/ui/LinkTokens";
 import Link from "next/link";
 import { ROOM_TYPE_LABELS, BED_STATUS_LABELS } from "../../../lib/constants";
-
-const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.2, ease: "easeOut" },
-};
+import { primaryLinkCtaClass, secondaryOutlineLinkClass } from "../../_components/ui/LinkTokens";
+import StandardPage from "../../_components/ui/StandardPage";
+import { FormSection } from "../../_components/ui/FormSection";
+import PageHeaderActions from "../../_components/ui/PageHeaderActions";
+import { useAuth } from "../../_context/AuthContext";
 
 export default function NewRoomPage() {
   const router = useRouter();
-  const { user: currentUser, authLoading } = useAuthGuard();
-  const shouldReduceMotion = useReducedMotion();
+  const { user: currentUser } = useAuth();
   const [apiError, setApiError] = useState("");
 
   const {
@@ -42,6 +32,7 @@ export default function NewRoomPage() {
     handleSubmit,
     setValue,
     control,
+    setError,
     formState: { errors, isSubmitting, isDirty },
   } = useForm({
     defaultValues: {
@@ -50,7 +41,7 @@ export default function NewRoomPage() {
       room_type: "solo",
       capacity: "1",
       monthly_rate: "",
-      status: "available",
+      status: "vacant",
       amenities: "",
       description: "",
       bed_spaces: [{ bed_label: "Bed 1", status: "vacant" }],
@@ -68,11 +59,10 @@ export default function NewRoomPage() {
 
   useEffect(() => {
     if (physicalNumber) {
-      const prefix = roomType === "solo" ? "SOLO" : "SHRD";
-      const generatedCode = `${prefix}-${physicalNumber.toUpperCase()}`;
+      const generatedCode = `UNIT-${String(physicalNumber).trim().toUpperCase()}`;
       setValue("room_code", generatedCode, { shouldDirty: true });
     }
-  }, [roomType, physicalNumber, setValue]);
+  }, [physicalNumber, setValue]);
 
   useEffect(() => {
     if (roomType === "solo") {
@@ -97,12 +87,17 @@ export default function NewRoomPage() {
         room_type: values.room_type,
         capacity: Number(values.capacity),
         monthly_rate: rate,
-        status: values.status || "available",
+        status: values.status || "vacant",
         amenities: values.amenities || null,
         description: values.description || null,
       };
 
       if (values.room_type === "shared") {
+        if (!values.bed_spaces || values.bed_spaces.length < 2) {
+          setApiError("Shared rooms must have at least 2 bed spaces.");
+          return;
+        }
+
         payload.bed_spaces = values.bed_spaces.map((b) => ({
           bed_label: b.bed_label,
           status: b.status || "vacant",
@@ -114,145 +109,114 @@ export default function NewRoomPage() {
         body: JSON.stringify(payload),
       });
 
-      const roomId = response?.room?.room_id;
+      const roomId = response?.room_id;
       if (roomId) router.push(`/rooms/${roomId}`);
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+       applyServerFieldErrors(error, setError, { setApiError });
     }
   };
-
-  if (authLoading) {
-    return (
-      <AppMain>
-        <Spinner label="Loading form…" />
-      </AppMain>
-    );
-  }
 
   const readOnly = !canManageRooms(currentUser);
 
   return (
-    <AppMain>
-      <motion.div
-        className="mx-auto mt-8 w-full max-w-4xl space-y-6"
-        initial={shouldReduceMotion ? false : pageVariants.initial}
-        animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
-      >
-        <PageHeader
-          title="Register Unit"
-          subtitle="Add a unit record and configure initial bed spaces."
-          breadcrumbs={
-            <Breadcrumbs items={[{ label: "Room Inventory", href: "/rooms" }, { label: "Register Unit" }]} />
-          }
-          actions={
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/rooms")}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Room Inventory"
-                title="Back to Room Inventory"
-              >
-                <ArrowLeft size={18} aria-hidden />
-              </button>
-              <div className="border-l border-stone-200 pl-3">
-                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-              </div>
-            </div>
-          }
+    <StandardPage
+      title="Register Unit"
+      subtitle="Add a unit record and configure initial bed spaces."
+      breadcrumbs={
+        <Breadcrumbs items={[{ label: "Room Inventory", href: "/rooms" }, { label: "Register Unit" }]} />
+      }
+      actions={
+        <PageHeaderActions
+          backHref="/rooms"
+          backLabel="Back to Room Inventory"
+          user={currentUser}
         />
+      }
+    >
+      <form onSubmit={handleSubmit(onSubmit)} className="mx-auto w-full max-w-4xl space-y-6">
+        <FormSection
+          title="Basic Information"
+          icon={RefreshCw}
+          rightElement={<span className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Required fields</span>}
+        >
+          <div className="space-y-8">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field 
+                label="Room Number" 
+                required 
+                error={errors.physical_number?.message}
+                helpText="The number displayed on the unit door (e.g. 101)."
+              >
+                <Input
+                  autoFocus
+                  placeholder="e.g. 101"
+                  className="!h-11 border-stone-200 focus:border-teal-500/50"
+                  disabled={readOnly}
+                  {...register("physical_number", { required: "Room number is required." })}
+                />
+              </Field>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
-                  <RefreshCw size={14} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Basic Information</h2>
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Required fields</span>
+              <Field label="Room Code" required error={errors.room_code?.message} helpText="System identifier for internal tracking.">
+                <Input
+                  readOnly
+                  placeholder="UNIT-101"
+                  className="!h-11 border-stone-200 bg-stone-50 font-mono text-stone-600 cursor-not-allowed"
+                  {...register("room_code", { required: "Room code missing." })}
+                />
+              </Field>
             </div>
 
-            <div className="space-y-8 p-8">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Physical number" required error={errors.physical_number?.message}>
-                  <Input
-                    autoFocus
-                    placeholder="e.g. 101"
-                    className="!h-11 border-stone-200 focus:border-teal-500/50"
-                    disabled={readOnly}
-                    {...register("physical_number", { required: "Physical number is required." })}
-                  />
-                </Field>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field label="Monthly Rent (PHP)" required error={errors.monthly_rate?.message}>
+                <Input
+                  type="number"
+                  step="1"
+                  placeholder="5000"
+                  className="!h-11 border-stone-200 font-mono focus:border-teal-500/50 tabular-nums"
+                  disabled={readOnly}
+                  {...register("monthly_rate", { required: "Rent rate is required.", min: 100 })}
+                />
+              </Field>
 
-                <Field label="Formal room code" required error={errors.room_code?.message} helpText="Auto-generated formal identifier.">
-                  <Input
-                    readOnly
-                    placeholder="SOLO-101"
-                    className="!h-11 border-stone-200 bg-stone-50 font-mono text-stone-600 cursor-not-allowed"
-                    {...register("room_code", { required: "Room code missing." })}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Base rate (PHP)" required error={errors.monthly_rate?.message}>
-                  <Input
-                    type="number"
-                    step="1"
-                    placeholder="5000"
-                    className="!h-11 border-stone-200 font-mono focus:border-teal-500/50 tabular-nums"
-                    disabled={readOnly}
-                    {...register("monthly_rate", { required: "Rate is required.", min: 100 })}
-                  />
-                </Field>
-
-                <Field label="Unit category" required error={errors.room_type?.message}>
-                  <Select className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("room_type")}>
-                    {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
+              <Field label="Room Category" required error={errors.room_type?.message}>
+                <Select className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("room_type")}>
+                  {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </Select>
+              </Field>
             </div>
-          </Card>
+          </div>
+        </FormSection>
 
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                  <ShieldCheck size={14} aria-hidden />
-                </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Bed Assignments</h2>
-              </div>
+        {roomType === "shared" && (
+          <FormSection
+            title="Room Layout"
+            icon={ShieldCheck}
+            rightElement={
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                  {roomType === "solo" ? "Single bed" : `${fields.length} beds`}
+                  {fields.length} beds
                 </span>
-                {roomType === "shared" ? (
-                  <button
-                    type="button"
-                    onClick={() => append({ bed_label: `Bed ${fields.length + 1}`, status: "vacant" })}
-                    disabled={readOnly}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-50 px-3 text-[10px] font-black uppercase tracking-widest text-teal-700 transition-colors hover:bg-teal-100 disabled:opacity-50"
-                  >
-                    <Plus size={12} strokeWidth={3} />
-                    Add bed
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => append({ bed_label: `Bed ${fields.length + 1}`, status: "vacant" })}
+                  disabled={readOnly}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-50 px-3 text-[10px] font-black uppercase tracking-widest text-teal-700 transition-colors hover:bg-teal-100 disabled:opacity-50"
+                >
+                  <Plus size={12} strokeWidth={3} />
+                  Add bed
+                </button>
               </div>
-            </div>
-
-            <div className="space-y-4 p-8">
+            }
+          >
+            <div className="space-y-4">
               {fields.map((field, index) => (
                 <div
                   key={field.id}
                   className="flex items-end gap-3 rounded-xl border border-stone-100 bg-stone-50 p-4 shadow-sm"
                 >
-                  <Field label="Bed label" className="flex-1">
+                  <Field label="Bed Label" className="flex-1">
                     <Input
                       placeholder="Bed A"
                       className="!h-10 border-stone-200 bg-white font-mono"
@@ -266,7 +230,7 @@ export default function NewRoomPage() {
                       <option value="maintenance">{BED_STATUS_LABELS.maintenance}</option>
                     </Select>
                   </Field>
-                  {roomType === "shared" && fields.length > 1 ? (
+                  {fields.length > 2 ? (
                     <button
                       type="button"
                       onClick={() => remove(index)}
@@ -276,50 +240,48 @@ export default function NewRoomPage() {
                     >
                       <Trash2 size={16} aria-hidden />
                     </button>
-                  ) : null}
+                  ) : (
+                    <div className="mb-0.5 flex h-10 w-10 items-center justify-center rounded-lg bg-stone-100 text-stone-400" title="Shared rooms must have at least 2 beds">
+                      <Trash2 size={16} className="opacity-30" />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-          </Card>
+          </FormSection>
+        )}
 
-          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-            <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-500">
-                <Box size={14} aria-hidden />
-              </div>
-              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Description</h2>
-            </div>
-            <div className="space-y-6 p-8">
-              <Field label="Amenities" helpText="e.g. AC, Wi-Fi, desk">
-                <Textarea rows={3} placeholder="List unit amenities…" className="border-stone-200" disabled={readOnly} {...register("amenities")} />
-              </Field>
-              <Field label="Staff notes" helpText="Internal staff context only.">
-                <Textarea rows={3} placeholder="Optional notes…" className="border-stone-200" disabled={readOnly} {...register("description")} />
-              </Field>
-            </div>
-          </Card>
-
-          {apiError && <Alert variant="error" title="Could not register room">{apiError}</Alert>}
-
-          <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end">
-            <Link
-              href="/rooms"
-              className={secondaryOutlineLinkClass + " px-8"}
-            >
-              Cancel
-            </Link>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={isSubmitting}
-              disabled={readOnly || isSubmitting}
-              className={primaryLinkCtaClass + " px-12 border-0 shadow-lg shadow-teal-900/10"}
-            >
-              Register Unit
-            </Button>
+        <FormSection title="Important Notes" icon={Box}>
+          <div className="space-y-6">
+            <Field label="Included Amenities" helpText="e.g. AC, Wi-Fi, personal desk">
+              <Textarea rows={3} placeholder="List room amenities…" className="border-stone-200 focus:border-teal-500/50" disabled={readOnly} {...register("amenities")} />
+            </Field>
+            <Field label="Management Notes" helpText="Internal staff context only (not visible to tenants).">
+              <Textarea rows={3} placeholder="Optional staff notes…" className="border-stone-200 focus:border-teal-500/50" disabled={readOnly} {...register("description")} />
+            </Field>
           </div>
-        </form>
-      </motion.div>
-    </AppMain>
+        </FormSection>
+
+        {apiError && <Alert variant="error" title="Could not register room">{apiError}</Alert>}
+
+        <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:justify-end">
+          <Link
+            href="/rooms"
+            className={secondaryOutlineLinkClass + " px-10"}
+          >
+            Cancel
+          </Link>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={isSubmitting}
+            disabled={readOnly || isSubmitting}
+            className={primaryLinkCtaClass + " px-12 border-0"}
+          >
+            Register Unit
+          </Button>
+        </div>
+      </form>
+    </StandardPage>
   );
 }

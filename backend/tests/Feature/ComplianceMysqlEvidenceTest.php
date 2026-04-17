@@ -27,14 +27,14 @@ class ComplianceMysqlEvidenceTest extends TestCase
         $this->assertTrue(Schema::hasTable('audit_logs'));
     }
 
-    public function test_mysql_supports_app_user_id_session_variable(): void
+    public function test_mysql_supports_current_user_id_session_variable(): void
     {
         if (DB::getDriverName() !== 'mysql') {
-            $this->markTestSkipped('SET @app_user_id requires MySQL (triggers read session vars per CLAUDE.md §5.4).');
+            $this->markTestSkipped('SET @current_user_id requires MySQL (triggers read session vars per SDD §5.4).');
         }
 
-        DB::statement('SET @app_user_id = ?', [1]);
-        $row = DB::selectOne('SELECT @app_user_id AS v');
+        DB::statement('SET @current_user_id = ?', [1]);
+        $row = DB::selectOne('SELECT @current_user_id AS v');
 
         $this->assertSame(1, (int) $row->v);
     }

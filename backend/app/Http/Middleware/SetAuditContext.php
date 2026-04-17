@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\Response;
 class SetAuditContext
 {
     /**
-     * Set the database-level audit user context (@app_user_id).
+     * Set the database-level audit user context (@current_user_id).
      * This ensures that database triggers capture the correct actor ID.
      */
     public function handle(Request $request, Closure $next): Response

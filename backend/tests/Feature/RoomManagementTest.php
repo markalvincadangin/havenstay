@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\BedSpace;
+use App\Models\Contract;
 use App\Models\Role;
 use App\Models\Room;
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -58,13 +60,13 @@ class RoomManagementTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5000.00,
-            'status' => 'available',
+            'status' => 'vacant',
             'amenities' => 'Air conditioning, Free WiFi',
             'description' => 'Single occupancy room',
         ]);
 
         $response->assertCreated();
-        $response->assertJsonStructure(['message', 'room']);
+        $response->assertJsonStructure(['message', 'data']);
 
         // Verify room stored in database
         $this->assertDatabaseHas('rooms', [
@@ -72,13 +74,13 @@ class RoomManagementTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5000.00,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         // Verify audit log entry for INSERT action (Trigger)
         $this->assertTriggerAuditLog([
             'user_id' => $this->adminUser->user_id,
-            'entity_name' => 'rooms',
+            'target_table' => 'rooms',
             'action' => 'INSERT',
         ]);
     }
@@ -98,7 +100,7 @@ class RoomManagementTest extends TestCase
         $response->assertForbidden();
 
         // Verify access_denied audit log
-        $this->assertDatabaseHas('audit_logs', [
+        $this->assertTriggerAuditLog([
             'user_id' => $this->viewerUser->user_id,
             'action' => 'access_denied',
         ]);
@@ -114,7 +116,7 @@ class RoomManagementTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3000.00,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         // Add first bed space
@@ -132,7 +134,7 @@ class RoomManagementTest extends TestCase
         // Verify audit log for INSERT action
         $this->assertTriggerAuditLog([
             'user_id' => $this->adminUser->user_id,
-            'entity_name' => 'bed_spaces',
+            'target_table' => 'bed_spaces',
             'action' => 'INSERT',
         ]);
     }
@@ -147,7 +149,7 @@ class RoomManagementTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3000.00,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
 
         $bedSpace = BedSpace::create([
@@ -168,8 +170,8 @@ class RoomManagementTest extends TestCase
         // Verify audit log for UPDATE action
         $this->assertTriggerAuditLog([
             'user_id' => $this->adminUser->user_id,
-            'entity_name' => 'bed_spaces',
-            'entity_id' => (string) $bedSpace->bed_space_id,
+            'target_table' => 'bed_spaces',
+            'record_id' => (string) $bedSpace->bed_space_id,
             'action' => 'UPDATE',
         ]);
 
@@ -177,5 +179,134 @@ class RoomManagementTest extends TestCase
         $response2 = $this->actingAs($this->adminUser)->postJson("/api/rooms/bed-spaces/{$bedSpace->bed_space_id}/occupy");
 
         $response2->assertConflict();
+    }
+
+    public function test_archive_is_blocked_when_room_has_occupied_bed(): void
+    {
+        $room = Room::create([
+            'room_code' => 'HS-901',
+            'room_type' => 'solo',
+            'capacity' => 1,
+            'monthly_rate' => 7000.00,
+            'status' => 'fully_occupied',
+        ]);
+
+        BedSpace::create([
+            'room_id' => $room->room_id,
+            'bed_label' => 'Solo Bed',
+            'status' => 'occupied',
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->postJson("/api/rooms/{$room->room_id}/archive");
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('room');
+
+        $this->assertNull($room->fresh()->deleted_at);
+    }
+
+    public function test_archive_is_blocked_when_room_has_active_contract(): void
+    {
+        $room = Room::create([
+            'room_code' => 'HS-902',
+            'room_type' => 'solo',
+            'capacity' => 1,
+            'monthly_rate' => 7200.00,
+            'status' => 'vacant',
+        ]);
+
+        $bedSpace = BedSpace::create([
+            'room_id' => $room->room_id,
+            'bed_label' => 'Solo Bed',
+            'status' => 'vacant',
+        ]);
+
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Archive',
+            'last_name' => 'Blocked',
+            'email' => 'archive.blocked@example.com',
+            'contact_number' => '09170000000',
+            'status' => 'active',
+        ]));
+
+        Contract::create([
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bedSpace->bed_space_id,
+            'created_by' => $this->adminUser->user_id,
+            'move_in_date' => now()->subDays(3)->toDateString(),
+            'expected_move_out_date' => now()->addMonths(6)->toDateString(),
+            'deposit_amount' => 2000.00,
+            'monthly_rate' => 7200.00,
+            'status' => 'active',
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->postJson("/api/rooms/{$room->room_id}/archive");
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('room');
+
+        $this->assertNull($room->fresh()->deleted_at);
+    }
+
+    public function test_archive_succeeds_when_room_has_no_occupied_bed_or_active_contract(): void
+    {
+        $room = Room::create([
+            'room_code' => 'HS-903',
+            'room_type' => 'shared',
+            'capacity' => 2,
+            'monthly_rate' => 5000.00,
+            'status' => 'vacant',
+        ]);
+
+        BedSpace::create([
+            'room_id' => $room->room_id,
+            'bed_label' => 'Bed A',
+            'status' => 'vacant',
+        ]);
+
+        BedSpace::create([
+            'room_id' => $room->room_id,
+            'bed_label' => 'Bed B',
+            'status' => 'maintenance',
+        ]);
+
+        $response = $this->actingAs($this->adminUser)->postJson("/api/rooms/{$room->room_id}/archive");
+
+        $response->assertOk();
+        $this->assertNotNull($room->fresh()->deleted_at);
+    }
+
+    public function test_admin_can_update_room_code_with_unique_constraint(): void
+    {
+        $room = Room::create([
+            'room_code' => 'HS-910',
+            'room_type' => 'solo',
+            'capacity' => 1,
+            'monthly_rate' => 5000.00,
+            'status' => 'vacant',
+        ]);
+
+        Room::create([
+            'room_code' => 'HS-911',
+            'room_type' => 'solo',
+            'capacity' => 1,
+            'monthly_rate' => 5200.00,
+            'status' => 'vacant',
+        ]);
+
+        $ok = $this->actingAs($this->adminUser)->putJson("/api/rooms/{$room->room_id}", [
+            'room_code' => 'HS-912',
+        ]);
+        $ok->assertOk();
+        $this->assertDatabaseHas('rooms', [
+            'room_id' => $room->room_id,
+            'room_code' => 'HS-912',
+        ]);
+
+        $conflict = $this->actingAs($this->adminUser)->putJson("/api/rooms/{$room->room_id}", [
+            'room_code' => 'HS-911',
+        ]);
+        $conflict->assertStatus(422);
+        $conflict->assertJsonValidationErrors('room_code');
     }
 }

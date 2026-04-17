@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -72,7 +73,7 @@ class BillingPaymentManagementTest extends TestCase
         ]);
 
         $response->assertCreated();
-        $billingId = (int) $response->json('billing.billing_id');
+        $billingId = (int) $response->json('data.billing_id');
 
         $this->assertDatabaseHas('billing', [
             'billing_id' => $billingId,
@@ -88,7 +89,7 @@ class BillingPaymentManagementTest extends TestCase
         // Verify audit log (INSERT)
         $this->assertTriggerAuditLog([
             'user_id' => $this->adminUser->user_id,
-            'entity_name' => 'billing',
+            'target_table' => 'billing',
             'action' => 'INSERT',
         ]);
     }
@@ -115,9 +116,8 @@ class BillingPaymentManagementTest extends TestCase
 
         // Verify transaction log
         $this->assertDatabaseHas('transaction_logs', [
-            'tx_name' => 'payment_posting',
+            'action' => 'POST_PAYMENT',
             'status' => 'committed',
-            'reference_id' => (string) $billing->billing_id,
         ]);
     }
 
@@ -177,9 +177,8 @@ class BillingPaymentManagementTest extends TestCase
 
         // Verify rolled-back transaction log (DB::transaction aborted)
         $this->assertDatabaseHas('transaction_logs', [
-            'tx_name' => 'payment_posting',
+            'action' => 'POST_PAYMENT',
             'status' => 'rolled_back',
-            'reference_id' => (string) $billing->billing_id,
         ]);
     }
 
@@ -231,6 +230,180 @@ class BillingPaymentManagementTest extends TestCase
             ->assertJsonValidationErrors(['line_items.0.amount']);
     }
 
+    public function test_billing_list_combines_status_and_past_due_filters(): void
+    {
+        $paidBilling = $this->createBillingRecord(4500.00);
+        $paidBilling->update([
+            'due_date' => now()->subDays(10)->toDateString(),
+        ]);
+
+        Payment::create([
+            'billing_id' => $paidBilling->billing_id,
+            'processed_by' => $this->adminUser->user_id,
+            'amount_paid' => 4500.00,
+            'payment_date' => now()->subDays(5)->toDateString(),
+            'payment_method' => 'cash',
+        ]);
+        $paidBilling->refresh();
+        BillingService::autoUpdateStatus($paidBilling);
+
+        $partialPastDueBilling = $this->createBillingRecord(5000.00);
+        $partialPastDueBilling->update([
+            'due_date' => now()->subDays(7)->toDateString(),
+        ]);
+
+        Payment::create([
+            'billing_id' => $partialPastDueBilling->billing_id,
+            'processed_by' => $this->adminUser->user_id,
+            'amount_paid' => 1000.00,
+            'payment_date' => now()->subDays(3)->toDateString(),
+            'payment_method' => 'cash',
+        ]);
+        $partialPastDueBilling->refresh();
+        BillingService::autoUpdateStatus($partialPastDueBilling);
+
+        $response = $this->actingAs($this->viewerUser)
+            ->getJson('/api/billing?status=paid&past_due=1');
+
+        $response->assertOk();
+        $response->assertJsonCount(0, 'data');
+    }
+
+    public function test_billing_status_semantics_for_current_and_past_due_balances(): void
+    {
+        $unpaidCurrent = $this->createBillingRecord(3000.00);
+        $unpaidCurrent->update([
+            'due_date' => now()->addDays(7)->toDateString(),
+        ]);
+        BillingService::autoUpdateStatus($unpaidCurrent->refresh());
+
+        $partialCurrent = $this->createBillingRecord(4000.00);
+        $partialCurrent->update([
+            'due_date' => now()->addDays(5)->toDateString(),
+        ]);
+        Payment::create([
+            'billing_id' => $partialCurrent->billing_id,
+            'processed_by' => $this->adminUser->user_id,
+            'amount_paid' => 1000.00,
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'cash',
+        ]);
+        BillingService::autoUpdateStatus($partialCurrent->refresh());
+
+        $overdueUnpaid = $this->createBillingRecord(3500.00);
+        $overdueUnpaid->update([
+            'due_date' => now()->subDays(8)->toDateString(),
+        ]);
+        BillingService::autoUpdateStatus($overdueUnpaid->refresh());
+
+        $overduePartial = $this->createBillingRecord(4500.00);
+        $overduePartial->update([
+            'due_date' => now()->subDays(6)->toDateString(),
+        ]);
+        Payment::create([
+            'billing_id' => $overduePartial->billing_id,
+            'processed_by' => $this->adminUser->user_id,
+            'amount_paid' => 1200.00,
+            'payment_date' => now()->subDays(2)->toDateString(),
+            'payment_method' => 'cash',
+        ]);
+        BillingService::autoUpdateStatus($overduePartial->refresh());
+
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $unpaidCurrent->billing_id,
+            'status' => 'unpaid',
+        ]);
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $partialCurrent->billing_id,
+            'status' => 'partial',
+        ]);
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $overdueUnpaid->billing_id,
+            'status' => 'overdue',
+        ]);
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $overduePartial->billing_id,
+            'status' => 'overdue',
+        ]);
+    }
+
+    public function test_zero_total_billing_is_marked_paid_per_status_priority(): void
+    {
+        $contract = $this->createActiveContract();
+        $zeroBilling = Billing::create([
+            'contract_id' => $contract->contract_id,
+            'billing_period_from' => '2026-05-01',
+            'billing_period_to' => '2026-05-31',
+            'due_date' => now()->subDays(2)->toDateString(),
+            'status' => 'unpaid',
+        ]);
+
+        BillingService::autoUpdateStatus($zeroBilling->refresh());
+
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $zeroBilling->billing_id,
+            'status' => 'paid',
+        ]);
+    }
+
+    public function test_voiding_payment_recomputes_billing_status_and_excludes_voided_amount(): void
+    {
+        $billing = $this->createBillingRecord(6000.00);
+
+        $this->actingAs($this->adminUser)->postJson('/api/payments', [
+            'billing_id' => $billing->billing_id,
+            'amount_paid' => 6000.00,
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'cash',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $billing->billing_id,
+            'status' => 'paid',
+        ]);
+
+        $payment = Payment::where('billing_id', $billing->billing_id)->firstOrFail();
+
+        $this->actingAs($this->adminUser)->deleteJson("/api/payments/{$payment->payment_id}", [
+            'void_reason' => 'Test status recompute',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('payments', [
+            'payment_id' => $payment->payment_id,
+        ]);
+
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $billing->billing_id,
+            'status' => 'unpaid',
+        ]);
+    }
+
+    public function test_overpayment_marks_billing_paid_and_removes_it_from_outstanding_balances(): void
+    {
+        $billing = $this->createBillingRecord(5000.00);
+        $billing->update([
+            'due_date' => now()->subDays(3)->toDateString(),
+        ]);
+
+        $this->actingAs($this->adminUser)->postJson('/api/payments', [
+            'billing_id' => $billing->billing_id,
+            'amount_paid' => 7000.00,
+            'payment_date' => now()->toDateString(),
+            'payment_method' => 'cash',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('billing', [
+            'billing_id' => $billing->billing_id,
+            'status' => 'paid',
+        ]);
+
+        $outstanding = $this->actingAs($this->viewerUser)->getJson('/api/reports/outstanding-balances');
+        $outstanding->assertOk();
+        $outstanding->assertJsonMissing([
+            'billing_id' => $billing->billing_id,
+        ]);
+    }
+
     private function createActiveContract(): Contract
     {
         $tenant = Tenant::create($this->tenantAttributes([
@@ -246,7 +419,7 @@ class BillingPaymentManagementTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => 'occupied',
+            'status' => 'vacant',
         ]);
 
         $bedSpace = BedSpace::create([
@@ -260,6 +433,7 @@ class BillingPaymentManagementTest extends TestCase
             'bed_space_id' => $bedSpace->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-31',
             'deposit_amount' => 1000,
             'status' => 'active',
         ]);

@@ -54,7 +54,7 @@ class UserManagementTest extends TestCase
         // Verify audit log (INSERT)
         $this->assertTriggerAuditLog([
             'user_id' => $admin->user_id,
-            'entity_name' => 'users',
+            'target_table' => 'users',
             'action' => 'INSERT',
         ]);
     }
@@ -108,7 +108,7 @@ class UserManagementTest extends TestCase
         $response->assertStatus(403);
 
         // Verify access_denied audit log
-        $this->assertDatabaseHas('audit_logs', [
+        $this->assertTriggerAuditLog([
             'user_id' => $staff->user_id,
             'action' => 'access_denied',
         ]);
@@ -168,11 +168,12 @@ class UserManagementTest extends TestCase
     {
         $adminRole = Role::where('role_name', 'admin')->first();
         $admin = User::factory()->create(['role_id' => $adminRole->role_id, 'is_active' => true]);
-        $target = User::factory()->create(['username' => 'targetuser']);
+        $viewerRole = Role::where('role_name', 'viewer')->first();
+        $target = User::factory()->create(['username' => 'targetuser', 'role_id' => $viewerRole->role_id]);
 
         $this->actingAs($admin)
             ->getJson("/api/users/{$target->user_id}")
             ->assertOk()
-            ->assertJsonPath('username', 'targetuser');
+            ->assertJsonPath('data.username', 'targetuser');
     }
 }

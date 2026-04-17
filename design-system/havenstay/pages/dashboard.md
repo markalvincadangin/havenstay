@@ -133,4 +133,12 @@ The following items were identified for revision to achieve 100% Master Spec par
 
 ---
 
+## 8. Page Titles and Subtitles (Master §21 Exact)
+
+| Route | Title (H1) | Subtitle |
+| :--- | :--- | :--- |
+| `/dashboard` | `Dashboard` | `Monitor daily activities, occupancy updates, and pending administrative tasks.` |
+
+---
+
 *This document is a child of the Master Specification. For all base rules on typography, color, and primitives, refer to `../MASTER.md`.*

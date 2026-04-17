@@ -28,6 +28,8 @@ export const metadata = {
   },
 };
 
+import { SWRProvider } from "./_context/SWRConfig";
+
 export default function RootLayout({ children }) {
   return (
     <html
@@ -36,9 +38,11 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
     >
       <body className="min-h-full" suppressHydrationWarning>
-        <AuthProvider>
-          <AppFrame>{children}</AppFrame>
-        </AuthProvider>
+        <SWRProvider>
+          <AuthProvider>
+            <AppFrame>{children}</AppFrame>
+          </AuthProvider>
+        </SWRProvider>
       </body>
     </html>
   );

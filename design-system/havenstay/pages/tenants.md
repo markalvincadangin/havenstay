@@ -8,12 +8,18 @@
 > [!IMPORTANT]
 > This specification follows the **Directory** pattern defined in **[../MASTER.md](../MASTER.md)** (Section 18.2). It mandates 100% usage of reusable components for Headers, Tables, and Forms to ensure architectural consistency with the Dashboard.
 
+## Form Contract Reference
+
+- Shared form theme and validation behavior: `FORM_PAGES.md` §1
+- Tenant form routes and allowed fields: `FORM_PAGES.md` §2.2
+- Source of truth: `docs/SRS.md` (FR-008, FR-009, BR-016), `docs/API_REFERENCE.md`, `backend/database/sql/havenstay_schema.sql`
+
 ---
 
 ## 1. Page Purpose
 
-The Tenant Directory acts as the central ledger for all resident data. It provides visual evidence of **tenant history** (SRS FR-008) and **contact integrity** through:
-- **Searchable Ledger**: High-density table with real-time multi-field search.
+The Tenant Directory is the central page for resident records. It supports **tenant history** (SRS FR-008) and accurate contact data through:
+- **Searchable list**: High-density table with real-time multi-field search.
 - **Operational KPIs**: Summary of active residents and bed saturation atop the directory.
 - **Actionable Records**: Direct paths to contracts, profiles, and billing context.
 
@@ -25,20 +31,20 @@ The Tenant Directory acts as the central ledger for all resident data. It provid
 1.  **Page Header**: `Tenant Directory` with "Register Tenant" Primary CTA.
 2.  **Summary KPIs**: 3-column `KpiCard` grid (Active, Saturation, Pending).
 3.  **Filter Hub**: `Registry Card` with strip title **Filters** (**MASTER §5.8.3**).
-4.  **Main Ledger**: `Table` primitive with row-level navigation to details.
+4.  **Main List**: `Table` primitive with row-level navigation to details.
 
 ### 2.2 Tenant Profile Detail (`/tenants/[id]`)
 - **Profile Header**: Displays `{First Name} {Last Name}` with Status Badge.
 - **Split View**:
     - **Sidebar (4)**: Personal Information card (Contact, ID, Emergency).
-    - **Main (8)**: Contract History registry table and Payment Ledger.
+    - **Main (8)**: Contract history table and payment history.
 
 ---
 
 ## 3. Component Standards (Master §5)
 
 ### 3.1 Registry Card (Filters)
-- **Header**: Standard `hs-strip-title` "Registry Filters" with `User` icon well.
+- **Header**: Standard `hs-strip-title` "Filters" with `User` icon well.
 - **Body**: `md:grid-cols-12` layout.
     - **Search (9)**: `Field` + `Input` with `Search` prefix. 
     - **Status (3)**: `Field` + `Select` (Active, Moved Out, Archived).
@@ -56,8 +62,17 @@ The Tenant Directory acts as the central ledger for all resident data. It provid
 - **Form Shell**: Centered `max-w-4xl` column containing `PageHeader`, alerts, and cards.
 - **Input Fields**: Standard `Input`, `Select`, `Textarea` from `Fields.js`.
 - **Validation**:
-    - Contact: PH Mobile Pattern (`09XXXXXXXXX`).
-    - Required: First Name, Last Name, Contact.
+    - Contact Number: PH Mobile Pattern (`09XXXXXXXXX`).
+    - Required: First Name, Last Name, Contact Number, Email, Emergency Contact Name, Emergency Contact Number, Address.
+
+### 3.4 Exact Form Labels (Parity with `FORM_PAGES.md` §2.2)
+- First Name (`first_name`)
+- Last Name (`last_name`)
+- Contact Number (`contact_number`)
+- Email (`email`)
+- Emergency Contact Name (`emergency_contact_name`)
+- Emergency Contact Number (`emergency_contact_number`)
+- Address (`address`)
 
 ---
 
@@ -89,6 +104,16 @@ All data mappings must strictly follow `db/havenstay_schema.sql` enums and field
 - [ ] Is the primary button using `primaryLinkCtaClass`?
 - [ ] Are custom `div` zero-states replaced with `<EmptyState />`?
 - [ ] Are all icons sourced from the shared `Icons.js` or `Lucide` keys?
+
+---
+
+## 7. Page Titles and Subtitles (Master §21 Exact)
+
+| Route | Title (H1) | Subtitle |
+| :--- | :--- | :--- |
+| `/tenants` | `Tenant Directory` | `Manage profile data, contact details, and historical lease statuses.` |
+| `/tenants/[id]` | `*(Tenant name)*` | `Profile details — contact, lease, and billing context.` |
+| `/tenants/new` and `/tenants/[id]/edit` | `Register tenant / Update details` | `Enter accurate information for tenant records to ensure billing and contract accuracy.` |
 
 ---
 

@@ -23,10 +23,13 @@ npm install
 
 2. Configure environment:
 
-Create `frontend/.env.local`:
+Create `frontend/.env.local` (optional — defaults match same-origin `/api`):
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+# Omit or leave empty: browser → http://localhost:3000/api/* → Next rewrites to Laravel.
+NEXT_PUBLIC_API_BASE_URL=
+# If you omit BACKEND_INTERNAL_URL, Next proxies to http://127.0.0.1:8000 (run Laravel on the host).
+# BACKEND_INTERNAL_URL=http://127.0.0.1:8000
 ```
 
 3. Run dev server:

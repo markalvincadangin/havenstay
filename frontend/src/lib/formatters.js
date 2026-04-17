@@ -91,3 +91,29 @@ export function compareTenantDirectoryName(a, b) {
   if (last !== 0) return last;
   return fn(a).localeCompare(fn(b), undefined, { sensitivity: "base", numeric: true });
 }
+
+export function formatTimestamp(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
+export function safeParseJson(value) {
+  if (value == null) return null;
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}

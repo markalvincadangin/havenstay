@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,18 +10,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable([
-    'tenant_id',
-    'bed_space_id',
-    'created_by',
-    'move_in_date',
-    'expected_move_out_date',
-    'actual_move_out_date',
-    'deposit_amount',
-    'monthly_rate',
-    'status',
-    'notes',
-])]
 class Contract extends Model
 {
     use HasFactory, SoftDeletes;
@@ -30,6 +17,19 @@ class Contract extends Model
     protected $table = 'contracts';
 
     protected $primaryKey = 'contract_id';
+
+    protected $fillable = [
+        'tenant_id',
+        'bed_space_id',
+        'created_by',
+        'move_in_date',
+        'expected_move_out_date',
+        'actual_move_out_date',
+        'deposit_amount',
+        'monthly_rate_override',
+        'status',
+        'notes',
+    ];
 
     const STATUS_ACTIVE = 'active';
 
@@ -44,7 +44,7 @@ class Contract extends Model
             'expected_move_out_date' => 'date',
             'actual_move_out_date' => 'date',
             'deposit_amount' => 'decimal:2',
-            'monthly_rate' => 'decimal:2',
+            'monthly_rate_override' => 'decimal:2',
             'status' => 'string',
         ];
     }

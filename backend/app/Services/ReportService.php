@@ -12,33 +12,31 @@ class ReportService
      * Generate an occupancy report by room and bed.
      * Aligned with hardened schema vw_room_occupancy.
      *
-     * FR-028, FR-031
-     *
      * @param  array{room_type?: string}  $filters
      * @return array{summary: array{total_rooms: int, total_beds: int, occupied_beds: int, vacant_beds: int}, rows: Collection}
      */
     public static function occupancy(array $filters = []): array
     {
-        // CCR-005: Multi-table JOIN via vw_room_occupancy
-        // CCR-003: SELECT query
         // vw_room_occupancy counts bed_space rows for total_beds.
-        // Solo rooms may have no bed_space rows, so we join rooms.capacity as a fallback.
-        $query = DB::table('vw_room_occupancy')
-            ->join('rooms', 'rooms.room_id', '=', 'vw_room_occupancy.room_id')
-            ->select('vw_room_occupancy.*', 'rooms.capacity as room_capacity');
+        $query = DB::table('vw_room_occupancy');
 
-        if (! empty($filters['room_type']) && in_array($filters['room_type'], ['solo', 'shared'], true)) {
-            $query->where('rooms.room_type', $filters['room_type']);
+        if (! empty($filters['room_type'])) {
+            $query->where('room_type', $filters['room_type']);
         }
 
-        $rows = $query->orderBy('vw_room_occupancy.room_code')
+        $rows = $query->orderBy('room_code')
             ->get()
             ->map(function ($row) {
-                // For solo rooms with no bed_space rows, COUNT returns 0 — fall back to rooms.capacity
-                $totalBeds = (int) $row->total_beds > 0 ? (int) $row->total_beds : (int) $row->room_capacity;
+                // For solo rooms with no bed_space rows, COUNT returns 0 — fall back to capacity
+                if ((int) $row->total_beds === 0 && (int) $row->capacity > 0) {
+                    $row->total_beds = (int) $row->capacity;
+                }
+
+                $totalBeds = (int) $row->total_beds;
                 $occupiedBeds = (int) $row->occupied_beds;
-                // Hardened vacancy check: only available if room status is 'available'
-                $vacantBeds = (strtolower($row->room_status ?? '') === 'available') ? (int) $row->vacant_beds : 0;
+                $roomStatus = strtolower((string) ($row->room_status ?? ''));
+                $isBookable = in_array($roomStatus, ['vacant', 'partially_occupied'], true);
+                $vacantBeds = $isBookable ? (int) $row->vacant_beds : 0;
 
                 return [
                     'room_id' => (int) $row->room_id,
@@ -65,7 +63,7 @@ class ReportService
     }
 
     /**
-     * Bed-level occupancy (FR-015) via `vw_occupancy_status` (CCR-005).
+     * Bed-level occupancy via `vw_occupancy_status`.
      *
      * @param  array{room_id?: int, bed_status?: string}  $filters
      * @return array{filters: array, summary: array, rows: Collection}
@@ -113,7 +111,7 @@ class ReportService
     }
 
     /**
-     * Active contracts snapshot via `vw_active_contracts` (CCR-005).
+     * Active contracts snapshot via `vw_active_contracts`.
      *
      * @param  array{room_id?: int}  $filters
      * @return array{filters: array, summary: array, rows: Collection}
@@ -142,6 +140,7 @@ class ReportService
                 'bed_space_id' => (int) $row->bed_space_id,
                 'bed_label' => $row->bed_label,
                 'bed_status' => $row->bed_status,
+                'deposit_amount' => (float) ($row->deposit_amount ?? 0),
             ];
         });
 
@@ -151,6 +150,8 @@ class ReportService
             ],
             'summary' => [
                 'contract_count' => $rows->count(),
+                'total_deposits' => round($rows->sum('deposit_amount'), 2),
+                'potential_revenue' => round($rows->sum('monthly_rate'), 2),
             ],
             'rows' => $rows->values(),
         ];
@@ -160,15 +161,11 @@ class ReportService
      * Generate a billing and collections summary report.
      * Aligned with hardened schema vw_billing_summary.
      *
-     * FR-029, FR-031
-     *
-     * @param  array{start_date?: string, end_date?: string}  $filters
+     * @param  array{start_date?: string, end_date?: string, current_month?: bool}  $filters
      * @return array{filters: array, summary: array, rows: Collection}
      */
     public static function billingSummary(array $filters = []): array
     {
-        // CCR-005: Multi-table JOIN via vw_billing_summary
-        // CCR-003: SELECT query
         $query = DB::table('vw_billing_summary')
             ->select(
                 'vw_billing_summary.*',
@@ -177,8 +174,12 @@ class ReportService
             ->orderByDesc('billing_period_from')
             ->orderByDesc('billing_id');
 
-        if (! empty($filters['start_date']) && ! empty($filters['end_date'])) {
-            // CCR-004: BETWEEN operator for date range
+        $currentMonthOnly = (bool) ($filters['current_month'] ?? false);
+        if ($currentMonthOnly && empty($filters['start_date']) && empty($filters['end_date'])) {
+            $monthStart = Carbon::now()->startOfMonth()->toDateString();
+            $monthEnd = Carbon::now()->endOfMonth()->toDateString();
+            $query->whereBetween('billing_period_from', [$monthStart, $monthEnd]);
+        } elseif (! empty($filters['start_date']) && ! empty($filters['end_date'])) {
             $query->whereBetween('billing_period_from', [$filters['start_date'], $filters['end_date']]);
         } elseif (! empty($filters['start_date'])) {
             $query->where('billing_period_from', '>=', $filters['start_date']);
@@ -211,12 +212,15 @@ class ReportService
             'filters' => [
                 'start_date' => $filters['start_date'] ?? null,
                 'end_date' => $filters['end_date'] ?? null,
+                'current_month' => $currentMonthOnly,
             ],
             'summary' => [
                 'billing_count' => $rows->count(),
                 'billed_total' => round($rows->sum('amount_due'), 2),
                 'collected_total' => round($rows->sum('amount_paid'), 2),
                 'outstanding_total' => round($rows->sum('outstanding_balance'), 2),
+                'overdue_count' => $rows->where('status', 'overdue')->count(),
+                'overdue_total' => round($rows->where('status', 'overdue')->sum('outstanding_balance'), 2),
             ],
             'rows' => $rows->values(),
         ];
@@ -226,15 +230,11 @@ class ReportService
      * Generate an outstanding balances report.
      * Utilizes vw_billing_summary filtered for unpaid/partial.
      *
-     * FR-030, CCR-004, CCR-005
-     *
      * @param  array{tenant_id?: int, due_from?: string, due_to?: string}  $filters
      * @return array{filters: array, summary: array, rows: Collection}
      */
     public static function outstandingBalances(array $filters = []): array
     {
-        // CCR-005: Multi-table JOIN via vw_billing_summary
-        // CCR-003: SELECT with WHERE conditions
         $query = DB::table('vw_billing_summary')
             ->whereRaw('(total_amount - total_paid) > 0');
 
@@ -242,7 +242,6 @@ class ReportService
             $query->where('tenant_id', (int) $filters['tenant_id']);
         }
 
-        // CCR-004: BETWEEN operator for date range filters
         if (! empty($filters['due_from']) && ! empty($filters['due_to'])) {
             $query->whereBetween('due_date', [$filters['due_from'], $filters['due_to']]);
         } elseif (! empty($filters['due_from'])) {
@@ -317,8 +316,6 @@ class ReportService
     /**
      * Generate a detailed financial ledger for a specific tenant.
      * Aggregates billings (debits) and payments (credits) chronologically.
-     *
-     * FR-032a
      *
      * @return array{tenant: object, entries: array, summary: array}
      */
@@ -406,21 +403,16 @@ class ReportService
      * Generate a collections performance report.
      * Aligned with vw_collections_summary.
      *
-     * FR-032b, CCR-004, CCR-005
-     *
      * @param  array{start_date?: string, end_date?: string, payment_method?: string}  $filters
      * @return array{filters: array, summary: array, rows: Collection}
      */
     public static function collectionsPerformance(array $filters = []): array
     {
-        // CCR-005: Multi-table JOIN via vw_collections_summary
-        // CCR-003: SELECT with date-range filters
         $query = DB::table('vw_collections_summary')
             ->orderByDesc('payment_date')
             ->orderByDesc('payment_id');
 
         if (! empty($filters['start_date']) && ! empty($filters['end_date'])) {
-            // CCR-004: BETWEEN operator
             $query->whereBetween('payment_date', [$filters['start_date'], $filters['end_date']]);
         } elseif (! empty($filters['start_date'])) {
             $query->where('payment_date', '>=', $filters['start_date']);
@@ -452,8 +444,6 @@ class ReportService
 
     /**
      * Tenant contract timeline (all statuses) via reporting view.
-     *
-     * FR-031, FR-032, CCR-004 (BETWEEN on move-in), CCR-005 (JOIN via vw_tenant_contract_history)
      *
      * @param  array{from?: string, to?: string, status?: string}  $filters
      * @return array{filters: array, summary: array, rows: Collection}
@@ -513,8 +503,6 @@ class ReportService
 
     /**
      * Build CSV headings and rows for stream download responses.
-     *
-     * FR-032, FR-032b
      *
      * @return array{headers: string[], rows: array[]}
      */

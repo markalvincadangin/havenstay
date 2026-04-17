@@ -2,23 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable([
-    'billing_id',
-    'processed_by',
-    'amount_paid',
-    'payment_date',
-    'payment_method',
-    'reference_number',
-    'remarks',
-    'voided_at',
-    'voided_by',
-    'void_reason',
-])]
 class Payment extends Model
 {
     use HasFactory;
@@ -26,6 +13,19 @@ class Payment extends Model
     protected $table = 'payments';
 
     protected $primaryKey = 'payment_id';
+
+    protected $fillable = [
+        'billing_id',
+        'processed_by',
+        'amount_paid',
+        'payment_date',
+        'payment_method',
+        'reference_number',
+        'remarks',
+        'voided_at',
+        'voided_by',
+        'void_reason',
+    ];
 
     const METHOD_CASH = 'cash';
 

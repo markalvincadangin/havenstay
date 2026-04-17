@@ -2,122 +2,78 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\User\StoreUserRequest;
+use App\Http\Requests\User\UpdateUserRequest;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\AuditService;
 use App\Services\AuthorizationService;
+use App\Services\UserService;
 use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
-    /**
-     * FR-005: Admin creates a new user
-     */
-    public function store(Request $request): JsonResponse
-    {
-        // FR-004: Check authorization
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.create');
+    use HandlesAuthorization;
 
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can create users.',
-            ], 403);
+    /**
+     */
+    public function store(StoreUserRequest $request): JsonResponse
+    {
+        if (! AuthorizationService::canManageUsers($request->user())) {
+            return $this->forbidden($request, 'users.create', 'Unauthorized: only Admin can create users.');
         }
 
-        $validated = $request->validate([
-            'first_name' => ['required', 'string', 'max:100'],
-            'last_name' => ['required', 'string', 'max:100'],
-            'username' => ['required', 'string', 'max:50', Rule::unique('users')],
-            'email' => ['required', 'email', Rule::unique('users')],
-            'password' => ['required', 'string', 'min:8'],
-            'role_id' => ['required', 'exists:roles,role_id'],
-        ]);
+        $validated = $request->validated();
 
-        $user = User::create([
-            'first_name' => $validated['first_name'],
-            'last_name' => $validated['last_name'],
-            'username' => $validated['username'],
-            'email' => $validated['email'],
-            'password_hash' => bcrypt($validated['password']),
-            'role_id' => $validated['role_id'],
-            'is_active' => true,
-        ]);
+        $user = UserService::create($request->user(), $validated);
 
         return response()->json([
             'message' => 'User created successfully.',
-            'user' => $user->load('role'),
+            'data' => $user->load('role'),
         ], 201);
     }
 
     /**
-     * FR-005: Show user details (Admin only — same scope as list/create).
      */
     public function show(Request $request, User $user): JsonResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.show');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can view user details.',
-            ], 403);
+            return $this->forbidden($request, 'users.show', 'Unauthorized: only Admin can view user details.');
         }
 
-        return response()->json($user->load('role'));
+        return response()->json([
+            'message' => 'User retrieved successfully.',
+            'data' => $user->load('role'),
+        ]);
     }
 
     /**
-     * FR-005: Admin updates an existing user
      */
-    public function update(Request $request, User $user): JsonResponse
+    public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
-        // FR-004: Check authorization
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.update');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can update users.',
-            ], 403);
+            return $this->forbidden($request, 'users.update', 'Unauthorized: only Admin can update users.');
         }
 
-        $validated = $request->validate([
-            'first_name' => ['sometimes', 'string', 'max:100'],
-            'last_name' => ['sometimes', 'string', 'max:100'],
-            'username' => ['sometimes', 'string', 'max:50', Rule::unique('users')->ignore($user->user_id, 'user_id')],
-            'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->user_id, 'user_id')],
-            'role_id' => ['sometimes', 'exists:roles,role_id'],
-            'is_active' => ['sometimes', 'boolean'],
-            'password' => ['nullable', 'string', 'min:8'],
-        ]);
+        $validated = $request->validated();
 
-        if (! empty($validated['password'] ?? null)) {
-            $validated['password_hash'] = bcrypt($validated['password']);
-        }
-        unset($validated['password']);
-
-        $user->update($validated);
+        $user = UserService::update($request->user(), $user, $validated);
 
         return response()->json([
             'message' => 'User updated successfully.',
-            'user' => $user->load('role'),
+            'data' => $user->load('role'),
         ]);
     }
 
     /**
-     * FR-005: Admin deactivates a user
      */
     public function deactivate(Request $request, User $user): JsonResponse
     {
-        // FR-004: Check authorization
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.deactivate');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can deactivate users.',
-            ], 403);
+            return $this->forbidden($request, 'users.deactivate', 'Unauthorized: only Admin can deactivate users.');
         }
 
         // Safety: Prevent self-deactivation (Admin cannot lock themselves out)
@@ -127,77 +83,56 @@ class UserController extends Controller
             ], 400);
         }
 
-        $user->update([
-            'is_active' => false,
-        ]);
+        $user = UserService::deactivate($request->user(), $user);
 
         return response()->json([
             'message' => 'User deactivated successfully.',
-            'user' => $user->load('role'),
+            'data' => $user->load('role'),
         ]);
     }
 
     /**
-     * FR-005: Admin reactivates a user
      */
     public function reactivate(Request $request, User $user): JsonResponse
     {
-        // FR-004: Check authorization
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.reactivate');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can reactivate users.',
-            ], 403);
+            return $this->forbidden($request, 'users.reactivate', 'Unauthorized: only Admin can reactivate users.');
         }
 
-        $user->update([
-            'is_active' => true,
-        ]);
+        $user = UserService::reactivate($request->user(), $user);
 
         return response()->json([
             'message' => 'User reactivated successfully.',
-            'user' => $user->load('role'),
+            'data' => $user->load('role'),
         ]);
     }
 
     /**
-     * FR-006: Admin updates user role
      */
     public function assignRole(Request $request, User $user): JsonResponse
     {
-        // FR-004: Check authorization
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.assignRole');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can assign roles.',
-            ], 403);
+            return $this->forbidden($request, 'users.assignRole', 'Unauthorized: only Admin can assign roles.');
         }
 
         $validated = $request->validate([
             'role_id' => ['required', 'exists:roles,role_id'],
         ]);
 
-        $user->update(['role_id' => $validated['role_id']]);
+        $user = UserService::assignRole($request->user(), $user, (int) $validated['role_id']);
 
         return response()->json([
             'message' => 'User role updated successfully.',
-            'user' => $user->load('role'),
+            'data' => $user->load('role'),
         ]);
     }
 
     /**
-     * FR-005: List users (Admin only — docs/API_REFERENCE.md, CLAUDE.md §6.4 routes).
      */
     public function index(Request $request): JsonResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.list');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can list users.',
-            ], 403);
+            return $this->forbidden($request, 'users.list', 'Unauthorized: only Admin can list users.');
         }
 
         $validated = $request->validate(array_merge([
@@ -208,35 +143,7 @@ class UserController extends Controller
 
         $pageParams = PaginationResponse::normalizePageParams($validated);
 
-        $query = User::with('role')->orderByDesc('user_id');
-
-        if (! empty($validated['q'])) {
-            $needle = $validated['q'];
-            $query->where(function ($w) use ($needle): void {
-                $w->where('username', 'LIKE', "%{$needle}%")
-                    ->orWhere('first_name', 'LIKE', "%{$needle}%")
-                    ->orWhere('last_name', 'LIKE', "%{$needle}%")
-                    ->orWhere('email', 'LIKE', "%{$needle}%");
-
-                if (ctype_digit($needle)) {
-                    $w->orWhere('user_id', (int) $needle);
-                }
-            });
-        }
-
-        if (! empty($validated['role'])) {
-            $query->whereHas('role', function ($r) use ($validated): void {
-                $r->where('role_name', $validated['role']);
-            });
-        }
-
-        if (($validated['account_status'] ?? null) === 'active') {
-            $query->where('is_active', true);
-        } elseif (($validated['account_status'] ?? null) === 'inactive') {
-            $query->where('is_active', false);
-        }
-
-        $paginator = $query->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
+        $paginator = UserService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
 
         return PaginationResponse::fromPaginator($paginator);
     }
@@ -247,10 +154,13 @@ class UserController extends Controller
     public function roles(Request $request): JsonResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return $this->forbidden($request, 'users.roles', 'Unauthorized: only Admin can view roles.');
         }
 
-        return response()->json(Role::all());
+        return response()->json([
+            'message' => 'Roles retrieved successfully.',
+            'data' => Role::all(),
+        ]);
     }
 
     /**
@@ -259,21 +169,19 @@ class UserController extends Controller
     public function archive(Request $request, User $user): JsonResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.archive');
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return $this->forbidden($request, 'users.archive', 'Unauthorized: only Admin can archive users.');
         }
-
 
         // Safety: Prevent self-archival
         if ($user->user_id === $request->user()->user_id) {
             return response()->json(['message' => 'You cannot archive your own account.'], 400);
         }
 
-        $user->delete();
+        $user = UserService::archive($request->user(), $user);
 
         return response()->json([
             'message' => 'User archived successfully.',
-            'user' => $user,
+            'data' => $user,
         ]);
     }
 
@@ -283,17 +191,14 @@ class UserController extends Controller
     public function restore(Request $request, int $id): JsonResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'users.restore');
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return $this->forbidden($request, 'users.restore', 'Unauthorized: only Admin can restore users.');
         }
 
-
-        $user = User::withTrashed()->findOrFail($id);
-        $user->restore();
+        $user = UserService::restore($request->user(), $id);
 
         return response()->json([
             'message' => 'User restored successfully.',
-            'user' => $user,
+            'data' => $user,
         ]);
     }
 }

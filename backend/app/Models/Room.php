@@ -2,20 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable([
-    'room_code',
-    'room_type',
-    'capacity',
-    'monthly_rate',
-    'status', 'amenities',
-    'description',
-])]
 class Room extends Model
 {
     use HasFactory, SoftDeletes;
@@ -24,13 +15,25 @@ class Room extends Model
 
     protected $primaryKey = 'room_id';
 
+    protected $fillable = [
+        'room_code',
+        'room_type',
+        'capacity',
+        'monthly_rate',
+        'status',
+        'amenities',
+        'description',
+    ];
+
     const TYPE_SOLO = 'solo';
 
     const TYPE_SHARED = 'shared';
 
-    const STATUS_AVAILABLE = 'available';
+    const STATUS_VACANT = 'vacant';
 
-    const STATUS_UNAVAILABLE = 'unavailable';
+    const STATUS_PARTIALLY_OCCUPIED = 'partially_occupied';
+
+    const STATUS_FULLY_OCCUPIED = 'fully_occupied';
 
     const STATUS_MAINTENANCE = 'maintenance';
 

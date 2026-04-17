@@ -2,64 +2,63 @@
 
 namespace App\Services;
 
+use App\Services\Concerns\ManagesWorkflows;
 use App\Models\BedSpace;
 use App\Models\Contract;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ContractService
 {
+    use ManagesWorkflows;
+
     /**
-     * FR-016..FR-018: Create contract with overlap prevention and transaction safety.
+     * Create contract with overlap prevention and transaction safety.
      */
     public static function create(User $actor, array $data): Contract
     {
-        $room = Room::find($data['room_id']);
-        if ($room && $room->room_type === 'solo' && empty($data['bed_space_id'])) {
-            $bed = $room->bedSpaces()->where('status', 'vacant')->first();
-            if ($bed) {
-                $data['bed_space_id'] = $bed->bed_space_id;
-            } else {
-                throw ValidationException::withMessages([
-                    'room_id' => ['This solo room is either occupied or has no bed space configured.'],
-                ]);
+        if (array_key_exists('monthly_rate', $data) && ! array_key_exists('monthly_rate_override', $data)) {
+            $data['monthly_rate_override'] = $data['monthly_rate'];
+        }
+
+        // Compatibility fallback: if bed_space_id is missing but room_id is a solo room,
+        // auto-pick a vacant bed. Shared units must provide bed_space_id.
+        if (empty($data['bed_space_id']) && ! empty($data['room_id'])) {
+            $roomFromRoomId = Room::find((int) $data['room_id']);
+            if ($roomFromRoomId && $roomFromRoomId->room_type === 'solo') {
+                $bed = $roomFromRoomId->bedSpaces()->where('status', 'vacant')->first();
+                if ($bed) {
+                    $data['bed_space_id'] = $bed->bed_space_id;
+                } else {
+                    throw ValidationException::withMessages([
+                        'room_id' => ['This solo room is either occupied or has no bed space configured.'],
+                    ]);
+                }
             }
         }
 
         self::validateCreateInput($data);
-        self::guardActiveOverlaps((int) $data['tenant_id'], $data['bed_space_id'] ?? null);
 
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'tenant_check_in',
-            $actor->user_id,
-            'tenants',
-            (string) $data['tenant_id']
-        );
-        $txLogId = $started['tx_log_id'];
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'TENANT_CHECKIN',
+            txnReference: self::buildTxnReference('CHK'),
+            payload: ['tenant_id' => $data['tenant_id']],
+            operation: function () use ($actor, $data): Contract {
+                self::guardActiveOverlaps((int) $data['tenant_id'], $data['bed_space_id'] ?? null);
 
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
-            $contract = DB::transaction(function () use ($actor, $data): Contract {
-                // ... same implementation ...
                 $contract = Contract::create([
                     'tenant_id' => $data['tenant_id'],
                     'bed_space_id' => $data['bed_space_id'],
                     'created_by' => $actor->user_id,
                     'move_in_date' => $data['move_in_date'],
-                    'expected_move_out_date' => $data['expected_move_out'],
+                    'expected_move_out_date' => $data['expected_move_out'] ?? null,
                     'deposit_amount' => $data['deposit_amount'] ?? 0,
-                    'monthly_rate' => $data['monthly_rate'] ?? (Room::find($data['room_id'])->monthly_rate ?? 0.00),
+                    'monthly_rate_override' => $data['monthly_rate_override'] ?? null,
                     'status' => 'active',
                     'notes' => $data['notes'] ?? null,
                 ]);
@@ -67,28 +66,19 @@ class ContractService
                 if (! empty($data['bed_space_id'])) {
                     $bed = BedSpace::find($data['bed_space_id']);
                     if ($bed) {
-                        RoomService::occupyBedSpace($bed);
+                        RoomService::occupyBedSpace($actor, $bed);
                     }
                 }
 
                 Tenant::where('tenant_id', $contract->tenant_id)->update(['status' => 'active']);
 
-                return $contract;
-            });
-
-            TransactionService::logCommitted($txLogId, [
+                return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
+            },
+            resultDetails: fn (Contract $contract): array => [
                 'contract_id' => $contract->contract_id,
-                'room_id' => $contract->bedSpace->room_id ?? null,
                 'bed_space_id' => $contract->bed_space_id,
-            ]);
-
-            return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
-        } catch (\Exception $e) {
-            TransactionService::logRolledBack($txLogId, $e->getMessage());
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
+            ]
+        );
     }
 
     public static function getById(int $contractId): ?Contract
@@ -97,9 +87,45 @@ class ContractService
     }
 
     /**
-     * FR-019, CCR-006: Move-out workflow with sp_move_out if available.
+     * Paginated contract list with optional filters.
+     *
+     * @param  array{tenant_id?:int|string,status?:string,q?:string}  $filters
      */
-    public static function moveOut(Contract $contract, array $data): Contract
+    public static function listPaginated(array $filters, int $page, int $perPage): LengthAwarePaginator
+    {
+        $query = Contract::with(['tenant', 'room', 'bedSpace', 'creator', 'latestBilling']);
+
+        if (! empty($filters['tenant_id'])) {
+            $query->where('tenant_id', (int) $filters['tenant_id']);
+        }
+
+        if (! empty($filters['status'])) {
+            $query->where('status', (string) $filters['status']);
+        }
+
+        if (! empty($filters['q'])) {
+            $needle = trim((string) $filters['q']);
+            $query->where(function ($w) use ($needle): void {
+                $w->where('contracts.contract_id', 'like', "%{$needle}%")
+                    ->orWhereHas('tenant', function ($t) use ($needle): void {
+                        $t->where('first_name', 'like', "%{$needle}%")
+                            ->orWhere('last_name', 'like', "%{$needle}%")
+                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$needle}%"]);
+                    })
+                    ->orWhereHas('room', function ($r) use ($needle): void {
+                        $r->where('room_code', 'like', "%{$needle}%");
+                    });
+            });
+        }
+
+        return $query->orderByDesc('contract_id')
+            ->paginate($perPage, ['*'], 'page', $page);
+    }
+
+    /**
+     * Move-out workflow: complete contract, vacate bed, sync room status.
+     */
+    public static function moveOut(User $actor, Contract $contract, array $data): Contract
     {
         $actualMoveOut = $data['actual_move_out'] ?? null;
 
@@ -121,24 +147,12 @@ class ContractService
             ]);
         }
 
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'tenant_move_out',
-            Auth::id() ?? 0,
-            'contracts',
-            (string) $contract->contract_id
-        );
-        $txLogId = $started['tx_log_id'];
-
-        if (Auth::check()) {
-            AuditService::setAuditUserContext(Auth::id());
-        }
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
-            $result = DB::transaction(function () use ($contract, $actualMoveOut, $data): Contract {
-                // CCR-003: UPDATE contract status and bed space
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'TENANT_MOVEOUT',
+            txnReference: self::buildTxnReference('OUT'),
+            payload: ['contract_id' => $contract->contract_id],
+            operation: function () use ($contract, $actualMoveOut, $data): Contract {
                 $contract->update([
                     'actual_move_out_date' => $actualMoveOut,
                     'status' => 'completed',
@@ -155,21 +169,13 @@ class ContractService
 
                 self::syncTenantStatus((int) $contract->tenant_id);
 
-                return $contract;
-            });
-
-            TransactionService::logCommitted($txLogId, [
+                return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
+            },
+            resultDetails: fn (Contract $contract): array => [
                 'contract_id' => $contract->contract_id,
                 'move_out_date' => $actualMoveOut,
-            ]);
-
-            return $result->fresh(['tenant', 'room', 'bedSpace', 'creator']);
-        } catch (\Exception $e) {
-            TransactionService::logRolledBack($txLogId, $e->getMessage());
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
+            ]
+        );
     }
 
     /**
@@ -177,31 +183,77 @@ class ContractService
      */
     public static function update(User $actor, Contract $contract, array $data): Contract
     {
-        return DB::transaction(function () use ($actor, $contract, $data): Contract {
-            $oldStatus = $contract->status;
-            $newStatus = $data['status'] ?? $oldStatus;
+        $oldStatus = $contract->status;
+        $newStatus = $data['status'] ?? $oldStatus;
+        $isTermination = ($oldStatus === 'active' && $newStatus !== 'active');
 
-            // Handle audit context
-            AuditService::setAuditUserContext($actor->user_id);
-
-            // If status is moving from active to something else, vacating the bed is mandatory
-            if ($oldStatus === 'active' && $newStatus !== 'active') {
-                if ($contract->bed_space_id) {
-                    BedSpace::where('bed_space_id', $contract->bed_space_id)->update(['status' => 'vacant']);
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: $isTermination ? 'TERMINATE_CONTRACT' : 'UPDATE_CONTRACT',
+            txnReference: self::buildTxnReference('CONTRACT-UP'),
+            payload: [
+                'contract_id' => $contract->contract_id,
+                'action'      => $isTermination ? 'terminate' : 'modify'
+            ],
+            operation: function () use ($actor, $contract, $data, $oldStatus, $newStatus): Contract {
+                // If status is moving from active to something else, vacating the bed is mandatory
+                if ($oldStatus === 'active' && $newStatus !== 'active') {
+                    if ($contract->bed_space_id) {
+                        BedSpace::where('bed_space_id', $contract->bed_space_id)->update(['status' => 'vacant']);
+                    }
                 }
-            }
 
-            $contract->update($data);
+                $contract->update($data);
 
-            if ($contract->room) {
-                RoomService::syncStatusAndCapacity($contract->room);
-            }
+                if ($contract->room) {
+                    RoomService::syncStatusAndCapacity($contract->room);
+                }
 
-            self::syncTenantStatus((int) $contract->tenant_id);
+                self::syncTenantStatus((int) $contract->tenant_id);
 
-            return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
-        });
+                return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
+            },
+            resultDetails: fn (Contract $contract): array => ['new_status' => $newStatus]
+        );
     }
+
+    public static function archive(User $actor, Contract $contract): Contract
+    {
+        if ((string) $contract->status === Contract::STATUS_ACTIVE) {
+            throw ValidationException::withMessages([
+                'contract' => ['Active contracts cannot be archived. Process move-out first.'],
+            ]);
+        }
+
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'ARCHIVE_CONTRACT',
+            txnReference: self::buildTxnReference('CONTRACT-ARC'),
+            payload: ['contract_id' => $contract->contract_id],
+            operation: function () use ($contract): Contract {
+                $contract->delete();
+                return $contract;
+            },
+            resultDetails: fn (Contract $contract): array => ['contract_id' => $contract->contract_id]
+        );
+    }
+
+    public static function restore(User $actor, int $id): Contract
+    {
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'RESTORE_CONTRACT',
+            txnReference: self::buildTxnReference('CONTRACT-RES'),
+            payload: ['contract_id' => $id],
+            operation: function () use ($id): Contract {
+                $contract = Contract::withTrashed()->findOrFail($id);
+                $contract->restore();
+                return $contract;
+            },
+            resultDetails: fn (Contract $contract): array => ['contract_id' => $id]
+        );
+    }
+
 
     private static function validateCreateInput(array $data): void
     {
@@ -212,10 +264,25 @@ class ContractService
             ]);
         }
 
-        $room = Room::find($data['room_id']);
-        if (! $room) {
+        if (empty($data['bed_space_id'])) {
             throw ValidationException::withMessages([
-                'room_id' => ['Room does not exist.'],
+                'bed_space_id' => ['Bed space is required for contract creation.'],
+            ]);
+        }
+
+        $bedSpace = BedSpace::with('room')->find((int) $data['bed_space_id']);
+        if (! $bedSpace || ! $bedSpace->room) {
+            throw ValidationException::withMessages([
+                'bed_space_id' => ['Bed space does not exist.'],
+            ]);
+        }
+
+        $room = $bedSpace->room;
+
+        // Backwards-compatibility: if room_id is provided, ensure it matches the bed's room.
+        if (! empty($data['room_id']) && (int) $data['room_id'] !== (int) $room->room_id) {
+            throw ValidationException::withMessages([
+                'bed_space_id' => ['Bed space does not belong to the selected room.'],
             ]);
         }
 
@@ -225,38 +292,16 @@ class ContractService
             ]);
         }
 
-        if (empty($data['expected_move_out'])) {
-            throw ValidationException::withMessages([
-                'expected_move_out' => ['Expected move-out date is required for contract planning.'],
-            ]);
-        }
-
-        if ($data['expected_move_out'] <= $data['move_in_date']) {
+        if (! empty($data['expected_move_out']) && $data['expected_move_out'] <= $data['move_in_date']) {
             throw ValidationException::withMessages([
                 'expected_move_out' => ['Expected move-out date must be after move-in date.'],
             ]);
         }
 
-        if (! empty($data['bed_space_id'])) {
-            $bedSpace = BedSpace::find($data['bed_space_id']);
-
-            if (! $bedSpace) {
-                throw ValidationException::withMessages([
-                    'bed_space_id' => ['Bed space does not exist.'],
-                ]);
-            }
-
-            if ((int) $bedSpace->room_id !== (int) $room->room_id) {
-                throw ValidationException::withMessages([
-                    'bed_space_id' => ['Bed space does not belong to the selected room.'],
-                ]);
-            }
-
-            if ($bedSpace->status !== 'vacant') {
-                throw ValidationException::withMessages([
-                    'bed_space_id' => ['Bed space is not vacant.'],
-                ]);
-            }
+        if ($bedSpace->status !== 'vacant') {
+            throw ValidationException::withMessages([
+                'bed_space_id' => ['Bed space is not vacant.'],
+            ]);
         }
     }
 
@@ -303,14 +348,5 @@ class ContractService
         }
     }
 
-    private static function mapDatabaseException(QueryException $e): void
-    {
-        $sqlState = $e->errorInfo[0] ?? (string) $e->getCode();
 
-        if (in_array($sqlState, ['45000', '23000'], true)) {
-            throw ValidationException::withMessages([
-                'contract' => ['Contract operation failed due to integrity constraints.'],
-            ]);
-        }
-    }
 }

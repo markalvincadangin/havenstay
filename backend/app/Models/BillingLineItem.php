@@ -2,17 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable([
-    'billing_id',
-    'item_type',
-    'item_description',
-    'amount',
-])]
 class BillingLineItem extends Model
 {
     use HasFactory;
@@ -20,6 +13,13 @@ class BillingLineItem extends Model
     protected $table = 'billing_line_items';
 
     protected $primaryKey = 'billing_line_item_id';
+
+    protected $fillable = [
+        'billing_id',
+        'item_type',
+        'item_description',
+        'amount',
+    ];
 
     const TYPE_BASE_RENT = 'base_rent';
 

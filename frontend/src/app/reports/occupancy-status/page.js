@@ -1,29 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { apiRequest } from "../../../lib/api";
+import { fetcher } from "../../../lib/api";
+import useSWR from "swr";
 import { canViewReports } from "../../../lib/auth";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
-import { downloadCsvWithAuth } from "../../../lib/downloads";
 import { flattenApiErrors } from "../../../lib/errors";
 import { formatReportTimestamp } from "../../../lib/formatters";
+import { exportReportCsv } from "../../../lib/reports";
 import Alert from "../../_components/ui/Alert";
-import { AppMain } from "../../_components/ui/AppShell";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import Button from "../../_components/ui/Button";
 import { Card } from "../../_components/ui/Card";
 import FilterChips from "../../_components/ui/FilterChips";
 import { Field, Select } from "../../_components/ui/Fields";
-import PageHeader from "../../_components/ui/PageHeader";
-import Spinner from "../../_components/ui/Spinner";
-import UserRoleBadge from "../../_components/ui/UserRoleBadge";
+import { SkeletonListPage } from "../../_components/ui/Skeleton";
 import { KpiCard } from "../../_components/ui/KpiCard";
 import { Table } from "../../_components/ui/Table";
 import { StatusBadge } from "../../_components/ui/StatusBadge";
+import StandardPage from "../../_components/ui/StandardPage";
+import ReportHeaderActions from "../../_components/ui/ReportHeaderActions";
+import ReportFilterCard from "../../_components/ui/ReportFilterCard";
+import ResourceIdCell from "../../_components/ui/ResourceIdCell";
 import { BED_STATUS_LABELS } from "../../../lib/constants";
 import { BedDouble, Home, Search, Wrench } from "lucide-react";
 import TablePagination from "../../_components/ui/TablePagination";
+import ResourceView from "../../_components/ui/ResourceView";
 import {
   buildReportListQuery,
   normalizePaginatedList,
@@ -31,18 +34,8 @@ import {
   readStoredPerPage,
 } from "../../../lib/pagination";
 
-function buildQuery(params) {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== "" && value !== null && value !== undefined) query.set(key, String(value));
-  });
-  const value = query.toString();
-  return value ? `?${value}` : "";
-}
-
 export default function OccupancyStatusReportPage() {
-  const { user: currentUser, authLoading } = useAuthGuard();
-  const [loading, setLoading] = useState(true);
+  const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
@@ -53,53 +46,47 @@ export default function OccupancyStatusReportPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
-  const loadRooms = useCallback(async () => {
-    try {
-      const data = await apiRequest("/api/rooms?per_page=100", { method: "GET" });
-      const rows = normalizePaginatedList(data).rows;
-      setRooms(rows.sort((a, b) => String(a.room_code).localeCompare(String(b.room_code))));
-    } catch {
-      setRooms([]);
-    }
-  }, []);
+  const { data: roomsData } = useSWR(
+    !authLoading && currentUser && canViewReports(currentUser) ? "/api/rooms?per_page=100" : null,
+    fetcher
+  );
 
-  const loadReport = useCallback(async () => {
+  useEffect(() => {
+    if (roomsData) {
+      const rows = normalizePaginatedList(roomsData).rows;
+      setRooms(rows.sort((a, b) => String(a.room_code).localeCompare(String(b.room_code))));
+    }
+  }, [roomsData]);
+
+  const reportQs = useMemo(() => {
     const extra = {};
     if (appliedFilters.room_id) extra.room_id = appliedFilters.room_id;
     if (appliedFilters.bed_status) extra.bed_status = appliedFilters.bed_status;
-    const qs = buildReportListQuery(page, perPage, extra);
-    const data = await apiRequest(`/api/reports/occupancy-status${qs}`, { method: "GET" });
-    setReport(data);
-    setTableMeta(normalizeReportRows(data, "rows").meta);
+    return buildReportListQuery(page, perPage, extra);
   }, [appliedFilters, page, perPage]);
 
-  useEffect(() => {
-    if (authLoading || !currentUser) return;
-    if (!canViewReports(currentUser)) return;
-    loadRooms();
-  }, [authLoading, currentUser, loadRooms]);
+  const { data: reportData, error: reportError, mutate: loadReport, isValidating } = useSWR(
+    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/occupancy-status${reportQs}` : null,
+    fetcher,
+    { keepPreviousData: true }
+  );
+
+  const loading = !reportData && !reportError && !authLoading && currentUser && canViewReports(currentUser);
 
   useEffect(() => {
-    if (authLoading || !currentUser) return;
-
-    if (!canViewReports(currentUser)) {
+    if (reportError) {
+      setApiError(flattenApiErrors(reportError));
+    } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
       setApiError("Unauthorized: you do not have permission to view reports.");
-      setLoading(false);
-      return;
     }
+  }, [reportError, authLoading, currentUser]);
 
-    const run = async () => {
-      try {
-        await loadReport();
-      } catch (error) {
-        setApiError(flattenApiErrors(error));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    run();
-  }, [authLoading, currentUser, loadReport]);
+  useEffect(() => {
+    if (reportData) {
+      setReport(reportData);
+      setTableMeta(normalizeReportRows(reportData, "rows").meta);
+    }
+  }, [reportData]);
 
   const onApplyFilters = (event) => {
     event.preventDefault();
@@ -112,9 +99,11 @@ export default function OccupancyStatusReportPage() {
     setApiError("");
     setExporting(true);
     try {
-      const query = buildQuery(appliedFilters);
-      const stamp = new Date().toISOString().slice(0, 10);
-      await downloadCsvWithAuth(`/api/reports/occupancy-status/export${query}`, `occupancy-status-${stamp}.csv`);
+      await exportReportCsv({
+        endpoint: "/api/reports/occupancy-status/export",
+        filters: appliedFilters,
+        filenamePrefix: "occupancy-status",
+      });
     } catch (error) {
       setApiError(flattenApiErrors(error));
     } finally {
@@ -122,15 +111,9 @@ export default function OccupancyStatusReportPage() {
     }
   };
 
-  if (authLoading || loading) {
-    return (
-      <AppMain>
-        <Spinner label="Loading bed-level occupancy…" />
-      </AppMain>
-    );
-  }
+  if (isUnauthorized) return null;
 
-  const rows = Array.isArray(report.rows) ? report.rows : [];
+  const rows = normalizeReportRows(report, "rows").rows;
   const s = report.summary || {};
   const totalRecords = tableMeta?.total ?? rows.length;
   const timestampLabel = `Generated ${formatReportTimestamp()} • ${totalRecords} beds`;
@@ -140,59 +123,54 @@ export default function OccupancyStatusReportPage() {
     : null;
 
   return (
-    <AppMain>
-      <PageHeader
-        title="Bed occupancy"
-        subtitle={timestampLabel}
-        breadcrumbs={
-          <Breadcrumbs items={[{ label: "Reports", href: "/reports" }, { label: "Bed occupancy" }]} />
-        }
-        actions={
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-            <Button
-              type="button"
-              variant="primary"
-              onClick={onExport}
-              loading={exporting}
-              disabled={exporting}
-              className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
-            >
-              Export CSV
-            </Button>
-          </div>
-        }
-      />
+    <StandardPage
+      title="Bed occupancy"
+      subtitle={timestampLabel}
+      loading={authLoading || (loading && !reportData)}
+      skeleton={<SkeletonListPage rows={10} />}
+      breadcrumbs={<Breadcrumbs items={[{ label: "Reports", href: "/reports" }, { label: "Bed occupancy" }]} />}
+      actions={
+        <ReportHeaderActions
+          user={currentUser}
+          onExport={onExport}
+          exporting={exporting}
+          exportDisabled={exporting}
+        />
+      }
+    >
 
       <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-stone-500">
         Per-bed availability, tenant name, and active contract—aligned with how beds are managed in Rooms.
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total beds" value={s.bed_count ?? "—"} icon={BedDouble} />
-        <KpiCard label="Occupied" value={s.occupied_beds ?? "—"} icon={Home} />
-        <KpiCard label="Vacant" value={s.vacant_beds ?? "—"} icon={Search} />
-        <KpiCard label="Maintenance" value={s.maintenance_beds ?? "—"} icon={Wrench} />
+        <KpiCard 
+          label="Total beds" 
+          value={s.bed_count ?? "—"} 
+          icon={BedDouble} 
+          isSyncing={isValidating}
+        />
+        <KpiCard 
+          label="Occupied" 
+          value={s.occupied_beds ?? "—"} 
+          icon={Home} 
+          isSyncing={isValidating}
+        />
+        <KpiCard 
+          label="Vacant" 
+          value={s.vacant_beds ?? "—"} 
+          icon={Search} 
+          isSyncing={isValidating}
+        />
+        <KpiCard 
+          label="Maintenance" 
+          value={s.maintenance_beds ?? "—"} 
+          icon={Wrench} 
+          isSyncing={isValidating}
+        />
       </div>
 
-      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
-        <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm border border-teal-100/50">
-              <Search size={14} />
-            </div>
-            <h3 className="hs-strip-title uppercase tracking-widest text-xs font-black text-stone-900">Filters</h3>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => loadReport()}
-            className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600"
-          >
-            Refresh
-          </Button>
-        </div>
-        <div className="p-8">
+      <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={isValidating}>
           <form className="grid gap-6 sm:grid-cols-4" onSubmit={onApplyFilters}>
             <Field label="Room">
               <Select
@@ -270,60 +248,72 @@ export default function OccupancyStatusReportPage() {
               {apiError}
             </Alert>
           ) : null}
-        </div>
-      </Card>
+      </ReportFilterCard>
 
-      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
-        <Table
-          embedded={true}
-          caption="Per-bed occupancy"
-          ariaLabel="Bed-level occupancy records"
-          columns={[
-            { key: "room", label: "Room" },
-            { key: "bed", label: "Bed label" },
-            { key: "status", label: "Bed status" },
-            { key: "tenant", label: "Tenant" },
-            { key: "contract", label: "Contract ID", className: "text-right" },
-          ]}
-          rows={rows.map((row) => (
-            <tr key={row.bed_space_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
-              <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-900">
-                {row.room_code}
-              </td>
-              <td className="px-6 py-4 text-xs font-bold text-stone-800">{row.bed_label}</td>
-              <td className="px-6 py-4">
-                <StatusBadge>{row.bed_status}</StatusBadge>
-              </td>
-              <td className="px-6 py-4 text-xs text-stone-700">{row.tenant_name || "—"}</td>
-              <td className="px-6 py-4 text-right">
-                {row.contract_id ? (
-                  <Link
-                    href={`/contracts/${row.contract_id}`}
-                    className="font-mono text-[10px] font-black text-teal-600 hover:text-teal-900"
-                  >
-                    #CONTRACT-{row.contract_id}
-                  </Link>
-                ) : (
-                  <span className="text-stone-300">—</span>
-                )}
-              </td>
-            </tr>
-          ))}
-          emptyTitle="No bed records"
-          emptyDescription="Adjust filters or confirm rooms and bed spaces exist in inventory."
-        />
-        <TablePagination
-          meta={tableMeta}
-          page={page}
-          perPage={perPage}
-          onPageChange={setPage}
-          onPerPageChange={(n) => {
-            setPage(1);
-            setPerPage(n);
-          }}
-          disabled={false}
-        />
-      </Card>
-    </AppMain>
+      <ResourceView
+        isLoading={loading}
+        isSyncing={isValidating}
+        error={reportError}
+        isEmpty={rows.length === 0}
+        onRetry={() => loadReport()}
+        skeleton={<SkeletonListPage rows={10} />}
+        emptyProps={{
+          title: "No bed records",
+          message: "Adjust filters or confirm rooms and bed spaces exist in inventory."
+        }}
+      >
+        <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
+          <Table
+            embedded={true}
+            caption="Per-bed occupancy"
+            ariaLabel="Bed-level occupancy records"
+            columns={[
+              { key: "room", label: "Room" },
+              { key: "bed", label: "Bed label" },
+              { key: "status", label: "Bed status" },
+              { key: "tenant", label: "Tenant" },
+              { key: "contract", label: "Contract ID", className: "text-right" },
+            ]}
+            rows={rows.map((row) => (
+              <tr key={row.bed_space_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
+                <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-900">
+                  {row.room_code}
+                </td>
+                <td className="px-6 py-4 text-xs font-bold text-stone-800">{row.bed_label}</td>
+                <td className="px-6 py-4">
+                  <StatusBadge>{row.bed_status}</StatusBadge>
+                </td>
+                <td className="px-6 py-4 text-xs text-stone-700">{row.tenant_name || "—"}</td>
+                <td className="px-6 py-4 text-right">
+                  {row.contract_id ? (
+                    <Link
+                      href={`/contracts/${row.contract_id}`}
+                      className="font-mono text-[10px] font-black text-teal-600 hover:text-teal-900"
+                    >
+                      <ResourceIdCell id={row.contract_id} prefix="CONTRACT" />
+                    </Link>
+                  ) : (
+                    <span className="text-stone-300">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            emptyTitle="No bed records"
+            emptyDescription="Adjust filters or confirm rooms and bed spaces exist in inventory."
+          />
+          <TablePagination
+            meta={tableMeta}
+            page={page}
+            perPage={perPage}
+            onPageChange={setPage}
+            onPerPageChange={(n) => {
+              setPage(1);
+              setPerPage(n);
+            }}
+            disabled={isValidating}
+          />
+        </Card>
+      </ResourceView>
+    </StandardPage>
   );
 }

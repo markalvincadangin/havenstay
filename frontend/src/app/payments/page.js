@@ -1,16 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { flushSync } from "react-dom";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ArrowUpRight, Wallet } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+import { Search, Wallet, PlusCircle } from "lucide-react";
 
-import { apiRequest } from "../../lib/api";
-import { flattenApiErrors } from "../../lib/errors";
+import useSWR from "swr";
+import { fetcher } from "../../lib/api";
 import { canManageBilling, canViewBilling } from "../../lib/auth";
-import { useAuthGuard } from "../../hooks/useAuthGuard";
 import { useTableSort } from "../../hooks/useTableSort";
 import { sortClientRows } from "../../lib/tableSort";
 import {
@@ -20,31 +16,26 @@ import {
   formatTenantDirectoryName,
 } from "../../lib/formatters";
 import { StatusBadge } from "../_components/ui/StatusBadge";
-import Alert from "../_components/ui/Alert";
-import { AppMain } from "../_components/ui/AppShell";
 import { Card } from "../_components/ui/Card";
+import FilterPanelCard from "../_components/ui/FilterPanelCard";
 import FilterChips from "../_components/ui/FilterChips";
 import { Field, Input, Select } from "../_components/ui/Fields";
 import Breadcrumbs from "../_components/ui/Breadcrumbs";
-import PageHeader from "../_components/ui/PageHeader";
-import { SkeletonListPage } from "../_components/ui/Skeleton";
-import UserRoleBadge from "../_components/ui/UserRoleBadge";
-import { primaryLinkCtaClass } from "../_components/ui/LinkTokens";
 import { Table } from "../_components/ui/Table";
 import { KpiCard } from "../_components/ui/KpiCard";
 import { METHOD_LABELS, PAYMENT_STATUS_LABELS } from "../../lib/constants";
 import {
-  buildPaginationQuery,
   normalizePaginatedList,
-  readStoredPerPage,
 } from "../../lib/pagination";
+import ResourceView from "../_components/ui/ResourceView";
 import TablePagination from "../_components/ui/TablePagination";
-
-const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.2, ease: "easeOut" },
-};
+import StandardPage from "../_components/ui/StandardPage";
+import ResourceIdCell from "../_components/ui/ResourceIdCell";
+import { useAuth } from "../_context/AuthContext";
+import PageHeaderActions from "../_components/ui/PageHeaderActions";
+import { usePaginatedFilters } from "../../hooks/usePaginatedFilters";
+import RowOpenIndicator from "../_components/ui/RowOpenIndicator";
+import { interactiveTableRowClass } from "../../lib/tableRows";
 
 function paymentRowStatus(p) {
   return p?.voided_at ? "voided" : "posted";
@@ -52,98 +43,67 @@ function paymentRowStatus(p) {
 
 export default function PaymentsListPage() {
   const router = useRouter();
-  const { user: currentUser, authLoading } = useAuthGuard();
-  const shouldReduceMotion = useReducedMotion();
-  const [loading, setLoading] = useState(true);
-  const [kpisLoading, setKpisLoading] = useState(true);
-  const [apiError, setApiError] = useState("");
-  const [payments, setPayments] = useState([]);
-  const [listMeta, setListMeta] = useState(null);
-
-  const [tenantQuery, setTenantQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
-  const [collectedToday, setCollectedToday] = useState(0);
-  const [collectedThisMonth, setCollectedThisMonth] = useState(0);
+  const { user: currentUser } = useAuth();
+  const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
+    usePaginatedFilters({
+      initialFilters: { query: "", dateFrom: "", dateTo: "", status: "all" },
+      debounceKeys: ["query"],
+      buildExtraParams: ({ filters: current, debounced }) => {
+        const extra = {};
+        const q = String(debounced.query ?? "").trim();
+        if (q) extra.q = q;
+        if (current.dateFrom) extra.from = current.dateFrom;
+        if (current.dateTo) extra.to = current.dateTo;
+        if (current.status !== "all") extra.posting_status = current.status;
+        return extra;
+      },
+    });
+  const tenantQuery = filters.query;
+  const dateFrom = filters.dateFrom;
+  const dateTo = filters.dateTo;
+  const statusFilter = filters.status;
   const { sortColumn, sortDirection, onSortChange } = useTableSort();
 
+  const canView = useMemo(() => canViewBilling(currentUser), [currentUser]);
   const canPostPayments = useMemo(() => canManageBilling(currentUser), [currentUser]);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(tenantQuery.trim()), 300);
-    return () => clearTimeout(t);
-  }, [tenantQuery]);
-
-  const fetchKpis = useCallback(async () => {
-    if (!currentUser || !canViewBilling(currentUser)) return;
-    setKpisLoading(true);
-    try {
+  // KPIs
+  const { data: todayRepData, isValidating: todayValidating } = useSWR(
+    currentUser && canView ? (() => {
       const today = new Date().toISOString().slice(0, 10);
+      return `/api/reports/collections-performance?start_date=${today}&end_date=${today}`;
+    })() : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
+
+  const { data: monthRepData, isValidating: monthValidating } = useSWR(
+    currentUser && canView ? (() => {
       const d = new Date();
       const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-      const [todayRep, monthRep] = await Promise.all([
-        apiRequest(`/api/reports/collections-performance?start_date=${today}&end_date=${today}`, {
-          method: "GET",
-        }),
-        apiRequest(`/api/reports/collections-performance?start_date=${start}&end_date=${today}`, {
-          method: "GET",
-        }),
-      ]);
-      setCollectedToday(Number(todayRep?.summary?.total_collected ?? 0));
-      setCollectedThisMonth(Number(monthRep?.summary?.total_collected ?? 0));
-    } catch {
-      /* KPIs best-effort */
-    } finally {
-      setKpisLoading(false);
-    }
-  }, [currentUser]);
+      const today = d.toISOString().slice(0, 10);
+      return `/api/reports/collections-performance?start_date=${start}&end_date=${today}`;
+    })() : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
 
-  const fetchPayments = useCallback(async () => {
-    if (!canViewBilling(currentUser)) {
-      setLoading(false);
-      return;
-    }
-    setApiError("");
-    setLoading(true);
-    try {
-      const extra = {};
-      if (debouncedQuery) extra.q = debouncedQuery;
-      if (dateFrom) extra.payment_from = dateFrom;
-      if (dateTo) extra.payment_to = dateTo;
-      if (statusFilter === "posted" || statusFilter === "voided") {
-        extra.posting_status = statusFilter;
-      }
-      const qs = buildPaginationQuery(page, perPage, extra);
-      const data = await apiRequest(`/api/payments${qs}`, { method: "GET" });
-      const { rows, meta } = normalizePaginatedList(data);
-      setPayments(rows);
-      setListMeta(meta);
-    } catch (error) {
-      setApiError(flattenApiErrors(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser, page, perPage, debouncedQuery, dateFrom, dateTo, statusFilter]);
+  const collectedToday = todayRepData?.summary?.total_collected ?? 0;
+  const collectedThisMonth = monthRepData?.summary?.total_collected ?? 0;
 
-  useEffect(() => {
-    if (authLoading || !currentUser) return;
-    fetchKpis();
-  }, [authLoading, currentUser, fetchKpis]);
+  // Payments
+  const { data: paymentsData, error: paymentsError, isValidating: isSyncing, mutate: refetchPayments } = useSWR(
+    currentUser && canView ? `/api/payments${queryString}` : null,
+    fetcher,
+    { keepPreviousData: true, dedupingInterval: 30000 }
+  );
 
-  useEffect(() => {
-    if (authLoading || !currentUser) return;
-    fetchPayments();
-  }, [authLoading, currentUser, fetchPayments]);
+  const { rows: payments = [], meta: listMeta = null } = useMemo(() => {
+    if (!paymentsData) return { rows: [], meta: null };
+    return normalizePaginatedList(paymentsData);
+  }, [paymentsData]);
 
-  useEffect(() => {
-    flushSync(() => {
-      setPage(1);
-    });
-  }, [debouncedQuery, dateFrom, dateTo, statusFilter]);
+  const loading = !paymentsData && !paymentsError;
 
   const sortedFiltered = useMemo(() => {
     if (!sortColumn) return payments;
@@ -172,113 +132,86 @@ export default function PaymentsListPage() {
     });
   }, [payments, sortColumn, sortDirection]);
 
-  if (authLoading || loading) {
-    return (
-      <AppMain>
-        <SkeletonListPage />
-      </AppMain>
-    );
-  }
-
   return (
-    <AppMain>
-      <motion.div
-        className="space-y-6"
-        initial={shouldReduceMotion ? false : pageVariants.initial}
-        animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
-      >
-        <PageHeader
-          title="Payments"
-          subtitle="Chronological ledger of payments, reference codes, and contract links."
-          breadcrumbs={<Breadcrumbs items={[{ label: "Payments" }]} />}
-          actions={
-            <>
-              {canPostPayments && (
-                <Link href="/payments/new" className={primaryLinkCtaClass + " !h-11 rounded-xl bg-teal-600 px-4 sm:px-8 text-[10px] font-black uppercase tracking-widest shadow-xl shadow-teal-900/10 hover:bg-teal-700 active:scale-95"}>
-                  <Plus size={18} aria-hidden />
-                  <span className="hidden sm:inline">Register Payment</span>
-                  <span className="sm:hidden">New</span>
-                </Link>
-              )}
-              <div className="hidden sm:block border-l border-stone-200 h-6 mx-1" />
-              <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-            </>
-          }
+    <StandardPage
+      title="Payments"
+      subtitle="Chronological ledger of payments, reference codes, and contract links."
+      breadcrumbs={<Breadcrumbs items={[{ label: "Payments" }]} />}
+      loading={loading}
+      error={paymentsError}
+      actions={
+        <PageHeaderActions
+          ctaHref={canPostPayments ? "/payments/new" : null}
+          ctaLabel="Record Payment"
+          ctaIcon={PlusCircle}
+          user={currentUser}
         />
-
+      }
+    >
+      <div className="space-y-6">
         <div className="grid gap-6 sm:grid-cols-2">
           <KpiCard
-            label="Total Collected Today"
+            label="Daily Collections"
             value={formatPHP(collectedToday)}
-            emphasis="success"
-            trend={null}
-            isLoading={kpisLoading}
+            sub="TOTAL TAKEN TODAY"
+            isSuccess={collectedToday > 0}
+            isLoading={!todayRepData && !monthRepData}
+            isSyncing={todayValidating}
           />
           <KpiCard
-            label="Total Collected This Month"
+            label="Monthly Volume"
             value={formatPHP(collectedThisMonth)}
-            emphasis="primary"
-            trend={null}
-            isLoading={kpisLoading}
+            sub="POSTED COLLECTIONS MTD"
+            isSuccess={collectedThisMonth > 0}
+            isLoading={!todayRepData && !monthRepData}
+            isSyncing={monthValidating}
           />
         </div>
 
-        <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-stone-100 text-stone-600 shadow-sm">
-                <Search size={16} aria-hidden />
-              </div>
-              <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Filter Payments</h2>
-            </div>
-          </div>
-          <div className="p-8">
+        <FilterPanelCard icon={Search}>
             <div className="grid items-end gap-6 lg:grid-cols-12">
               <div className="lg:col-span-5">
-                <Field label="Cross-Reference Search">
+                <Field label="Search payments">
                   <Input
                     icon={Search}
                     value={tenantQuery}
-                    onChange={(e) => setTenantQuery(e.target.value)}
-                    placeholder="Resident name, Payment ID, or Reference…"
+                    onChange={(e) => updateFilter("query", e.target.value)}
+                    placeholder="Resident name, Payment ID, or reference..."
                     className="!h-12 border-stone-200"
                   />
                 </Field>
               </div>
               <div className="lg:col-span-3">
-                <Field label="Posting Status">
+                <Field label="Status">
                   <Select
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
+                    onChange={(e) => updateFilter("status", e.target.value)}
                     className="!h-12 border-stone-200 font-bold uppercase tracking-widest text-[10px]"
                   >
                     <option value="all">All Statuses</option>
                     {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
+                      <option key={value} value={value}>{label}</option>
                     ))}
                   </Select>
                 </Field>
               </div>
               <div className="lg:col-span-2">
-                <Field label="Range From">
+                <Field label="Payment From">
                   <Input
                     type="date"
                     value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="!h-12 border-stone-200 font-bold"
+                    onChange={(e) => updateFilter("dateFrom", e.target.value)}
+                    className="!h-12 border-stone-200 font-bold tabular-nums"
                   />
                 </Field>
               </div>
               <div className="lg:col-span-2">
-                <Field label="Range To">
+                <Field label="Payment To">
                   <Input
                     type="date"
                     value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="!h-12 border-stone-200 font-bold"
+                    onChange={(e) => updateFilter("dateTo", e.target.value)}
+                    className="!h-12 border-stone-200 font-bold tabular-nums"
                   />
                 </Field>
               </div>
@@ -286,110 +219,104 @@ export default function PaymentsListPage() {
             <FilterChips
               className="mt-6"
               items={[
-                { key: "tenant", label: "Search", value: tenantQuery, onClear: () => setTenantQuery("") },
+                { key: "tenant", label: "Search", value: tenantQuery, onClear: () => updateFilter("query", "") },
                 {
                   key: "status",
                   label: "Status",
                   value: statusFilter !== "all" ? PAYMENT_STATUS_LABELS[statusFilter] || statusFilter : "",
-                  onClear: () => setStatusFilter("all"),
+                  onClear: () => updateFilter("status", "all"),
                 },
-                { key: "from", label: "Date From", value: dateFrom, onClear: () => setDateFrom("") },
-                { key: "to", label: "Date To", value: dateTo, onClear: () => setDateTo("") },
+                { key: "from", label: "Date From", value: dateFrom, onClear: () => updateFilter("dateFrom", "") },
+                { key: "to", label: "Date To", value: dateTo, onClear: () => updateFilter("dateTo", "") },
               ]}
-              onClearAll={() => {
-                setTenantQuery("");
-                setStatusFilter("all");
-                setDateFrom("");
-                setDateTo("");
-              }}
+              onClearAll={resetFilters}
             />
-          </div>
-        </Card>
+        </FilterPanelCard>
 
-        {apiError && <Alert variant="error" title="Could not load payments">{apiError}</Alert>}
+        <ResourceView
+          isLoading={loading}
+          isSyncing={isSyncing}
+          error={paymentsError}
+          isEmpty={sortedFiltered.length === 0}
+          onRetry={() => refetchPayments()}
+          emptyProps={{
+            title: "No payments found",
+            message: "Adjust filters or record a payment to see results here."
+          }}
+        >
+          <Card className="!p-0 overflow-hidden border-stone-200 rounded-2xl shadow-sm">
+            <Table
+              embedded
+              caption={`Payments ledger — ${listMeta?.total ?? sortedFiltered.length} matching`}
+              columns={[
+                { key: "payment_id", label: "PAYMENT ID", sortable: true, sortKey: "payment_id", className: "w-28" },
+                { key: "date", label: "PAYMENT DATE", sortable: true, sortKey: "date" },
+                { key: "tenant", label: "RESIDENT", sortable: true, sortKey: "tenant" },
+                { key: "amount", label: "AMOUNT PAID", sortable: true, sortKey: "amount", className: "text-right" },
+                { key: "method", label: "PAYMENT METHOD", sortable: true, sortKey: "method" },
+                { key: "status", label: "STATUS", sortable: true, sortKey: "status" },
+                { key: "actions", label: "", className: "text-right w-16" },
+              ]}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              onSortChange={onSortChange}
+              rows={sortedFiltered.map((payment) => {
+                const tenant = payment?.billing?.contract?.tenant;
+                const tenantName = tenant ? formatTenantDirectoryName(tenant) : "—";
+                const rowStatus = paymentRowStatus(payment);
+                const isVoided = rowStatus === "voided";
+                const methodKey = String(payment?.payment_method || "").toLowerCase();
 
-        <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden shadow-sm">
-          <Table
-            variant="embedded"
-            caption={`Payment ledger — ${listMeta?.total ?? sortedFiltered.length} matching`}
-            columns={[
-              { key: "payment_id", label: "Payment ID", sortable: true, sortKey: "payment_id", className: "w-28" },
-              { key: "date", label: "Payment date", sortable: true, sortKey: "date" },
-              { key: "tenant", label: "Tenant", sortable: true, sortKey: "tenant" },
-              { key: "amount", label: "Amount paid", sortable: true, sortKey: "amount", className: "text-right" },
-              { key: "method", label: "Payment method", sortable: true, sortKey: "method" },
-              { key: "status", label: "Status", sortable: true, sortKey: "status" },
-              { key: "actions", label: "", className: "text-right w-16" },
-            ]}
-            sortColumn={sortColumn}
-            sortDirection={sortDirection}
-            onSortChange={onSortChange}
-            rows={sortedFiltered.map((payment) => {
-              const tenant = payment?.billing?.contract?.tenant;
-              const tenantName = tenant ? formatTenantDirectoryName(tenant) : "—";
-              const rowStatus = paymentRowStatus(payment);
-              const isVoided = rowStatus === "voided";
-
-              return (
-                <tr
-                  key={payment.payment_id}
-                  className="group cursor-pointer border-t border-stone-50 transition-colors hover:bg-stone-50/50"
-                  onClick={() => router.push(`/payments/${payment.payment_id}`)}
-                >
-                  <td className="px-6 py-4">
-                    <span className="font-mono text-[10px] font-black tracking-widest text-stone-400">
-                      PAY-{String(payment.payment_id).padStart(6, '0')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold tabular-nums text-stone-600">
-                    {formatDateString(payment.payment_date)}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-black text-stone-900 group-hover:text-teal-700 transition-colors">
-                    {tenantName}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <span className={`font-mono font-black tabular-nums ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`}>
-                      {formatPHP(payment.amount_paid)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Wallet size={12} className="text-stone-300" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
-                        {METHOD_LABELS[payment.payment_method.toLowerCase()] || payment.payment_method || "Other"}
+                return (
+                  <tr
+                    key={payment.payment_id}
+                    title="Open payment detail"
+                    className={interactiveTableRowClass}
+                    onClick={() => router.push(`/payments/${payment.payment_id}`)}
+                  >
+                    <td className="px-6 py-4">
+                      <ResourceIdCell id={payment.payment_id} prefix="PAY" />
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold tabular-nums text-stone-600">
+                      {formatDateString(payment.payment_date)}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-black text-stone-900 group-hover:text-teal-700 transition-colors leading-tight">
+                      {tenantName}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <span className={`font-mono font-black tabular-nums ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`}>
+                        {formatPHP(payment.amount_paid)}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge>{rowStatus}</StatusBadge>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div
-                      className="inline-flex size-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-300 transition-all group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600 shadow-sm"
-                      aria-label="View transaction"
-                    >
-                      <ArrowUpRight size={16} />
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            emptyTitle="No transactions posted"
-            emptyDescription="Adjust filters or check for archive entries."
-          />
-          <TablePagination
-            meta={listMeta}
-            page={page}
-            perPage={perPage}
-            onPageChange={setPage}
-            onPerPageChange={(n) => {
-              setPage(1);
-              setPerPage(n);
-            }}
-            disabled={loading}
-          />
-        </div>
-      </motion.div>
-    </AppMain>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <Wallet size={12} className="text-stone-300" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+                          {METHOD_LABELS[methodKey] || payment?.payment_method || "Other"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <StatusBadge size="sm">{rowStatus}</StatusBadge>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <RowOpenIndicator compact />
+                    </td>
+                  </tr>
+                );
+              })}
+            />
+            <TablePagination
+              meta={listMeta}
+              page={page}
+              perPage={perPage}
+              onPageChange={setPage}
+              onPerPageChange={(n) => { setPage(1); setPerPage(n); }}
+              disabled={loading || isSyncing}
+            />
+          </Card>
+        </ResourceView>
+      </div>
+    </StandardPage>
   );
 }

@@ -83,8 +83,11 @@ describe("constants.js vs db/havenstay_schema.sql ENUMs", () => {
     );
   });
 
-  it("AUDIT_ACTION_LABELS keys match audit_logs.action", () => {
-    expectKeysMatchEnum(AUDIT_ACTION_LABELS, extractColumnEnum(sql, "audit_logs", "action"), "AUDIT_ACTION_LABELS");
+  it("audit_logs.action is VARCHAR in schema; AUDIT_ACTION_LABELS are UI keys for free-form actions", () => {
+    const block = sql.match(/CREATE TABLE\s+audit_logs\s*\(([\s\S]*?)\)\s*ENGINE/i);
+    expect(block?.[1], "audit_logs table").toBeTruthy();
+    expect(block[1]).toMatch(/\baction\s+VARCHAR\s*\(\s*32\s*\)/i);
+    expect(Object.keys(AUDIT_ACTION_LABELS).length).toBeGreaterThan(0);
   });
 
   it("TX_LOG_STATUS_LABELS keys match transaction_logs.status", () => {

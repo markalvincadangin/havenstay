@@ -1,29 +1,43 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, CheckCircle, CreditCard, Receipt, Building2, ShieldCheck } from "lucide-react";
+import {
+  CheckCircle, Building2, ShieldCheck, Receipt, CreditCard
+} from "lucide-react";
 
-import { apiRequest } from "../../../lib/api";
+import { apiRequest, fetcher } from "../../../lib/api";
+import useSWR from "swr";
 import { canManageBilling } from "../../../lib/auth";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { flattenApiErrors } from "../../../lib/errors";
+import { applyServerFieldErrors } from "../../../lib/forms";
 import { formatPHP, formatDateRange } from "../../../lib/formatters";
 import { useUnsavedChangesWarning } from "../../../lib/useUnsavedChangesWarning";
 import { useFocusTrap } from "../../../hooks/useFocusTrap";
 import Alert from "../../_components/ui/Alert";
-import { AppMain } from "../../_components/ui/AppShell";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import Button from "../../_components/ui/Button";
-import { Card } from "../../_components/ui/Card";
 import { Field, Input, Select, Textarea } from "../../_components/ui/Fields";
-import PageHeader from "../../_components/ui/PageHeader";
+import {
+  primaryLinkCtaClass,
+  secondaryOutlineLinkClass,
+} from "../../_components/ui/LinkTokens";
 import Spinner from "../../_components/ui/Spinner";
-import UserRoleBadge from "../../_components/ui/UserRoleBadge";
-import { METHOD_LABELS, PAYMENT_METHOD_KEYS } from "../../../lib/constants";
+import {
+  METHOD_LABELS,
+  PAYMENT_METHOD_KEYS,
+  isBillingCollectibleStatus,
+  isPaymentMethodCash,
+} from "../../../lib/constants";
 import { normalizePaginatedList } from "../../../lib/pagination";
+import StandardPage from "../../_components/ui/StandardPage";
+import PageHeaderActions from "../../_components/ui/PageHeaderActions";
+import ResourceIdCell from "../../_components/ui/ResourceIdCell";
+import SectionCard from "../../_components/ui/SectionCard";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -109,14 +123,20 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
           </div>
           <div>
             <h3 id="confirm-payment-title" className="hs-strip-title text-stone-900">
-              Confirm Payment
+              Confirm Payment Posting
             </h3>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-stone-400">Verify ledger entry</p>
+            <p className="mt-1 text-sm text-stone-500">This will post the collection to the billing ledger while preserving historical and audit records.</p>
           </div>
         </div>
 
         <div className="mt-6 rounded-2xl border border-stone-100 bg-stone-50/50 p-6">
           <div className="grid grid-cols-2 gap-y-4 text-xs">
+            <div className="col-span-2">
+              <p className="font-bold uppercase tracking-widest text-stone-400">Record</p>
+              <div className="mt-1">
+                <ResourceIdCell id={selectedBilling?.billing_id} prefix="BILL" />
+              </div>
+            </div>
             <div className="col-span-2">
               <p className="font-bold uppercase tracking-widest text-stone-400">Resident</p>
               <p className="mt-1 font-bold text-stone-900">{selectedBilling?.tenant_name || "—"}</p>
@@ -141,7 +161,7 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
         </div>
 
         <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={onCancel} disabled={loading} className="!h-11 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest">
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={loading} className={secondaryOutlineLinkClass + " px-10"}>
             Cancel
           </Button>
           <Button
@@ -149,7 +169,7 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
             variant="primary"
             onClick={onConfirm}
             loading={loading}
-            className="!h-11 rounded-xl bg-teal-600 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700"
+            className={primaryLinkCtaClass + " px-10 border-0"}
           >
             Record Payment
           </Button>
@@ -161,13 +181,12 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
 
 export default function RecordPaymentPage() {
   const router = useRouter();
-  const { user: currentUser, authLoading } = useAuthGuard();
+  const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
   const deepLinkApplied = useRef(false);
 
   const [apiError, setApiError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [loading, setLoading] = useState(true);
   const [billingOptions, setBillingOptions] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingValues, setPendingValues] = useState(null);
@@ -179,13 +198,14 @@ export default function RecordPaymentPage() {
     setValue,
     watch,
     clearErrors,
+    setError,
     trigger,
     formState: { errors, isDirty },
   } = useForm({
     defaultValues: {
       billing_id: "",
       amount_paid: "",
-      payment_date: new Date().toLocaleDateString("en-CA"),
+      payment_date: new Date().toISOString().slice(0, 10),
       payment_method: "cash",
       reference_number: "",
       remarks: "",
@@ -197,7 +217,7 @@ export default function RecordPaymentPage() {
   const watchedMethod = watch("payment_method");
 
   useEffect(() => {
-    if (watchedMethod === "cash") {
+    if (isPaymentMethodCash(watchedMethod)) {
       setValue("reference_number", "", { shouldDirty: false });
       clearErrors("reference_number");
     } else {
@@ -228,55 +248,47 @@ export default function RecordPaymentPage() {
 
   useUnsavedChangesWarning(isDirty && !isSubmitting);
 
+  const { data: billingData, error: billingError } = useSWR(
+    !authLoading && currentUser && canManageBilling(currentUser) ? "/api/billing?per_page=100" : null,
+    fetcher,
+    { fallbackData: { data: [], meta: { total: 0 } } }
+  );
+
+  const loading = !billingData && !billingError && !authLoading && currentUser;
+
   useEffect(() => {
-    if (authLoading || !currentUser) return;
-    if (!canManageBilling(currentUser)) {
-      setLoading(false);
-      return;
+    if (billingError) {
+      setApiError(flattenApiErrors(billingError) || billingError?.message || "Failed to load billing records.");
     }
+  }, [billingError]);
 
-    let cancelled = false;
-    (async () => {
-      try {
-        const billingData = await apiRequest("/api/billing?per_page=100", { method: "GET" }).catch(() => ({
-          data: [],
-          meta: { total: 0 },
-        }));
-        if (cancelled) return;
-        const rows = normalizePaginatedList(billingData).rows;
-        const options = rows
-          .map((row) => {
-            const amountDue = Number(row.amount_due || row.total_amount || 0);
-            const amountPaid = Number(row.amount_paid || row.total_paid || 0);
-            const balance = Number(row.balance ?? (amountDue - amountPaid));
-            const tenant = row?.contract?.tenant;
-            return {
-              billing_id: row.billing_id,
-              contract_id: row.contract_id,
-              tenant_id: tenant?.tenant_id,
-              status: row.status,
-              tenant_name: tenant ? `${tenant.last_name || ""}, ${tenant.first_name || ""}`.trim() : "",
-              period: formatDateRange(row.billing_period_from, row.billing_period_to),
-              balance,
-              total_amount: amountDue,
-            };
-          })
-          .filter((item) => {
-            if (item.balance > 0) return true;
-            return item.status === "unpaid" || item.status === "partial";
-          });
-        setBillingOptions(options);
-      } catch (error) {
-        if (!cancelled) setApiError(flattenApiErrors(error) || error.message || "Failed to load billing records.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, currentUser]);
+  useEffect(() => {
+    if (billingData) {
+      const rows = normalizePaginatedList(billingData).rows;
+      const options = rows
+        .map((row) => {
+          const amountDue = Number(row.amount_due || row.total_amount || 0);
+          const amountPaid = Number(row.amount_paid || row.total_paid || 0);
+          const balance = Number(row.balance ?? (amountDue - amountPaid));
+          const tenant = row?.contract?.tenant;
+          return {
+            billing_id: row.billing_id,
+            contract_id: row.contract_id,
+            tenant_id: tenant?.tenant_id,
+            status: row.status,
+            tenant_name: tenant ? `${tenant.last_name || ""}, ${tenant.first_name || ""}`.trim() : "",
+            period: formatDateRange(row.billing_period_from, row.billing_period_to),
+            balance,
+            total_amount: amountDue,
+          };
+        })
+        .filter((item) => {
+          if (item.balance > 0) return true;
+          return isBillingCollectibleStatus(item.status);
+        });
+      setBillingOptions(options);
+    }
+  }, [billingData]);
 
   useEffect(() => {
     if (typeof window === "undefined" || billingOptions.length === 0 || deepLinkApplied.current) return;
@@ -320,7 +332,7 @@ export default function RecordPaymentPage() {
           amount_paid: Number(pendingValues.amount_paid),
           payment_date: pendingValues.payment_date,
           payment_method: pendingValues.payment_method,
-          reference_number: pendingValues.payment_method === "cash" ? null : pendingValues.reference_number || null,
+          reference_number: isPaymentMethodCash(pendingValues.payment_method) ? null : pendingValues.reference_number || null,
           remarks: pendingValues.remarks || null,
         }),
       });
@@ -334,46 +346,40 @@ export default function RecordPaymentPage() {
       }
     } catch (error) {
       setShowConfirmModal(false);
-      setApiError(flattenApiErrors(error));
+      applyServerFieldErrors(error, setError, { setApiError });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const pageTitle = "Record Payment";
+  const pageSubtitle = "Record a payment against a billing cycle and update balances.";
+  const pageBreadcrumbs = (
+    <Breadcrumbs items={[{ label: "Payments", href: "/payments" }, { label: "Record Payment" }]} />
+  );
+  const pageActions = <PageHeaderActions backHref="/payments" backLabel="Back to Payments" user={currentUser} />;
+
+  if (isUnauthorized) return null;
   if (authLoading || loading) {
     return (
-      <AppMain>
-        <Spinner label="Syncing billing data…" />
-      </AppMain>
+      <StandardPage
+        title={pageTitle}
+        subtitle={pageSubtitle}
+        loading
+        skeleton={<Spinner label="Syncing billing data…" />}
+      />
     );
   }
 
   if (!canManageBilling(currentUser)) {
     return (
-      <AppMain>
+      <StandardPage
+        title={pageTitle}
+        subtitle={pageSubtitle}
+        breadcrumbs={pageBreadcrumbs}
+        actions={pageActions}
+      >
         <div className="mx-auto mt-8 w-full max-w-4xl space-y-6">
-          <PageHeader
-            title="Register Payment"
-            subtitle="Record a payment against a billing cycle and update balances."
-            breadcrumbs={
-              <Breadcrumbs items={[{ label: "Payments", href: "/payments" }, { label: "Register Payment" }]} />
-            }
-            actions={
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => router.push("/payments")}
-                  className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                  aria-label="Back to payments"
-                >
-                  <ArrowLeft size={18} aria-hidden />
-                </button>
-                <div className="border-l border-stone-200 pl-3">
-                  <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-                </div>
-              </div>
-            }
-          />
           <Alert variant="warning" title="Access restricted">
             Administrative clearance is required to post payments.
           </Alert>
@@ -386,12 +392,17 @@ export default function RecordPaymentPage() {
             Back to payments
           </Button>
         </div>
-      </AppMain>
+      </StandardPage>
     );
   }
 
   return (
-    <AppMain>
+    <StandardPage
+      title={pageTitle}
+      subtitle={pageSubtitle}
+      breadcrumbs={pageBreadcrumbs}
+      actions={pageActions}
+    >
       {showConfirmModal && pendingValues && selectedBilling ? (
         <ConfirmPaymentModal
           selectedBilling={selectedBilling}
@@ -408,40 +419,15 @@ export default function RecordPaymentPage() {
         animate={shouldReduceMotion ? false : pageVariants.animate}
         transition={shouldReduceMotion ? { duration: 0.2 } : pageVariants.transition}
       >
-        <PageHeader
-          title="Register Payment"
-          subtitle="Record a payment against a billing cycle and update balances."
-          breadcrumbs={
-            <Breadcrumbs items={[{ label: "Payments", href: "/payments" }, { label: "Register Payment" }]} />
-          }
-          actions={
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/payments")}
-                className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to payments"
-              >
-                <ArrowLeft size={18} aria-hidden />
-              </button>
-              <div className="border-l border-stone-200 pl-3">
-                <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-              </div>
-            </div>
-          }
-        />
-
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
           <div className="grid gap-6 lg:grid-cols-5">
             <div className="lg:col-span-3 space-y-6">
-              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                    <Receipt size={16} aria-hidden />
-                  </div>
-                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Payment Information</h2>
-                </div>
-                <div className="space-y-6 p-8">
+              <SectionCard
+                title="Payment Information"
+                icon={Receipt}
+                iconClassName="bg-teal-50 text-teal-700"
+                bodyClassName="space-y-6 p-8"
+              >
                   <Field label="Billing Selection" required error={errors.billing_id?.message}>
                     <Select
                       autoFocus
@@ -478,19 +464,16 @@ export default function RecordPaymentPage() {
                       })}
                     />
                   </Field>
-                </div>
-              </Card>
+              </SectionCard>
 
-              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-stone-50 text-stone-600">
-                    <CreditCard size={16} aria-hidden />
-                  </div>
-                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Details</h2>
-                </div>
-                <div className="space-y-6 p-8">
+              <SectionCard
+                title="Details"
+                icon={CreditCard}
+                iconClassName="bg-stone-50 text-stone-600"
+                bodyClassName="space-y-6 p-8"
+              >
                   <div className="grid gap-6 sm:grid-cols-2">
-                    <Field label="Collection Date" required error={errors.payment_date?.message}>
+                    <Field label="Payment Date" required error={errors.payment_date?.message}>
                       <Input
                         type="date"
                         className="!h-12 border-stone-200 font-bold"
@@ -520,24 +503,24 @@ export default function RecordPaymentPage() {
 
                   <Field
                     label="Reference No."
-                    required={watchedMethod !== "cash"}
+                    required={!isPaymentMethodCash(watchedMethod)}
                     error={errors.reference_number?.message}
                     helpText={
-                      watchedMethod === "cash"
+                      isPaymentMethodCash(watchedMethod)
                         ? "Not required for cash."
                         : "Required for GCash, bank transfer, and other methods."
                     }
                   >
                     <Input
                       type="text"
-                      placeholder={watchedMethod === "cash" ? "Not used for cash" : "Enter reference or transaction ID"}
-                      disabled={watchedMethod === "cash"}
+                      placeholder={isPaymentMethodCash(watchedMethod) ? "Not used for cash" : "Enter reference or transaction ID"}
+                      disabled={isPaymentMethodCash(watchedMethod)}
                       hasError={Boolean(errors.reference_number)}
                       className="!h-12 border-stone-200 font-mono text-[10px]"
                       autoComplete="off"
                       {...register("reference_number", {
                         validate: (value) => {
-                          if (watchedMethod === "cash") return true;
+                          if (isPaymentMethodCash(watchedMethod)) return true;
                           if (!String(value ?? "").trim()) {
                             return "Enter a reference number for this payment method.";
                           }
@@ -547,16 +530,15 @@ export default function RecordPaymentPage() {
                     />
                   </Field>
 
-                  <Field label="Notes" error={errors.remarks?.message}>
+                  <Field label="Special Notes" error={errors.remarks?.message}>
                     <Textarea
                       rows={3}
                       className="border-stone-200 text-sm font-medium"
-                      placeholder="Add collection notes (optional)…"
+                      placeholder="Add payment notes (optional)…"
                       {...register("remarks", { maxLength: { value: 500, message: "Limit 500 chars." } })}
                     />
                   </Field>
-                </div>
-              </Card>
+              </SectionCard>
             </div>
 
             <div className="lg:col-span-2">
@@ -584,20 +566,18 @@ export default function RecordPaymentPage() {
                   </Alert>
                 ) : null}
 
-                <div className="flex flex-col-reverse gap-3 border-t border-stone-100 pt-6 sm:flex-row sm:items-center sm:justify-end">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => router.push("/payments")}
-                    className="!h-11 w-full rounded-xl px-8 text-[10px] font-bold uppercase tracking-widest sm:w-auto"
+                <div className="flex flex-col-reverse gap-3 border-t border-stone-100 pt-8 sm:flex-row sm:items-center sm:justify-end">
+                  <Link
+                    href="/payments"
+                    className={secondaryOutlineLinkClass + " px-10"}
                   >
                     Cancel
-                  </Button>
+                  </Link>
                   <Button
                     type="submit"
                     variant="primary"
                     loading={isSubmitting}
-                    className="!h-11 w-full rounded-xl bg-teal-600 px-12 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700 active:scale-95 sm:w-auto"
+                    className={primaryLinkCtaClass + " px-12 border-0"}
                   >
                     Record Payment
                   </Button>
@@ -607,6 +587,6 @@ export default function RecordPaymentPage() {
           </div>
         </form>
       </motion.div>
-    </AppMain>
+    </StandardPage>
   );
 }

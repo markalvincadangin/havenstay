@@ -12,18 +12,20 @@
  * @param {string} [helpText]
  * @param {React.ReactNode} children
  */
-export function Field({ label, required, error, helpText, children }) {
+export function Field({ label, required, error, helpText, children, className = "" }) {
   return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium text-[var(--color-text)]">
+    <div className={className}>
+      <label className="mb-2 block text-[11px] font-black uppercase tracking-widest text-stone-500">
         {label}
         {required ? (
-          <span className="ml-1 text-[#EF4444]" aria-hidden="true">*</span>
+          <span className="ml-1.5 text-red-500" aria-hidden="true">*</span>
         ) : null}
       </label>
       {children}
       {error ? (
-        <div className="mt-1 text-xs text-[#991B1B]" role="alert">{error}</div>
+        <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-red-600" role="alert">
+          {error}
+        </div>
       ) : null}
       {!error && helpText ? (
         <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{helpText}</div>

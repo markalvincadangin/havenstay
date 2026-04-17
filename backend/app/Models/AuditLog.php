@@ -9,18 +9,29 @@ class AuditLog extends Model
 {
     protected $table = 'audit_logs';
 
-    protected $primaryKey = 'audit_log_id';
+    protected $primaryKey = 'id';
 
-    public $timestamps = false; // created_at is handled by DB default
+    public $timestamps = false; // changed_at is handled by DB default
 
     protected $fillable = [
-        'user_id',
-        'entity_name',
-        'entity_id',
         'action',
-        'old_values_json',
-        'new_values_json',
+        'target_table',
+        'record_id',
+        'old_value',
+        'new_value',
+        'changed_by',
         'correlation_id',
+        'changed_at',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     * Required for forensic JSON serialization.
+     */
+    protected $casts = [
+        'old_value' => 'array',
+        'new_value' => 'array',
+        'changed_at' => 'datetime',
     ];
 
     /**
@@ -28,6 +39,6 @@ class AuditLog extends Model
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'user_id', 'user_id');
+        return $this->belongsTo(User::class, 'changed_by', 'user_id');
     }
 }

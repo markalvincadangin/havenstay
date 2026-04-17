@@ -3,7 +3,13 @@
 > **PROJECT:** HavenStay
 > **VERSION:** 4.3 (Human-First Language Sync)
 > **STATUS:** Authoritative Standard
-> **Routes:** `/billing`, `/billing/[id]`, `/billing/new`
+> **Routes:** `/billing`, `/billing/[id]`, `/billing/new`, `/billing/generate` (alias of `/billing/new`)
+
+## Form Contract Reference
+
+- Shared form theme and validation behavior: `FORM_PAGES.md` §1
+- Billing form routes and allowed fields: `FORM_PAGES.md` §2.6
+- Source of truth: `docs/SRS.md` (FR-020 to FR-023, BR-001, BR-003, BR-014), `docs/API_REFERENCE.md`, `backend/database/sql/havenstay_schema.sql`
 
 ---
 
@@ -21,7 +27,7 @@ A bird's-eye view of all current and past rent cycles.
 
 **Layout Summary:**
 - **Summary Cards**: Quick count of **Total Collections**, **Unpaid Rent**, and **Active Bills**.
-- **Search & Filters**: Simple search by name or room, plus status filters (Paid, Unpaid, Overdue).
+- **Filters**: Simple search by name or room, plus status filters (Paid, Unpaid, Overdue).
 - **Billing Table**: A scannable list showing the resident, room, billing dates, and current balance.
 
 ### 2.2 Billing Detail
@@ -36,10 +42,28 @@ A deep dive into a specific resident's monthly bill.
 ### 2.3 New Billing Form
 Used to create a new monthly bill for a resident.
 
-- **Tenant & Room**: Choose the resident and their contract.
-- **Billing Dates**: Select the start and end dates for this rent cycle.
-- **Monthly Charges**: Enter the rent amount and any utility fees.
+- **Contract**: Choose the active contract.
+- **Billing Dates**: Select Billing Period Start, Billing Period End, and Due Date.
+- **Line Items**: Enter Charge Type, Description, and Amount.
 - **Actions**: Click **Generate Bill** to save or **Cancel** to go back.
+
+### 2.5 Exact Form Labels (Parity with `FORM_PAGES.md` §2.6)
+Header fields:
+- Contract (`contract_id`)
+- Billing Period Start (`billing_period_from`)
+- Billing Period End (`billing_period_to`)
+- Due Date (`due_date`)
+
+Line item fields:
+- Charge Type (`item_type`)
+- Description (`item_description`)
+- Amount (`amount`)
+
+### 2.4 Billing Generate Alias
+`/billing/generate` is a route alias that renders the same page as `/billing/new`.
+
+- **Behavior**: Same form, validation, and submit flow as `/billing/new`.
+- **Labeling**: Keep user-facing copy as **Generate Bill** / **Create Bill** (no separate alias-specific wording).
 
 ---
 
@@ -48,7 +72,7 @@ Used to create a new monthly bill for a resident.
 | UI Label | Technical Key | Friendly Mapping |
 | :--- | :--- | :--- |
 | **ID** | `billing_id` | Simplified identifier |
-| **Tenant** | `tenant_id` | The name of the resident |
+| **Contract** | `contract_id` | Selected active contract for the billing cycle |
 | **Total Amount** | `total_amount` | The full amount of the bill |
 | **Paid** | `total_paid` | Amount already collected |
 | **Unpaid Balance** | `balance` | Remaining amount to collect |
@@ -78,6 +102,16 @@ Used to create a new monthly bill for a resident.
 - [ ] Is "Record Payment" used instead of "Process Reception"?
 - [ ] Are dates clearly labeled "Billing Cycle"?
 - [ ] Are all section headers simple (e.g., "Charges & Fees" instead of "Ledger Items")?
+
+---
+
+## 6. Page Titles and Subtitles (Master §21 Exact)
+
+| Route | Title (H1) | Subtitle |
+| :--- | :--- | :--- |
+| `/billing` | `Billing` | `Monitor account balances and track monthly billing cycles across all contracts.` |
+| `/billing/[id]` | `Billing *(# id)*` | `Line items, payments, and status for this cycle.` |
+| `/billing/new` and `/billing/generate` | `Billing` | `Monitor account balances and track monthly billing cycles across all contracts.` |
 
 ---
 

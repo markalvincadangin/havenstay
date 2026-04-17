@@ -1,143 +1,42 @@
-export function DashboardIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-      <rect x="13.5" y="3.5" width="7" height="4.5" rx="1.5" />
-      <rect x="13.5" y="10.5" width="7" height="10" rx="1.5" />
-      <rect x="3.5" y="12.5" width="7" height="8" rx="1.5" />
-    </svg>
-  );
-}
+import React from 'react';
+import {
+  LayoutDashboard,
+  User,
+  Users,
+  DoorOpen,
+  FileSignature,
+  Receipt,
+  CreditCard,
+  BarChart2,
+  Menu,
+  X,
+  AlertCircle,
+  History,
+  Search,
+  TrendingUp,
+  PlusCircle
+} from 'lucide-react';
 
-export function TenantIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <circle cx="12" cy="8" r="3.2" />
-      <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
-    </svg>
-  );
-}
+const withDefaultProps = (IconComponent) => {
+  return function IconWrapper(props) {
+    // Preserve the exact optical weight from the design system (strokeWidth="1.8")
+    return <IconComponent strokeWidth={1.8} aria-hidden="true" {...props} />;
+  };
+};
 
-/** Distinct from TenantIcon: two figures for system user administration (sidebar Admin). */
-export function UserManagementIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <circle cx="8" cy="7" r="2.8" />
-      <circle cx="16" cy="7" r="2.8" />
-      <path d="M3.5 20a4.5 4.5 0 0 1 9 0M11.5 20a4.5 4.5 0 0 1 9 0" />
-    </svg>
-  );
-}
+export const DashboardIcon = withDefaultProps(LayoutDashboard);
+export const TenantIcon = withDefaultProps(User);
+export const UserManagementIcon = withDefaultProps(Users);
+export const RoomIcon = withDefaultProps(DoorOpen);
+export const ContractIcon = withDefaultProps(FileSignature);
+export const BillingIcon = withDefaultProps(Receipt);
+export const PaymentIcon = withDefaultProps(CreditCard);
+export const ReportIcon = withDefaultProps(BarChart2);
 
-export function RoomIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <path d="M4 20V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13" />
-      <path d="M9 20v-5h6v5" />
-    </svg>
-  );
-}
-
-export function ContractIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <rect x="5" y="3.5" width="14" height="17" rx="2" />
-      <path d="M8 8h8M8 12h8M8 16h5" />
-    </svg>
-  );
-}
-
-export function BillingIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <path d="M5 4h14v16H5z" />
-      <path d="M8 8h8M8 12h8M8 16h4" />
-    </svg>
-  );
-}
-
-export function PaymentIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <rect x="3" y="6" width="18" height="12" rx="2" />
-      <path d="M3 10h18" />
-      <circle cx="8" cy="14" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-export function ReportIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <path d="M4 20h16" />
-      <path d="M7 16V9M12 16V5M17 16v-7" />
-    </svg>
-  );
-}
-
-export function HamburgerMenuIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true" {...props}>
-      <path d="M4 7h16" />
-      <path d="M4 12h16" />
-      <path d="M4 17h16" />
-    </svg>
-  );
-}
-
-export function XIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <path d="M6 6l12 12" />
-      <path d="M18 6l-12 12" />
-    </svg>
-  );
-}
-
-export function AlertCircleIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}
-
-export function HistoryIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M12 7v5l4 2" />
-    </svg>
-  );
-}
-
-export function SearchIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  );
-}
-
-export function TrendingUpIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-      <polyline points="17 6 23 6 23 12" />
-    </svg>
-  );
-}
-
-export function PlusCircleIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="16" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-    </svg>
-  );
-}
+export const HamburgerMenuIcon = withDefaultProps(Menu);
+export const XIcon = withDefaultProps(X);
+export const AlertCircleIcon = withDefaultProps(AlertCircle);
+export const HistoryIcon = withDefaultProps(History);
+export const SearchIcon = withDefaultProps(Search);
+export const TrendingUpIcon = withDefaultProps(TrendingUp);
+export const PlusCircleIcon = withDefaultProps(PlusCircle);

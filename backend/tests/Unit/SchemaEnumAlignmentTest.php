@@ -51,24 +51,24 @@ class SchemaEnumAlignmentTest extends TestCase
     /**
      * @param  list<string>  $expectedSorted
      */
-    private function assertControllerInRuleMatches(string $controllerBasename, string $fieldPattern, array $expectedSorted): void
+    private function assertFileInRuleMatches(string $relativePath, string $fieldPattern, array $expectedSorted): void
     {
-        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.$controllerBasename);
+        $path = $this->backendPath($relativePath);
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
-        $this->assertMatchesRegularExpression($fieldPattern, $content, $controllerBasename.' contains '.$fieldPattern);
+        $this->assertMatchesRegularExpression($fieldPattern, $content, $relativePath.' contains '.$fieldPattern);
         preg_match($fieldPattern, $content, $m);
         $actual = explode(',', $m[1]);
         sort($actual);
-        $this->assertSame($expectedSorted, $actual, $controllerBasename.' validation vs schema');
+        $this->assertSame($expectedSorted, $actual, $relativePath.' validation vs schema');
     }
 
     public function test_payment_method_matches_payments_table(): void
     {
         $expected = $this->parseMysqlEnum('payments', 'payment_method');
         sort($expected);
-        $this->assertControllerInRuleMatches(
-            'PaymentController.php',
+        $this->assertFileInRuleMatches(
+            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'Payment'.DIRECTORY_SEPARATOR.'StorePaymentRequest.php',
             "/'payment_method'\s*=>\s*\[[^\]]*'in:([^']+)'/",
             $expected
         );
@@ -78,8 +78,8 @@ class SchemaEnumAlignmentTest extends TestCase
     {
         $expected = $this->parseMysqlEnum('tenants', 'status');
         sort($expected);
-        $this->assertControllerInRuleMatches(
-            'TenantController.php',
+        $this->assertFileInRuleMatches(
+            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'TenantController.php',
             "/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/",
             $expected
         );
@@ -89,8 +89,8 @@ class SchemaEnumAlignmentTest extends TestCase
     {
         $expected = $this->parseMysqlEnum('contracts', 'status');
         sort($expected);
-        $this->assertControllerInRuleMatches(
-            'ContractController.php',
+        $this->assertFileInRuleMatches(
+            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'Contract'.DIRECTORY_SEPARATOR.'UpdateContractRequest.php',
             "/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/",
             $expected
         );
@@ -100,8 +100,8 @@ class SchemaEnumAlignmentTest extends TestCase
     {
         $expected = $this->parseMysqlEnum('billing_line_items', 'item_type');
         sort($expected);
-        $this->assertControllerInRuleMatches(
-            'BillingController.php',
+        $this->assertFileInRuleMatches(
+            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'Billing'.DIRECTORY_SEPARATOR.'StoreBillingRequest.php',
             "/'line_items\.\*\.item_type'\s*=>\s*\[[^\]]*'in:([^']+)'/",
             $expected
         );
@@ -111,8 +111,8 @@ class SchemaEnumAlignmentTest extends TestCase
     {
         $expected = $this->parseMysqlEnum('transaction_logs', 'status');
         sort($expected);
-        $this->assertControllerInRuleMatches(
-            'TransactionController.php',
+        $this->assertFileInRuleMatches(
+            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'TransactionController.php',
             "/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/",
             $expected
         );
@@ -120,12 +120,15 @@ class SchemaEnumAlignmentTest extends TestCase
 
     public function test_audit_log_action_matches_audit_logs_table(): void
     {
-        $expected = $this->parseMysqlEnum('audit_logs', 'action');
-        sort($expected);
-        $this->assertControllerInRuleMatches(
-            'AuditLogController.php',
+        // audit_logs.action is VARCHAR(32) in schema, not ENUM.
+        // We match against the set of actions allowed in the Controller validation.
+        $schemaActions = ['INSERT', 'UPDATE', 'DELETE', 'login', 'logout', 'access_denied', 'status_change', 'archive', 'restore'];
+        sort($schemaActions);
+
+        $this->assertFileInRuleMatches(
+            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'AuditLogController.php',
             "/'action'\s*=>\s*\[[^\]]*'in:([^']+)'/",
-            $expected
+            $schemaActions
         );
     }
 
@@ -138,7 +141,7 @@ class SchemaEnumAlignmentTest extends TestCase
         $bed = $this->parseMysqlEnum('bed_spaces', 'status');
         sort($bed);
 
-        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'RoomController.php');
+        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'Room'.DIRECTORY_SEPARATOR.'UpdateRoomRequest.php');
         $content = (string) file_get_contents($path);
 
         preg_match("/'room_type'\s*=>\s*\[[^\]]*'in:([^']+)'/", $content, $m);
@@ -148,7 +151,7 @@ class SchemaEnumAlignmentTest extends TestCase
         $this->assertSame($type, $a);
 
         preg_match("/'status'\s*=>\s*\[[^\]]*'in:([^']+)'/", $content, $m2);
-        $this->assertNotEmpty($m2[1]);
+        $this->assertNotEmpty($m2[1] ?? null);
         $b = explode(',', $m2[1]);
         sort($b);
         $this->assertSame($status, $b);

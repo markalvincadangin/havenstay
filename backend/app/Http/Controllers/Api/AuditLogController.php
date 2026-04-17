@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
-use App\Services\AuditService;
 use App\Services\AuthorizationService;
+use App\Services\AuditService;
 use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,25 +13,22 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AuditLogController extends Controller
 {
+    use HandlesAuthorization;
+
     /**
      * List audit logs with filters.
      *
-     * FR-033
      */
     public function index(Request $request): JsonResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'audit_logs.list');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can view audit logs.',
-            ], 403);
+            return $this->forbidden($request, 'audit_logs.list', 'Unauthorized: only Admin can view audit logs.');
         }
 
         $validated = $request->validate(array_merge([
             'entity_type' => ['sometimes', 'nullable', 'string', 'max:64'],
             /** `audit_logs.action` ENUM — `backend/database/sql/havenstay_schema.sql` */
-            'action' => ['sometimes', 'nullable', 'string', 'in:create,update,delete,login,logout,access_denied,status_change'],
+            'action' => ['sometimes', 'nullable', 'string', 'in:INSERT,UPDATE,DELETE,login,logout,access_denied,status_change,archive,restore'],
             'from' => ['sometimes', 'nullable', 'string', 'max:32'],
             'to' => ['sometimes', 'nullable', 'string', 'max:32'],
             'user' => ['sometimes', 'nullable', 'string', 'max:200'],
@@ -61,19 +59,16 @@ class AuditLogController extends Controller
     }
 
     /**
-     * FR-032-style CSV export; filters match {@see index()} query params (`entity_type`, `action`, `from`, `to`, `user`).
      */
     public function export(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'audit_logs.export');
-
-            abort(403, 'Unauthorized: only Admin can export audit logs.');
+            $this->forbiddenExport($request, 'audit_logs.export', 'Unauthorized: only Admin can export audit logs.');
         }
 
         $validated = $request->validate([
             'entity_type' => ['sometimes', 'nullable', 'string', 'max:64'],
-            'action' => ['sometimes', 'nullable', 'string', 'in:create,update,delete,login,logout,access_denied,status_change'],
+            'action' => ['sometimes', 'nullable', 'string', 'in:INSERT,UPDATE,DELETE,login,logout,access_denied,status_change,archive,restore'],
             'from' => ['sometimes', 'nullable', 'string', 'max:32'],
             'to' => ['sometimes', 'nullable', 'string', 'max:32'],
             'user' => ['sometimes', 'nullable', 'string', 'max:200'],

@@ -44,7 +44,6 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'password_hash' => 'hashed',
             'last_login_at' => 'datetime',
             'is_active' => 'boolean',
         ];
@@ -63,35 +62,5 @@ class User extends Authenticatable
     public function hasRole(string $roleName): bool
     {
         return strtolower($this->role?->role_name) === strtolower($roleName);
-    }
-
-    public function canAdmin(): bool
-    {
-        return $this->hasRole('admin');
-    }
-
-    public function canStaff(): bool
-    {
-        return $this->hasRole('staff') || $this->canAdmin();
-    }
-
-    public function canView(): bool
-    {
-        return $this->hasRole('viewer') || $this->canStaff();
-    }
-
-    public function canManageBilling(): bool
-    {
-        return $this->canStaff();
-    }
-
-    public function canManageContracts(): bool
-    {
-        return $this->canStaff();
-    }
-
-    public function canViewReports(): bool
-    {
-        return $this->canView();
     }
 }

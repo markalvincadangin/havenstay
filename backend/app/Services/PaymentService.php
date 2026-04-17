@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Concerns\ManagesWorkflows;
 use App\Models\Billing;
 use App\Models\Payment;
 use App\Models\User;
@@ -12,10 +13,22 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentService
 {
+    use ManagesWorkflows;
+
+    public static function getById(int $paymentId): ?Payment
+    {
+        return Payment::query()
+            ->with([
+                'billing.contract.tenant',
+                'billing.contract.bedSpace.room',
+                'billing.contract.room',
+                'processor',
+            ])
+            ->find($paymentId);
+    }
+
     /**
      * Record a new payment with atomic balance update and transaction logging.
-     *
-     * FR-024..FR-027, CCR-006, CCR-007
      *
      * @param  array{billing_id: int, amount_paid: float, payment_date: string, payment_method?: string, reference_number?: string, remarks?: string}  $data
      *
@@ -23,23 +36,12 @@ class PaymentService
      */
     public static function record(User $actor, array $data): Billing
     {
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'payment_posting',
-            $actor->user_id,
-            'billing',
-            (string) $data['billing_id']
-        );
-        $txLogId = $started['tx_log_id'];
-
-        // CCR-008: Set audit context so database triggers can capture the actor
-        AuditService::setAuditUserContext($actor->user_id);
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            // CCR-006: Explicit transaction — START TRANSACTION / COMMIT / ROLLBACK
-            $result = DB::transaction(function () use ($actor, $data): Billing {
-                // CCR-003: INSERT payment record
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'POST_PAYMENT',
+            txnReference: self::buildTxnReference('PAY'),
+            payload: ['billing_id' => $data['billing_id']],
+            operation: function () use ($actor, $data): Billing {
                 $billing = Billing::where('billing_id', (int) $data['billing_id'])
                     ->lockForUpdate()
                     ->first();
@@ -56,7 +58,7 @@ class PaymentService
                     ]);
                 }
 
-                $payment = Payment::create([
+                Payment::create([
                     'billing_id' => $billing->billing_id,
                     'processed_by' => $actor->user_id,
                     'amount_paid' => (float) $data['amount_paid'],
@@ -69,48 +71,27 @@ class PaymentService
                 BillingService::autoUpdateStatus($billing);
 
                 return BillingService::getById((int) $billing->billing_id);
-            });
-
-            TransactionService::logCommitted($txLogId, [
+            },
+            resultDetails: fn (Billing $billing): array => [
                 'billing_id' => (int) $data['billing_id'],
                 'amount_paid' => (float) $data['amount_paid'],
-            ]);
-
-            return $result;
-        } catch (\Throwable $e) {
-            TransactionService::logRolledBack($txLogId, $e->getMessage());
-
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
+            ]
+        );
     }
 
     /**
      * Void a payment and reverse the billing effects.
      *
-     * FR-024..FR-026, CCR-006, CCR-007, CCR-008
-     *
      * @throws ValidationException
      */
     public static function void(User $actor, Payment $payment, ?string $reason = null): Billing
     {
-        // CCR-007: Transaction log entry
-        $started = TransactionService::logStarted(
-            'void_payment',
-            $actor->user_id,
-            'payments',
-            (string) $payment->payment_id
-        );
-        $txLogId = $started['tx_log_id'];
-
-        // CCR-008: Set audit context so trigger trg_billing_au captures acting user
-        AuditService::setAuditUserContext($actor->user_id);
-        AuditService::setCorrelationContext($started['correlation_id']);
-
-        try {
-            // CCR-006: Explicit transaction
-            $result = DB::transaction(function () use ($actor, $payment, $reason): Billing {
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'VOID_PAYMENT',
+            txnReference: self::buildTxnReference('VOID'),
+            payload: ['payment_id' => $payment->payment_id],
+            operation: function () use ($actor, $payment, $reason): Billing {
                 $billing = Billing::where('billing_id', $payment->billing_id)
                     ->lockForUpdate()
                     ->firstOrFail();
@@ -121,36 +102,24 @@ class PaymentService
                     ]);
                 }
 
-                // Mark payment as voided
                 $payment->update([
                     'voided_at' => now(),
                     'voided_by' => $actor->user_id,
                     'void_reason' => $reason ?: 'User requested void (Standard Protocol)',
                 ]);
 
-                // CCR-003: UPDATE — billing status recalculation
-                // CCR-008: Trigger fires on billing UPDATE — see havenstay_schema.sql (trg_billing_au)
                 BillingService::autoUpdateStatus($billing);
 
                 return BillingService::getById((int) $billing->billing_id);
-            });
-
-            // CCR-007: Transaction log entry - committed
-            TransactionService::logCommitted($txLogId, [
+            },
+            resultDetails: fn (Billing $billing) => [
                 'payment_id' => $payment->payment_id,
                 'billing_id' => $payment->billing_id,
                 'amount_voided' => $payment->amount_paid,
-            ]);
-
-            return $result;
-        } catch (\Throwable $e) {
-            TransactionService::logRolledBack($txLogId, $e->getMessage());
-
-            throw $e;
-        } finally {
-            AuditService::clearCorrelationContext();
-        }
+            ]
+        );
     }
+
 
     /**
      * List payment history with filters (query builder for pagination).
@@ -160,6 +129,7 @@ class PaymentService
      */
     public static function listHistoryQuery(array $filters = []): Builder
     {
+        /** @var Builder $query */
         $query = Payment::query()
             ->select('payments.*')
             ->join('billing', 'billing.billing_id', '=', 'payments.billing_id')
@@ -212,6 +182,7 @@ class PaymentService
             });
         }
 
+        /** @var Builder $query */
         return $query;
     }
 

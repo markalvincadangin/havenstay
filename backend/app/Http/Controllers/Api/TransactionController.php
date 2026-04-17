@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
-use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\TransactionService;
 use App\Support\PaginationResponse;
@@ -12,17 +12,14 @@ use Illuminate\Http\Request;
 
 class TransactionController extends Controller
 {
+    use HandlesAuthorization;
+
     /**
-     * FR-034: Transaction Log Retrieval (Adherence to CCR-007)
      */
     public function index(Request $request): JsonResponse
     {
         if (! AuthorizationService::canManageUsers($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'transaction_logs.list');
-
-            return response()->json([
-                'message' => 'Unauthorized: only Admin can view transaction logs.',
-            ], 403);
+            return $this->forbidden($request, 'transaction_logs.list', 'Unauthorized: only Admin can view transaction logs.');
         }
 
         $validated = $request->validate(array_merge([
@@ -45,7 +42,8 @@ class TransactionController extends Controller
         );
 
         $paginator = TransactionService::listLogsPaginated($pageParams['page'], $pageParams['per_page'], $filters);
+        $stats = TransactionService::getLogStats($filters);
 
-        return PaginationResponse::fromPaginator($paginator);
+        return PaginationResponse::fromPaginator($paginator, $stats);
     }
 }

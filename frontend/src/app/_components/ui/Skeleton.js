@@ -2,6 +2,16 @@ import { motion } from "framer-motion";
 import { AppMain } from "./AppShell";
 import { Card } from "./Card";
 
+/** Base skeleton primitive (box) */
+export function Skeleton({ className = "h-4 w-full", opacity = "opacity-30" }) {
+  return (
+    <div 
+      className={`animate-pulse rounded bg-[var(--color-border-strong)] ${opacity} ${className}`} 
+      role="status"
+    />
+  );
+}
+
 
 
 /** Full-page skeleton for grid/card layouts (e.g. Rooms Dashboard) */
@@ -125,9 +135,78 @@ export function SkeletonDetailPage() {
           ))}
         </div>
 
-        {/* Large Data Card */}
-        <div className="h-64 animate-pulse rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] opacity-30 shadow-sm" />
+        <Skeleton className="h-64 opacity-30 shadow-sm rounded-2xl border-stone-200" />
       </div>
     </AppMain>
+  );
+}
+
+/** Specialized Dashboard Skeleton mapped to the Operational Command Center layout */
+export function DashboardSkeleton() {
+  return (
+    <div className="space-y-8">
+      {/* KPI Grid - 6 cards */}
+      <section aria-label="Loading metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[...Array(6)].map((_, i) => (
+          <Skeleton key={`kpi-${i}`} className="h-32 rounded-2xl bg-white border border-stone-100 shadow-sm opacity-50" />
+        ))}
+      </section>
+
+      {/* Row 2: Quick Links Skeleton (Full Width) */}
+      <div className="rounded-2xl bg-white border border-stone-200 p-8 shadow-sm">
+        <Skeleton className="mb-6 h-4 w-32 opacity-20" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={`link-${i}`} className="h-20 rounded-xl bg-stone-50/50 opacity-40" />
+          ))}
+        </div>
+      </div>
+
+      {/* Row 3: Main Content Area (8/4 Grid) */}
+      <div className="grid gap-8 lg:grid-cols-12">
+        <div className="lg:col-span-8 space-y-8">
+          {/* Turnover Forecast Skeleton */}
+          <div className="rounded-2xl bg-white border border-stone-200 p-0 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between h-14 border-b border-stone-50 bg-stone-50/50 px-8">
+              <Skeleton className="w-32 h-3 opacity-20" />
+              <Skeleton className="w-16 h-2.5 opacity-10" />
+            </div>
+            <div className="p-0">
+               {[...Array(2)].map((_, i) => (
+                <div key={`turnover-${i}`} className="h-16 border-b border-stone-50 flex items-center px-8">
+                  <Skeleton className="w-full h-4 opacity-5" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white border border-stone-200 p-0 shadow-sm overflow-hidden">
+            <div className="h-14 border-b border-stone-50 bg-stone-50/50" />
+            <div className="p-0">
+               {[...Array(3)].map((_, i) => (
+                <div key={`row-${i}`} className="h-16 border-b border-stone-50 flex items-center px-8">
+                   <Skeleton className="w-full h-4 opacity-5" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-4 space-y-8">
+          {[...Array(2)].map((_, i) => (
+            <div key={`list-${i}`} className="rounded-2xl bg-white border border-stone-200 p-0 shadow-sm overflow-hidden">
+              <div className="h-14 border-b border-stone-50 bg-stone-50/50" />
+              <div className="p-0 space-y-px">
+                {[...Array(3)].map((_, j) => (
+                  <div key={`list-item-${j}`} className="h-20 border-b border-stone-50 flex items-center px-8">
+                    <Skeleton className="w-full h-10 opacity-5" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

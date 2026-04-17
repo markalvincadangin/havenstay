@@ -1,22 +1,46 @@
-# Frontend Dockerfile for Next.js
-FROM node:20-alpine
-
+# Stage 1: Base - Install dependencies only when needed
+FROM node:20-alpine AS base
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 
-# Copy package files
+# Stage 2: Dependencies - Install node_modules
+FROM base AS deps
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install
 
-# Copy source code
+# Stage 3: Development - Hot-reloading environment
+# node_modules are installed in deps, then the bind mount in docker-compose
+# overlays /app with host files while an anonymous volume protects /app/node_modules
+FROM base AS development
+ENV NODE_ENV=development
 COPY . .
+COPY --from=deps /app/node_modules ./node_modules
+# Polling required for file-change detection on Windows/WSL2 hosts
+ENV WATCHPACK_POLLING=true
+EXPOSE 3000
+CMD ["npm", "run", "dev"]
 
-# Build the app to ensure all env vars are baked in correctly
+# Stage 4: Builder - Build the production application
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ARG BACKEND_INTERNAL_URL=http://backend
+ENV BACKEND_INTERNAL_URL=$BACKEND_INTERNAL_URL
 RUN npm run build
 
-# Expose port
-EXPOSE 3000
+# Stage 5: Runner - Minimal production image
+FROM base AS runner
+ENV NODE_ENV=production
+# next.config.mjs is required for runtime settings
+COPY --from=builder /app/next.config.mjs ./
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/static ./.next/static
 
-# Start Next.js
-CMD ["npm", "start"]
+# Automatically leverages the library built in the builder stage
+COPY --from=builder /app/.next/standalone ./
+
+EXPOSE 3000
+# The standalone build provides a server.js file
+CMD ["node", "server.js"]

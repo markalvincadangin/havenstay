@@ -2,9 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\BedSpace;
+use App\Models\Contract;
 use App\Models\Role;
+use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -62,7 +66,7 @@ class TenantManagementTest extends TestCase
         ]);
 
         $response->assertCreated();
-        $response->assertJsonStructure(['message', 'tenant']);
+        $response->assertJsonStructure(['message', 'data']);
 
         // Verify tenant stored in database
         $this->assertDatabaseHas('tenants', [
@@ -75,7 +79,7 @@ class TenantManagementTest extends TestCase
         // Verify audit log entry (Trigger handles INSERT)
         $this->assertTriggerAuditLog([
             'user_id' => $this->adminUser->user_id,
-            'entity_name' => 'tenants',
+            'target_table' => 'tenants',
             'action' => 'INSERT',
         ]);
     }
@@ -94,7 +98,7 @@ class TenantManagementTest extends TestCase
         $response->assertForbidden();
 
         // Verify access_denied audit log (App level log)
-        $this->assertDatabaseHas('audit_logs', [
+        $this->assertTriggerAuditLog([
             'user_id' => $this->viewerUser->user_id,
             'action' => 'access_denied',
         ]);
@@ -133,32 +137,375 @@ class TenantManagementTest extends TestCase
         // Verify audit log entry (Trigger handles UPDATE)
         $this->assertTriggerAuditLog([
             'user_id' => $this->adminUser->user_id,
-            'entity_name' => 'tenants',
-            'entity_id' => (string) $tenant->tenant_id,
+            'target_table' => 'tenants',
+            'record_id' => (string) $tenant->tenant_id,
             'action' => 'UPDATE',
         ]);
     }
 
     /**
-     * TC-TENANT-002: Admin deactivates a tenant
+     * BR-005b (SRS): Admin cannot manually set status to moved_out
      */
-    public function test_admin_deactivates_tenant(): void
+    public function test_manual_status_change_to_moved_out_is_blocked(): void
     {
         $tenant = Tenant::create($this->tenantAttributes([
-            'first_name' => 'John',
-            'last_name' => 'Doe',
-            'contact_number' => '+63912345678',
             'status' => 'active',
         ]));
 
-        $response = $this->actingAs($this->adminUser)->postJson("/api/tenants/{$tenant->tenant_id}/deactivate");
+        $response = $this->actingAs($this->adminUser)->putJson("/api/tenants/{$tenant->tenant_id}", $this->tenantAttributes([
+            'status' => 'moved_out',
+        ]));
 
-        $response->assertOk();
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['status']);
 
-        // Verify status changed to moved_out
         $this->assertDatabaseHas('tenants', [
             'tenant_id' => $tenant->tenant_id,
-            'status' => 'moved_out',
+            'status' => 'active',
         ]);
+    }
+
+    public function test_status_update_is_blocked_when_tenant_has_active_contract(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Guard',
+            'last_name' => 'Status',
+            'contact_number' => '+639171111111',
+            'status' => 'active',
+        ]));
+        $this->createActiveContractForTenant($tenant);
+
+        $response = $this->actingAs($this->adminUser)->putJson("/api/tenants/{$tenant->tenant_id}", [
+            'first_name' => $tenant->first_name,
+            'last_name' => $tenant->last_name,
+            'contact_number' => $tenant->contact_number,
+            'email' => $tenant->email,
+            'emergency_contact_name' => $tenant->emergency_contact_name,
+            'emergency_contact_number' => $tenant->emergency_contact_number,
+            'address' => $tenant->address,
+            'status' => 'archived',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['status']);
+        $this->assertDatabaseHas('tenants', [
+            'tenant_id' => $tenant->tenant_id,
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_archive_is_blocked_when_tenant_has_active_contract(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Archive',
+            'last_name' => 'Blocked',
+            'contact_number' => '+639172222222',
+            'status' => 'active',
+        ]));
+        $this->createActiveContractForTenant($tenant);
+
+        $response = $this->actingAs($this->adminUser)->postJson("/api/tenants/{$tenant->tenant_id}/archive");
+
+        $response->assertStatus(422);
+        $this->assertDatabaseHas('tenants', [
+            'tenant_id' => $tenant->tenant_id,
+            'deleted_at' => null,
+        ]);
+    }
+
+    public function test_archive_succeeds_when_tenant_has_no_active_contract(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Archive',
+            'last_name' => 'Allowed',
+            'contact_number' => '+639173333333',
+            'status' => 'archived',
+        ]));
+
+        $response = $this->actingAs($this->adminUser)->postJson("/api/tenants/{$tenant->tenant_id}/archive");
+
+        $response->assertOk();
+        $this->assertSoftDeleted('tenants', ['tenant_id' => $tenant->tenant_id]);
+        $this->assertDatabaseHas('tenants', [
+            'tenant_id' => $tenant->tenant_id,
+            'status' => Tenant::STATUS_ARCHIVED,
+        ]);
+    }
+
+    public function test_restore_sets_tenant_to_moved_out_if_no_active_contract(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Restore',
+            'last_name' => 'Lifecycle',
+            'status' => Tenant::STATUS_ARCHIVED,
+        ]));
+        $tenant->delete();
+
+        $response = $this->actingAs($this->adminUser)->postJson("/api/tenants/{$tenant->tenant_id}/restore");
+
+        $response->assertOk();
+        $this->assertDatabaseHas('tenants', [
+            'tenant_id' => $tenant->tenant_id,
+            'deleted_at' => null,
+            'status' => Tenant::STATUS_MOVED_OUT,
+        ]);
+    }
+
+    public function test_restore_sets_tenant_to_active_if_has_active_contract(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'status' => Tenant::STATUS_ARCHIVED,
+        ]));
+        $this->createActiveContractForTenant($tenant);
+        $tenant->delete();
+
+        $response = $this->actingAs($this->adminUser)->postJson("/api/tenants/{$tenant->tenant_id}/restore");
+
+        $response->assertOk();
+        $this->assertDatabaseHas('tenants', [
+            'tenant_id' => $tenant->tenant_id,
+            'deleted_at' => null,
+            'status' => Tenant::STATUS_ACTIVE,
+        ]);
+    }
+
+    public function test_tenant_summary_returns_global_counts(): void
+    {
+        $tenantWithPendingMoveOut = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Pending',
+            'last_name' => 'Tenant',
+            'contact_number' => '+639174444444',
+            'status' => 'active',
+            'email' => 'pending@example.com',
+        ]));
+        $tenantWithoutPending = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Stable',
+            'last_name' => 'Tenant',
+            'contact_number' => '+639175555555',
+            'status' => 'active',
+            'email' => 'stable@example.com',
+        ]));
+        Tenant::create($this->tenantAttributes([
+            'first_name' => 'Moved',
+            'last_name' => 'Tenant',
+            'contact_number' => '+639176666666',
+            'status' => 'moved_out',
+            'email' => 'moved@example.com',
+        ]));
+
+        $this->createActiveContractForTenant(
+            $tenantWithPendingMoveOut,
+            Carbon::now()->subDays(15),
+            Carbon::now()->addDays(10)
+        );
+        $this->createActiveContractForTenant(
+            $tenantWithoutPending,
+            Carbon::now()->subDays(60),
+            Carbon::now()->addDays(60)
+        );
+
+        $response = $this->actingAs($this->adminUser)->getJson('/api/tenants/summary');
+
+        $response->assertOk();
+        $response->assertJsonPath('data.active_tenants', 2);
+        $response->assertJsonPath('data.pending_move_outs', 1);
+    }
+
+    public function test_index_returns_rich_fields_for_tenant_directory(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Directory',
+            'last_name' => 'Row',
+            'contact_number' => '+639178888888',
+            'email' => 'directory.row@example.com',
+            'status' => 'active',
+        ]));
+        $this->createActiveContractForTenant($tenant);
+
+        $response = $this->actingAs($this->adminUser)->getJson('/api/tenants');
+
+        $response->assertOk();
+        $response->assertJsonStructure([
+            'data' => [[
+                'tenant_id',
+                'room_code',
+                'bed_label',
+                'outstanding_balance',
+            ]],
+            'meta',
+        ]);
+    }
+
+    public function test_index_pending_move_outs_excludes_soft_deleted_contracts(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Pending',
+            'last_name' => 'SoftDelete',
+            'contact_number' => '+6391888999011',
+            'email' => 'pending.softdelete@example.com',
+            'status' => Tenant::STATUS_ACTIVE,
+        ]));
+        $contract = $this->createActiveContractForTenant(
+            $tenant,
+            Carbon::now()->subDays(10),
+            Carbon::now()->addDays(5)
+        );
+        $contract->delete();
+
+        $response = $this->actingAs($this->adminUser)->getJson('/api/tenants');
+        $response->assertOk();
+
+        $row = collect($response->json('data'))
+            ->firstWhere('tenant_id', $tenant->tenant_id);
+        $this->assertNotNull($row);
+        $this->assertSame(0, (int) ($row['pending_move_outs'] ?? -1));
+    }
+
+    public function test_index_rejects_unknown_status_filter(): void
+    {
+        $response = $this->actingAs($this->adminUser)->getJson('/api/tenants?status=invalid_status');
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['status']);
+    }
+
+    public function test_search_rejects_unknown_status_filter(): void
+    {
+        $response = $this->actingAs($this->adminUser)->getJson('/api/tenants/search?status=invalid_status');
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['status']);
+    }
+
+    /**
+     * TC-PII-001 — NFR-015: Viewer receives masked tenant PII in API responses.
+     */
+    public function test_viewer_sees_masked_tenant_pii_on_show(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'PII',
+            'last_name' => 'Viewer',
+            'contact_number' => '+6391999888777',
+            'email' => 'pii.viewer@example.com',
+            'emergency_contact_name' => 'Emergency Contact',
+            'emergency_contact_number' => '+6391777888999',
+            'address' => '123 Confidential Road',
+        ]));
+
+        $response = $this->actingAs($this->viewerUser)->getJson("/api/tenants/{$tenant->tenant_id}");
+
+        $response->assertOk();
+        $data = $response->json('data');
+        $this->assertSame('Redacted', $data['address']);
+        $this->assertSame('Redacted', $data['emergency_contact_name']);
+        $this->assertSame('***', $data['emergency_contact_number']);
+        $this->assertStringContainsString('***@', (string) $data['email']);
+        $this->assertSame('***-***-8777', $data['contact_number']);
+    }
+
+    public function test_viewer_sees_masked_tenant_pii_on_index_and_search(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'Viewer',
+            'last_name' => 'Masked',
+            'contact_number' => '+6391888999000',
+            'email' => 'viewer.masked@example.com',
+            'emergency_contact_name' => 'Emergency Contact',
+            'emergency_contact_number' => '+6391777888999',
+            'address' => '456 Sensitive Street',
+        ]));
+
+        $indexResponse = $this->actingAs($this->viewerUser)->getJson('/api/tenants');
+        $indexResponse->assertOk();
+        $indexRow = collect($indexResponse->json('data'))
+            ->firstWhere('tenant_id', $tenant->tenant_id);
+
+        $this->assertNotNull($indexRow);
+        $this->assertSame('Redacted', $indexRow['address']);
+        $this->assertSame('Redacted', $indexRow['emergency_contact_name']);
+        $this->assertSame('***', $indexRow['emergency_contact_number']);
+        $this->assertStringContainsString('***@', (string) $indexRow['email']);
+        $this->assertSame('***-***-9000', $indexRow['contact_number']);
+
+        $searchResponse = $this->actingAs($this->viewerUser)->getJson('/api/tenants/search?q=Viewer');
+        $searchResponse->assertOk();
+        $searchRow = collect($searchResponse->json('data'))
+            ->firstWhere('tenant_id', $tenant->tenant_id);
+
+        $this->assertNotNull($searchRow);
+        $this->assertSame('Redacted', $searchRow['address']);
+        $this->assertSame('Redacted', $searchRow['emergency_contact_name']);
+        $this->assertSame('***', $searchRow['emergency_contact_number']);
+        $this->assertStringContainsString('***@', (string) $searchRow['email']);
+        $this->assertSame('***-***-9000', $searchRow['contact_number']);
+    }
+
+    /**
+     * TC-PII-001 — Admin continues to receive full tenant attributes.
+     */
+    public function test_admin_sees_unmasked_tenant_pii_on_show(): void
+    {
+        $tenant = Tenant::create($this->tenantAttributes([
+            'first_name' => 'PII',
+            'last_name' => 'Admin',
+            'contact_number' => '+6391999888777',
+            'email' => 'pii.admin@example.com',
+            'emergency_contact_name' => 'Emergency Contact',
+            'emergency_contact_number' => '+6391777888999',
+            'address' => '123 Confidential Road',
+        ]));
+
+        $response = $this->actingAs($this->adminUser)->getJson("/api/tenants/{$tenant->tenant_id}");
+
+        $response->assertOk();
+        $data = $response->json('data');
+        $this->assertSame('123 Confidential Road', $data['address']);
+        $this->assertSame('Emergency Contact', $data['emergency_contact_name']);
+        $this->assertSame('pii.admin@example.com', $data['email']);
+    }
+
+    private function createActiveContractForTenant(
+        Tenant $tenant,
+        ?Carbon $moveInDate = null,
+        ?Carbon $expectedMoveOutDate = null
+    ): Contract {
+        $room = Room::create([
+            'room_code' => 'UT-'.mt_rand(1000, 9999),
+            'room_type' => Room::TYPE_SHARED,
+            'capacity' => 2,
+            'monthly_rate' => 5000.00,
+            'status' => Room::STATUS_VACANT,
+        ]);
+
+        $bed = BedSpace::create([
+            'room_id' => $room->room_id,
+            'bed_label' => 'Bed A',
+            'status' => BedSpace::STATUS_OCCUPIED,
+        ]);
+
+        return Contract::create([
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $this->adminUser->user_id,
+            'move_in_date' => ($moveInDate ?? Carbon::now()->subMonths(1))->toDateString(),
+            'expected_move_out_date' => ($expectedMoveOutDate ?? Carbon::now()->addMonths(1))->toDateString(),
+            'deposit_amount' => 5000.00,
+            'monthly_rate_override' => 5000.00,
+            'status' => Contract::STATUS_ACTIVE,
+        ]);
+    }
+
+    protected function tenantAttributes(array $overrides = []): array
+    {
+        return array_merge([
+            'first_name' => 'Test',
+            'last_name' => 'Tenant',
+            'contact_number' => '+639123456789',
+            'email' => 'test@example.com',
+            'emergency_contact_name' => 'Test Emergency Contact',
+            'emergency_contact_number' => '+639000000001',
+            'address' => '123 Test Street, Quezon City',
+            'status' => 'active',
+        ], $overrides);
     }
 }

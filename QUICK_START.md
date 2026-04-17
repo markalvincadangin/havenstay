@@ -27,9 +27,11 @@ havenstay/
 ├── DOCKER_SETUP.md              # ⭐ Docker guide (distributed DB)
 ├── QUICK_START.md               # ⭐ This file
 │
-├── docs/                        # Domain & Tech Documentation
-├── design-system/               # Visual & Component Design Spec
-└── backend/                     # Laravel Core & Database
+    ├── docs/               # System documentation (SRS, SDD, etc.)
+    ├── frontend/           # Next.js web application
+    └── backend/            # Laravel REST API
+        ├── database/sql/   # Authoritative MySQL schema
+        └── ...
 ```
 
 ---
@@ -45,8 +47,8 @@ havenstay/
 
 **Backend:**
 - Laravel 13 (PHP 8.3+)
-- MySQL 8.4+ (primary) / SQLite (dev)
-- Laravel Sanctum for auth
+- **Database**: MySQL 8.4+ (Source of Truth/Audit Triggers)
+- **Frontend**: Next.js 16 + Tailwind CSS v4for auth
 
 **Frontend:**
 - Next.js 16.2.1 (App Router)
@@ -76,10 +78,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-**Demo credentials:**
-- Admin: `admin@havenstay.local` / `HavenStay123!`
-- Staff: `staff@havenstay.local` / `HavenStay123!`
-- Viewer: `viewer@havenstay.local` / `HavenStay123!`
+- **Admin**: `admin` / `HavenStay123!` (email: `admin@havenstay.ph`)
+- **Staff**: `staff` / `HavenStay123!` (email: `elena.santos@havenstay.ph`)
+- **Viewer**: `viewer` / `HavenStay123!` (email: `rdalisay@havenstay.ph`)
 
 ---
 
@@ -88,61 +89,17 @@ npm run dev
 **Backend:**
 - [ ] Ran `php artisan test` (all pass)
 - [ ] Verified CCR compliance if database work
-- [ ] Called `setAuditUserContext()` before MySQL transactions
+- [ ] Called `AuditService::setAuditUserContext()` before transactions
 - [ ] Updated schema file if database changes
 
 **Frontend:**
 - [ ] Ran `npm run lint` (passes)
 - [ ] Ran `npm run build` (succeeds)
-- [ ] Verified design system compliance
+- [ ] All loading states use Skeletons (no Spinners)
 
 **Documentation:**
-- [ ] Updated traceability matrix if new FR
+- [ ] Updated traceability matrix if new FR implemented
 - [ ] Updated CLAUDE.md if architecture changed
-- [ ] Updated spec tasks if working from spec
-
----
-
-## 🔧 Kiro-Specific Tips
-
-### Efficient File Reading
-
-```
-# Use readCode for code files (not readFile)
-readCode(path="backend/app/Services/BillingService.php")
-
-# Read multiple files at once
-readMultipleFiles(paths=["file1.php", "file2.php"])
-
-# Use context-gatherer for complex exploration
-invokeSubAgent(name="context-gatherer", prompt="Find all billing-related files")
-```
-
-### Multi-File Changes
-
-```
-# Use strReplace in parallel for independent changes
-strReplace(path="file1.php", oldStr="...", newStr="...")
-strReplace(path="file2.php", oldStr="...", newStr="...")
-
-# Use semanticRename for symbol renaming
-semanticRename(path="file.php", line=42, character=15, 
-               oldName="old", newName="new")
-
-# Use smartRelocate for file moves (auto-updates imports)
-smartRelocate(sourcePath="old/path.js", destinationPath="new/path.js")
-```
-
-### Testing and Validation
-
-```
-# Always use getDiagnostics (not bash commands)
-getDiagnostics(paths=["backend/app/Services/BillingService.php"])
-
-# Run tests
-executePwsh(command="php artisan test", cwd="backend")
-executePwsh(command="npm run lint", cwd="frontend")
-```
 
 ---
 
@@ -150,30 +107,29 @@ executePwsh(command="npm run lint", cwd="frontend")
 
 ### Course Compliance Requirements (CCR)
 
-8 non-negotiable requirements for academic submission:
-- CCR-001: ≥6 entities (we have 11)
-- CCR-002: Distributed DB (MySQL primary-replica)
-- CCR-003: SQL CRUD operations
-- CCR-004: SQL operators (AND, OR, BETWEEN, LIKE)
-- CCR-005: SQL joins (use views)
-- CCR-006: Transactions (COMMIT/ROLLBACK)
-- CCR-007: Transaction logs
-- CCR-008: Triggers (AFTER INSERT/UPDATE/DELETE)
-
-**Never break these!**
+The following 8 requirements are non-negotiable for academic submission:
+- **CCR-001**: ≥6 entities (HavenStay has 11)
+- **CCR-002**: Distributed DB (MySQL Primary-Replica topology)
+- **CCR-003**: SQL CRUD operations (SELECT, INSERT, UPDATE, DELETE)
+- **CCR-004**: SQL operators (AND, OR, BETWEEN, LIKE)
+- **CCR-005**: SQL joins (implemented via 6 Canonical Reporting Views)
+- **CCR-006**: Transactions (Explicit `COMMIT`/`ROLLBACK` control)
+- **CCR-007**: Transaction logs (Manual workflow tracking in `transaction_logs`)
+- **CCR-008**: SQL Triggers (24 `AFTER` triggers for automated auditing)
 
 ### Audit Context Pattern
 
-Before any MySQL transaction that writes to trigger-covered tables:
+Before any transactional write to trigger-covered tables on MySQL:
 
 ```php
-if (DB::connection()->getDriverName() === 'mysql') {
-    self::setAuditUserContext($actor->id);
-}
+AuditService::setAuditUserContext($actor->id);
 ```
 
-This sets `@app_user_id` so triggers can write the acting user to `audit_logs`.
+- **Triggers**: 24 database triggers capture row-level changes into `audit_logs` using the MySQL session variable `@current_user_id`.archy
 
-### Design System Hierarchy
+HavenStay follows a "Stability First" design policy:
+1. **Skeleton First**: Every data-loading card must show a structural skeleton immediately.
+2. **Tabular Numerics**: All financial data and IDs use `font-mono` for vertical alignment.
+3. **No Spinning Icons**: Use pulse animations for refreshing, not spinning icons.
 
 **Happy coding!** 🚀

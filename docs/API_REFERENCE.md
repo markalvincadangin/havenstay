@@ -1,203 +1,155 @@
 # HavenStay API Reference
 
-REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**. Request and response bodies are JSON unless noted.
+**Version:** 2.2  
+**Last Updated:** April 17, 2026  
+**Status:** Canonical integration contract for backend services; forensic alignment baseline
 
-## List responses (pagination)
+REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**.
 
-Many `GET` list endpoints return **`{ "data": [...], "meta": { ... } }`**:
-
-- Query: `page` (integer ≥ 1), `per_page` (integer 1–100; default **25**).
-- `meta`: `current_page`, `last_page`, `per_page`, `total`, `from`, `to`.
-
-**Report JSON** (`/api/reports/*`, except exports): if **`page` or `per_page`** is present, the primary row array (`rows`, or `entries` for tenant ledger) is **sliced** server-side and **`meta`** is appended; `summary` and `filters` are unchanged. Omit both to receive the full row list (used by UIs that filter client-side). CSV exports are always full filtered datasets.
+## 1. Document Boundary
+This document defines the technical interface contract between the HavenStay presentation layer and the application services. It specifies the endpoints, security schemes, request/response structures, and error modalities required to realize the capabilities defined in [**SRS.md**](SRS.md).
 
 ---
 
-## Authentication and access
+## 2. API Standards and Conventions
 
-- **Bearer token:** Send `Authorization: Bearer <token>` for every route except those listed under [Public routes](#public-routes).
-- **Middleware:** Authenticated routes use `auth:sanctum` and `auth.check` (see `backend/routes/api.php`).
-- **Authorization:** Enforced in controllers via `AuthorizationService` (not Gates/Policies). Roles are `admin`, `staff`, `viewer` on `users.role_id` → `roles.role_name`.
+### 2.1 Standard Response Payloads
+- **Success:** Most `GET` list endpoints return a paginated object:
+    - `{ "data": [...], "meta": { "current_page": 1, "last_page": 5, "total": 120 } }`
+- **Errors:** All error responses follow a consistent structural pattern per SRS Section 3.2:
+    - **General Error (401, 403, 404, 500):**
+      `{ "message": "User does not have the right roles." }`
+    - **Validation Error (422):**
+      `{ "message": "The given data was invalid.", "errors": { "tenant_id": ["The tenant_id field is required."] } }`
 
-### Role shorthand (this document)
+### 2.2 Global Parameters
+- **Pagination:** `page` (integer ≥ 1), `per_page` (integer 1–100; default 25).
+- **Correlation:** Every write operation generates a `correlation_id` which is returned in the response headers. This ID is used to link application actions to forensic audit and transaction logs.
 
-| Shorthand | Meaning |
+### 2.3 Authentication and Role-Based Access
+- **Scheme:** Bearer Token via Laravel Sanctum.
+- **Header:** `Authorization: Bearer <token>`
+- **Role Enforcement:** Access is validated via `AuthorizationService`.
+
+| Role | Operational Scope |
 | :--- | :--- |
-| **Admin** | `admin` only (`AuthorizationService::canManageUsers`) |
-| **Staff+** | `admin` or `staff` (operational write access where noted) |
-| **All roles** | `admin`, `staff`, or `viewer` (read or allowed action) |
-| **Reports** | All roles (`canViewReports`) |
-| **Billing view** | All roles (`canViewBilling`) |
+| **Admin** | Full system management (Users, Audit, Finance) |
+| **Staff** | Operational management (Tenants, Rooms, Contracts, Billing) |
+| **Viewer** | Read-only access to operational data and reports |
+
+### 2.4 Data Privacy (NFR-015)
+In accordance with **NFR-015**, PII (Personally Identifiable Information) masking is enforced on all API responses for the **Viewer** role. Sensitive fields such as contact numbers and addresses are redacted or masked in list and detail views to protect tenant privacy.
 
 ---
 
-## Public routes
+## 3. Core Resource Endpoints
 
-| Method | Path | Description |
+### 3.1 Authentication and Public Access
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/login` | Public | FR-001 | Issue session token via credentials |
+| `POST` | `/api/auth/logout` | All | FR-001 | Revoke current token |
+| `GET` | `/api/auth/me` | All | FR-002 | Get current user and role profile |
+| `GET` | `/api/health` | Public | — | Liveness/Health check |
+
+### 3.2 User Management
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/users` | Admin | FR-005 | Query user accounts (filter by role/status) |
+| `POST` | `/api/users` | Admin | FR-005 | Provision new user account |
+| `GET` | `/api/users/roles` | Admin | FR-005 | List assignable roles |
+| `GET` | `/api/users/{id}` | Admin | FR-005 | Retrieve detailed user profile |
+| `PUT` | `/api/users/{id}` | Admin | FR-005 | Update profile (optional password change) |
+| `POST` | `/api/users/{id}/deactivate`| Admin | FR-006 | Soft‑deactivate user (rejection on login) |
+| `POST` | `/api/users/{id}/archive` | Admin | FR-007 | Hard‑archive / Soft‑delete account record |
+
+### 3.3 Tenant Management
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/tenants` | All | FR-011 | List tenants (paginated) with occupancy context and outstanding balance fields |
+| `GET` | `/api/tenants/search` | All | FR-011 | Wildcard search (LIKE) by name/contact |
+| `GET` | `/api/tenants/summary` | All | FR-011a | KPI-optimized tenant listing |
+| `POST` | `/api/tenants` | Staff | FR-008 | Register new tenant profile |
+| `GET` | `/api/tenants/{id}` | All | FR-008 | View tenant profile and history |
+| `PUT` | `/api/tenants/{id}` | Staff | FR-008 | Update tenant contact/profile |
+| `POST` | `/api/tenants/{id}/deactivate` | Staff | FR-009 | Mark tenant as moved_out (blocked when active contract exists) |
+| `POST` | `/api/tenants/{id}/reactivate` | Staff | FR-009 | Return moved_out tenant to active operational state |
+| `POST` | `/api/tenants/{id}/archive` | Staff | FR-009 | Archive tenant (soft-delete) |
+| `POST` | `/api/tenants/{id}/restore` | Staff | FR-009 | Restore archived tenant record from soft-delete |
+
+### 3.4 Room and Bed Inventory
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/rooms` | All | FR-015 | List rooms with aggregated bed capacity |
+| `GET` | `/api/rooms/stats` | All | FR-015a | Occupancy-optimized room metrics |
+| `GET` | `/api/rooms/availability`| All | FR-015 | Filter beds by vacant status |
+| `POST` | `/api/rooms` | Staff | FR-012 | Create new room entity |
+| `GET` | `/api/rooms/{id}` | All | FR-012 | Room detail with nested bed spaces |
+| `POST` | `/api/rooms/{id}/bed-spaces`| Staff| FR-014 | Add a bed space to an existing room |
+| `POST` | `/api/rooms/{id}/archive`| Staff | FR-013 | Archive room (denied if beds are occupied) |
+
+---
+
+### 3.5 Operational Lifecycle (Contracts)
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/contracts` | All | FR-016 | Query operational contracts (by tenant/status) |
+| `POST` | `/api/contracts` | Staff | FR-016 | Execute new contract (Check‑in) |
+| `GET` | `/api/contracts/{id}` | All | FR-016 | Retrieve specific contract and row context |
+| `PUT` | `/api/contracts/{id}` | Staff | FR-018 | Update contract metadata (e.g. deposit, notes) |
+| `POST` | `/api/contracts/{id}/move-out`| Staff | FR-019 | Finalize move‑out (Move‑out timestamp) |
+
+### 3.6 Financial Management (Billing)
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/billing` | All | FR-023 | List bill cycles with status and aging meta |
+| `POST` | `/api/billing` | Staff | FR-020 | Bulk or manual bill cycle generation |
+| `GET` | `/api/billing/{id}` | All | FR-021 | Detail view of billing and itemized charges |
+| `PATCH` | `/api/billing/{id}/status` | Staff | FR-025a | Manually override cycle status |
+
+### 3.7 Transaction Processing (Payments)
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/payments` | All | FR-027 | Global payment ledger (filter by void status) |
+| `POST` | `/api/payments` | Staff | FR-024 | Post individual payment to a bill cycle |
+| `GET` | `/api/payments/{id}` | All | FR-024 | View posted payment details |
+| `DELETE` | `/api/payments/{id}` | Staff | FR-026 | Soft‑void payment and trigger recalculation |
+
+---
+
+### 3.8 Analytical Reports
+All operational reports query standardized database views (CCR-005) and support optional pagination for large datasets. In accordance with **NFR-015**, PII (Personally Identifiable Information) data is masked/redacted for the Viewer role.
+
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/reports/occupancy` | All | FR-028 | Aggregated room-level metrics |
+| `GET` | `/api/reports/occupancy-status`| All | FR-028 | Bed‑level availability matrix |
+| `GET` | `/api/reports/billing-summary` | All | FR-029 | Financial overview by date range |
+| `GET` | `/api/reports/outstanding-balances`| All| FR-030 | Receivables aging and balance report |
+| `GET` | `/api/reports/tenant-ledger` | All | FR-031 | Detailed transactional profile for one tenant |
+| `GET` | `/api/reports/collections-performance`| All| FR-032 | Payment volume by method and period |
+| `GET` | `/api/reports/*/export` | All | FR-028–032 | Streamed CSV datasets for all reports |
+
+### 3.9 Forensic Auditing
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/audit-logs` | Admin | FR-034 | Row‑level change logs (trigger‑written) |
+| `GET` | `/api/audit-logs/export` | Admin | FR-034 | Full forensic change log in CSV format |
+| `GET` | `/api/transaction-logs` | Admin | FR-035 | Workflow outcome logs (started/committed) |
+
+---
+
+## 4. Error Modalities
+
+| HTTP | Message Pattern | Rationale |
 | :--- | :--- | :--- |
-| `POST` | `/api/auth/login` | Issue Sanctum token (body: credentials per `AuthController`). |
-| `GET` | `/api/health` | Liveness JSON: `{ "status": "ok", "service": "havenstay-backend" }`. |
+| **401** | `Unauthenticated.` | Missing or expired Sanctum token |
+| **403** | `User does not have the right roles.` | Role‑based permission violation |
+| **404** | `Not Found.` | Resource (ID) does not exist |
+| **409** | `Conflict.` | State machine violation (e.g. archiving occupied room) |
+| **422** | `The given data was invalid.` | Payload validation failure (includes `errors` map) |
 
 ---
 
-## Authenticated — session and user
-
-| Method | Path | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/auth/me` | All authenticated | Current user (with `role` as loaded by controller). |
-| `POST` | `/api/auth/logout` | All authenticated | Revoke current token(s). |
-| `GET` | `/api/user` | All authenticated | Laravel default: returns `$request->user()` (same use-case as `auth/me`; prefer one client convention). |
-
----
-
-## Users (`/api/users`)
-
-**Admin only** — `canManageUsers` on every action.
-
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/users` | List users (`page`, `per_page`; optional `q`, `role`, `account_status`). |
-| `GET` | `/api/users/roles` | List roles (`roles` table) for assignment UIs. |
-| `GET` | `/api/users/{user}` | Get one user (with `role`). |
-| `POST` | `/api/users` | Create user. |
-| `PUT` | `/api/users/{user}` | Update user (optional `password`). |
-| `POST` | `/api/users/{user}/deactivate` | Soft-deactivate. |
-| `POST` | `/api/users/{user}/reactivate` | Reactivate. |
-| `POST` | `/api/users/{user}/assign-role` | Assign role. |
-
-`{user}` is the Eloquent key (typically `user_id` / route model binding).
-
----
-
-## Tenants (`/api/tenants`)
-
-| Method | Path | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/tenants` | All authenticated | List tenants (`page`, `per_page`; optional `q`, `status`). |
-| `POST` | `/api/tenants` | Staff+ | Create tenant. |
-| `GET` | `/api/tenants/search` | All authenticated | Search (query params: `q`, optional `status`). CCR-004 LIKE search in service. |
-| `GET` | `/api/tenants/{tenant}` | All authenticated | Tenant detail. |
-| `PUT` | `/api/tenants/{tenant}` | Staff+ | Update tenant. |
-| `POST` | `/api/tenants/{tenant}/deactivate` | Staff+ | Deactivate (e.g. moved out). |
-| `POST` | `/api/tenants/{tenant}/reactivate` | Staff+ | Reactivate. |
-
-> **Route order:** `search` is a static segment and is registered before `{tenant}` so `/api/tenants/search` is not captured as a tenant ID.
-
----
-
-## Rooms and bed spaces (`/api/rooms`)
-
-| Method | Path | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/rooms` | All authenticated | List rooms with bed spaces (`page`, `per_page`; optional `q`, `status`, `room_type`). |
-| `POST` | `/api/rooms` | Staff+ | Create room (optional nested `bed_spaces`). |
-| `GET` | `/api/rooms/availability` | All authenticated | Availability payload (`RoomService::getAllAvailability`). |
-| `GET` | `/api/rooms/{room}` | All authenticated | Room detail with bed spaces. |
-| `PUT` | `/api/rooms/{room}` | Staff+ | Update room / bed space labels. |
-| `POST` | `/api/rooms/{room}/bed-spaces` | Staff+ | Add a bed space (`bed_label` in body). |
-| `POST` | `/api/rooms/bed-spaces/{bedSpace}/occupy` | Staff+ | Mark bed space occupied (route is under `rooms` prefix; `bedSpace` is `bed_space_id`). |
-
----
-
-## Contracts (`/api/contracts`)
-
-| Method | Path | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/contracts` | All roles with contract view | List contracts. Query: optional `tenant_id`, `status`. |
-| `POST` | `/api/contracts` | Staff+ | Create contract (move-in). |
-| `GET` | `/api/contracts/{contract}` | All roles with contract view | Contract detail (`ContractService::getById`). |
-| `PUT` | `/api/contracts/{contract}` | Staff+ | Update contract fields (e.g. dates, deposit, status, notes). |
-| `POST` | `/api/contracts/{contract}/move-out` | Staff+ | Process move-out (`actual_move_out`, optional `notes`). |
-
----
-
-## Billing (`/api/billing`)
-
-| Method | Path | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/billing` | Billing view | List billing (`page`, `per_page`; optional `contract_id`, `tenant_id`, `q`, `status` ∈ unpaid/partial/paid/overdue, **`past_due`** boolean for calendar receivables: due before today with positive balance). |
-| `POST` | `/api/billing` | Staff+ | Create billing + line items. |
-| `GET` | `/api/billing/{billing}` | Billing view | Billing detail and line items. |
-| `PATCH` | `/api/billing/{billing}/status` | Staff+ | Update status (validated in controller). |
-
----
-
-## Payments (`/api/payments`)
-
-| Method | Path | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/payments` | Billing view | List payments (`page`, `per_page`; optional `tenant_id`, `contract_id`, `billing_id`, `q`, `payment_from`, `payment_to`, `posting_status` = `posted` or `voided`). |
-| `POST` | `/api/payments` | Staff+ | Post payment against billing. |
-| `GET` | `/api/payments/{payment}` | Billing view | Payment detail. |
-| `DELETE` | `/api/payments/{payment}` | Staff+ | **Soft void** — HTTP DELETE for REST semantics; **does not** run SQL `DELETE` on `payments`. Sets `voided_at` / `voided_by` / `void_reason` (FR-026). |
-
----
-
-## Reports (`/api/reports`)
-
-**All roles** — `canViewReports`. Data comes from reporting views in `havenstay_schema.sql` (see [DATABASE.md](DATABASE.md)).
-
-### JSON
-
-| Method | Path | Query parameters (validated) | Primary view / notes |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/reports/occupancy-status` | As before + optional **`page` / `per_page`** (slices `rows`; adds `meta`) | `vw_occupancy_status` (FR-015 bed-level) |
-| `GET` | `/api/reports/active-contracts` | `room_id` (optional) + optional **`page` / `per_page`** | `vw_active_contracts` (active leases only) |
-| `GET` | `/api/reports/occupancy` | Optional **`room_type`** (`solo` \| `shared`) + **`page` / `per_page`**; CSV export supports **`room_type`** | `vw_room_occupancy` / occupancy composition in `ReportService::occupancy()` |
-| `GET` | `/api/reports/billing-summary` | `start_date`, `end_date` (optional) + optional **`page` / `per_page`** | `vw_billing_summary` |
-| `GET` | `/api/reports/outstanding-balances` | `tenant_id`, `due_from`, `due_to` (optional) + optional **`page` / `per_page`** | `vw_billing_summary` |
-| `GET` | `/api/reports/collections-performance` | `start_date`, `end_date`, `payment_method` (optional) + optional **`page` / `per_page`** | `vw_collections_summary` |
-| `GET` | `/api/reports/tenant-ledger` | **`tenant_id` required** + optional **`page` / `per_page`** (slices **`entries`**) | Tenant ledger aggregation |
-| `GET` | `/api/reports/tenant-history` | `from`, `to`, `status` + optional **`page` / `per_page`** | `vw_tenant_contract_history` |
-
-**Tenant history JSON `rows[]` fields:** `contract_id`, `tenant_id`, `tenant_name`, `email`, `move_in_date`, `move_out_date`, `room_label`, `status`.
-
-### CSV exports
-
-Same query parameters as the matching JSON endpoint where applicable.
-
-| Method | Path |
-| :--- | :--- |
-| `GET` | `/api/reports/occupancy-status/export` |
-| `GET` | `/api/reports/active-contracts/export` |
-| `GET` | `/api/reports/occupancy/export` |
-| `GET` | `/api/reports/billing-summary/export` |
-| `GET` | `/api/reports/outstanding-balances/export` |
-| `GET` | `/api/reports/collections-performance/export` |
-| `GET` | `/api/reports/tenant-ledger/export` |
-| `GET` | `/api/reports/tenant-history/export` |
-
-Exports return streamed CSV (`text/csv`) with `Content-Disposition` attachment filenames set in `ReportController`.
-
----
-
-## Audit and transaction logs
-
-**Admin only** — `canManageUsers`.
-
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/audit-logs` | Row-level audit (paginated: `page`, `per_page`; filters: `entity_type`, `action`, `from`, `to`, `user`, `correlation` (partial match on `correlation_id`)). Response `meta` includes `access_denied_total` (count of `action=access_denied` rows matching the same filters, all pages; `0` when `action` is filtered to something other than `access_denied`). CSV export remains capped (`AuditService::AUDIT_LOG_LIST_LIMIT`). JSON includes `correlation_id` when set (MySQL trigger workflows). |
-| `GET` | `/api/audit-logs/export` | Same filters as `/api/audit-logs`; streamed CSV includes `correlation_id` column. **Admin only.** |
-| `GET` | `/api/transaction-logs` | Transaction logs (paginated: `page`, `per_page`; optional `q` matches name, reference, initiator, or **`correlation_id`**; optional `status` ∈ **`started` \| `committed` \| `rolled_back` \| `failed`** per `transaction_logs.status` in schema; `from`, `to`). JSON includes `correlation_id` when set. |
-
----
-
-## Errors
-
-| HTTP | When |
-| :--- | :--- |
-| `401` | Missing/invalid token (`Unauthenticated.`). |
-| `403` | Authenticated but `AuthorizationService` denies action (message explains resource). |
-| `422` | Validation error (`message` / `errors`). |
-| `409` | Conflict (e.g. bed space occupy — see `RoomController`). |
-
----
-
-## Primary key naming
-
-APIs use explicit keys such as `tenant_id`, `contract_id`, `billing_id`, `payment_id`, `user_id` in JSON where applicable.
-
----
-
-*Source of truth: `backend/routes/api.php` · Aligned to AuthorizationService and controllers · Last updated: April 2026*
+*Aligned to: SRS.md v4.7 · SDD.md v3.2 · routes/api.php*  
+*Last Updated: April 17, 2026 (v2.2 — final audit alignment pass)*

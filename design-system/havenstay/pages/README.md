@@ -23,43 +23,22 @@ When building a page:
 
 ## Available Page Specifications
 
-### Dashboard (`dashboard.md`)
-**Routes:** `/dashboard`
+Use these files when changing routes listed below:
 
-**Key Overrides:**
-- KPI card styling (unique label/value sizing, decorative circles, progress bars)
-- Due Today table structure and empty state
-- Quick Links panel component
-- Financial and occupancy metric calculations
-- API fallback logic for occupancy data
-
-**When to Reference:**
-- Building or modifying dashboard KPI cards
-- Implementing financial metric calculations
-- Styling the Due Today table
-- Handling dashboard-specific API errors
-
----
-
-### Tenants (`tenants.md`)
-**Routes:** `/tenants`, `/tenants/[id]`, `/tenants/new`, `/tenants/[id]/edit`
-
-**Key Overrides:**
-- Database schema alignment (tenant_id, room_id, contract_id)
-- Status enum mapping (active, moved_out, archived)
-- Search and filter controls
-- Profile card layout (detail page)
-- Contract history table (detail page)
-- Form validation rules (PH mobile format)
-- Status information panel (edit page)
-- Unsaved changes warning
-
-**When to Reference:**
-- Building or modifying tenant list, detail, or form pages
-- Implementing tenant search and filtering
-- Validating contact numbers
-- Displaying tenant status
-- Handling tenant-specific API errors
+| Module | File | Route coverage |
+|------|------|-------------------|
+| Dashboard | `dashboard.md` | `/dashboard` |
+| Tenants | `tenants.md` | `/tenants`, `/tenants/[id]`, `/tenants/new`, `/tenants/[id]/edit` |
+| Rooms | `rooms.md` | `/rooms`, `/rooms/[id]`, `/rooms/new`, `/rooms/[id]/edit` |
+| Contracts | `contracts.md` | `/contracts`, `/contracts/[id]`, `/contracts/new`, `/contracts/[id]/edit` |
+| Billing | `billing.md` | `/billing`, `/billing/[id]`, `/billing/new`, `/billing/generate` |
+| Payments | `payments.md` | `/payments`, `/payments/[id]`, `/payments/new` |
+| Reports | `reports.md` | `/reports`, `/reports/*` |
+| Users | `users.md` | `/users`, `/users/new`, `/users/[id]/edit` |
+| Audit Trail | `audit_logs.md` | `/audit-logs` |
+| Transaction Logs | `transaction_logs.md` | `/transaction-logs` |
+| Login | `login.md` | `/login` |
+| Form Pages Playbook | `FORM_PAGES.md` | `/login`, `/tenants/*`, `/rooms/*`, `/contracts/*`, `/billing/new`, `/billing/generate`, `/payments/new`, `/users/new`, `/users/[id]/edit` |
 
 ---
 
@@ -171,12 +150,114 @@ Before approving a page file update:
 
 ---
 
-## Quick Reference
+## Completeness Checks
 
-| Page | File | Primary Overrides |
-|------|------|-------------------|
-| Dashboard | `dashboard.md` | KPI cards, Due Today table, Quick Links, financial calculations |
-| Tenants | `tenants.md` | Database keys, status mapping, search/filter, form validation |
+Before signing off changes to `design-system/havenstay`:
+
+- [ ] Each active frontend route has a matching page spec or explicit note that Master-only rules apply.
+- [ ] Page titles and subtitles match `MASTER.md` §21 exactly.
+- [ ] Labels use plain language and avoid internal/technical jargon.
+- [ ] API endpoint examples align with `docs/API_REFERENCE.md`.
+- [ ] Role behavior and permissions align with `docs/SRS.md`.
+- [ ] Accessibility guidance aligns with WCAG 2.2 expectations in `MASTER.md`.
+- [ ] Form pages follow `FORM_PAGES.md` shared theme and page-specific field contracts.
+
+---
+
+## Entity Form and Detail Coverage Matrix
+
+Source of truth used for this matrix:
+- `backend/database/sql/havenstay_schema.sql` (entities and fields)
+- `docs/SRS.md` (required capabilities per module)
+- `frontend/src/app/**/page.js` (actual implemented routes)
+
+| Entity (schema table) | List view | Detail view | Create form | Edit form | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Users (`users`) | `/users` | No standalone detail route | `/users/new` | `/users/[id]/edit` | Admin-only management pattern; edit page acts as profile detail context. |
+| Tenants (`tenants`) | `/tenants` | `/tenants/[id]` | `/tenants/new` | `/tenants/[id]/edit` | Full list/detail/create/edit coverage documented in `tenants.md`. |
+| Rooms (`rooms`, `bed_spaces`) | `/rooms` | `/rooms/[id]` | `/rooms/new` | `/rooms/[id]/edit` | Full list/detail/create/edit coverage documented in `rooms.md`. |
+| Contracts (`contracts`) | `/contracts` | `/contracts/[id]` | `/contracts/new` | `/contracts/[id]/edit` | Full list/detail/create/edit coverage documented in `contracts.md`. |
+| Billing (`billing`, `billing_line_items`) | `/billing` | `/billing/[id]` | `/billing/new` and `/billing/generate` | No edit route (status update flow only) | Create + detail pattern; updates handled by status/actions, not a full edit form. |
+| Payments (`payments`) | `/payments` | `/payments/[id]` | `/payments/new` | No edit route (void workflow) | Create + detail pattern; correction handled through void/re-post workflow. |
+| Audit logs (`audit_logs`) | `/audit-logs` | In-page detail modal | Not applicable | Not applicable | Immutable forensic records by design. |
+| Transaction logs (`transaction_logs`) | `/transaction-logs` | In-page run-detail modal | Not applicable | Not applicable | Immutable workflow records by design. |
+
+### Coverage Rules
+
+- If a module intentionally has no edit page, the page spec must explicitly state the alternative workflow (for example: status action, void/re-post, or immutable records).
+- Form and detail field labels should map to schema-backed concepts from `havenstay_schema.sql`, but use user-friendly wording in UI copy.
+
+---
+
+## Schema-to-UI Field Mapping (Forms and Details)
+
+Use this as the canonical mapping reference for add/edit/detail screens.  
+Schema names must follow `backend/database/sql/havenstay_schema.sql`; labels must remain user-friendly.
+
+| Module | Schema field(s) | Suggested form/detail UI label |
+| :--- | :--- | :--- |
+| Users | `first_name`, `last_name` | First Name, Last Name |
+| Users | `username` | Username |
+| Users | `email` | Email |
+| Users | `role_id` | System Role |
+| Users | `is_active` | Account Status / Account is active |
+| Tenants | `first_name`, `last_name` | First Name, Last Name |
+| Tenants | `contact_number` | Contact Number |
+| Tenants | `email` | Email |
+| Tenants | `emergency_contact_name`, `emergency_contact_number` | Emergency Contact Name, Emergency Contact Number |
+| Tenants | `address` | Address |
+| Tenants | `status` | Status |
+| Rooms | `room_code` | Room Code |
+| Rooms | `room_type` | Room Type |
+| Rooms | `capacity` | Capacity |
+| Rooms | `monthly_rate` | Monthly Rate |
+| Rooms | `status` | Room Status |
+| Rooms | `amenities`, `description` | Amenities, Description |
+| Bed Spaces | `bed_label`, `status` | Bed Label, Bed Status |
+| Contracts | `tenant_id`, `bed_space_id` | Resident, Bed Space |
+| Contracts | `move_in_date`, `expected_move_out_date`, `actual_move_out_date` | Move-in Date, Expected Move-out Date, Actual Move-out Date |
+| Contracts | `deposit_amount`, `monthly_rate_override` | Security Deposit, Monthly Rate Override |
+| Contracts | `status`, `notes` | Contract Status, Notes |
+| Billing | `contract_id` | Contract |
+| Billing | `billing_period_from`, `billing_period_to` | Billing Period (From), Billing Period (To) |
+| Billing | `due_date`, `status` | Due Date, Billing Status |
+| Billing Line Items | `item_type`, `item_description`, `amount` | Charge Type, Description, Amount |
+| Payments | `billing_id` | Billing Record |
+| Payments | `amount_paid`, `payment_date` | Amount Paid, Payment Date |
+| Payments | `payment_method`, `reference_number` | Payment Method, Reference Number |
+| Payments | `remarks`, `void_reason`, `voided_at` | Notes, Void Reason, Voided At |
+
+### Mapping Notes
+
+- When the UI uses clearer wording (for example, **Resident** instead of `tenant_id`), preserve the schema key in API payloads and docs.
+- For contracts, use `expected_move_out_date` as the canonical schema field name in documentation, even if UI text says **Expected Move-out**.
+- Billing and payments are correction-sensitive domains; detail views should always expose status and date fields clearly.
+
+---
+
+## Route Parity Snapshot
+
+Snapshot basis: `frontend/src/app/**/page.js` (49 route files discovered).
+
+| Frontend route pattern | Design-system coverage | Source |
+| :--- | :--- | :--- |
+| `/dashboard` | Covered | `dashboard.md` |
+| `/login` | Covered | `login.md` |
+| `/tenants`, `/tenants/[id]`, `/tenants/new`, `/tenants/[id]/edit` | Covered | `tenants.md` |
+| `/rooms`, `/rooms/[id]`, `/rooms/new`, `/rooms/[id]/edit` | Covered | `rooms.md` |
+| `/contracts`, `/contracts/[id]`, `/contracts/new`, `/contracts/[id]/edit` | Covered | `contracts.md` |
+| `/billing`, `/billing/[id]`, `/billing/new`, `/billing/generate` | Covered | `billing.md` |
+| `/payments`, `/payments/[id]`, `/payments/new` | Covered | `payments.md` |
+| `/reports` and report children (`/reports/*`) | Covered | `reports.md` |
+| `/users`, `/users/new`, `/users/[id]/edit` | Covered | `users.md` |
+| `/audit-logs` | Covered | `audit_logs.md` |
+| `/transaction-logs` | Covered | `transaction_logs.md` |
+| `/` (app root page) | Master-only / Not explicitly documented in pages | `../MASTER.md` |
+
+### Notes
+
+- `reports.md` intentionally covers sub-routes via `/reports/*` (including `occupancy`, `occupancy-status`, `active-contracts`, `tenant-history`, `tenant-ledger`, and others).
+- Duplicate path entries can appear in glob output because of mixed slash styles on Windows; parity decisions above use normalized route paths.
 
 ---
 

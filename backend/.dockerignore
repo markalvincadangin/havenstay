@@ -1,0 +1,22 @@
+# Dependencies - rebuilt inside the container
+vendor
+
+# Environment files - injected at runtime via docker-compose
+.env
+.env.local
+.env.testing
+
+# Testing artifacts
+tests
+.phpunit.result.cache
+phpunit.xml
+phpunit.mysql.xml
+
+# Dev/tooling artifacts
+.git
+.gitignore
+*.md
+migration_error.txt
+
+# Node artifacts (backend has a package.json for Vite)
+node_modules

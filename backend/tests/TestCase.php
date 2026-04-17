@@ -11,9 +11,6 @@ use Illuminate\Support\Facades\DB;
  */
 abstract class TestCase extends BaseTestCase
 {
-    /**
-     * Ensure default roles exist. On MySQL, migrations may load havenstay_schema.sql with roles already present.
-     */
     protected function seedRoles(): void
     {
         Role::firstOrCreate(['role_name' => 'admin'], ['description' => 'Admin']);
@@ -30,6 +27,7 @@ abstract class TestCase extends BaseTestCase
     protected function tenantAttributes(array $overrides = []): array
     {
         return array_merge([
+            'email' => 'test@example.com',
             'emergency_contact_name' => 'Test Emergency Contact',
             'emergency_contact_number' => '+639000000001',
             'address' => '123 Test Street, Quezon City',
@@ -43,7 +41,13 @@ abstract class TestCase extends BaseTestCase
     protected function assertTriggerAuditLog(array $data): void
     {
         if (DB::getDriverName() === 'mysql') {
-            $this->assertDatabaseHas('audit_logs', $data);
+            $userId = $data['user_id'] ?? null;
+            $params = $data;
+            unset($params['user_id']);
+            if ($userId) {
+                $params['changed_by'] = $userId;
+            }
+            $this->assertDatabaseHas('audit_logs', $params);
         } else {
             // In SQLite, we expect NO trigger audit logs
             // We just pass the test since triggers are verified in MySQL/Staging

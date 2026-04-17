@@ -64,6 +64,7 @@ services:
   backend:
     build:
       context: ./backend
+      target: development
     container_name: havenstay-backend
     restart: always
     ports:
@@ -100,6 +101,7 @@ services:
   frontend:
     build:
       context: ./frontend
+      target: development
       args:
         NEXT_PUBLIC_API_BASE_URL: ""
         BACKEND_INTERNAL_URL: "http://backend"
@@ -110,6 +112,12 @@ services:
     environment:
       - BACKEND_INTERNAL_URL=http://backend:80
       - NEXT_PUBLIC_API_BASE_URL=
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       backend:
         condition: service_healthy

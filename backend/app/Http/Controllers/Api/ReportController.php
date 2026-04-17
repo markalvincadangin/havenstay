@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
-use App\Services\AuditService;
 use App\Services\AuthorizationService;
+use App\Services\PiiMaskingService;
 use App\Services\ReportService;
 use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
@@ -14,15 +15,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
+    use HandlesAuthorization;
+
     /**
-     * FR-028, FR-031: Occupancy report by room and bed.
      */
     public function occupancy(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.occupancy');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.occupancy', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
@@ -37,38 +37,36 @@ class ReportController extends Controller
     }
 
     /**
-     * FR-029, FR-031: Billing and collections report with date-range filters.
      */
     public function billingSummary(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.billingSummary');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.billingSummary', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
+            'current_month' => ['nullable', 'boolean'],
         ], PaginationResponse::queryRules()));
 
         $report = ReportService::billingSummary([
             'start_date' => $validated['start_date'] ?? null,
             'end_date' => $validated['end_date'] ?? null,
+            'current_month' => (bool) ($validated['current_month'] ?? false),
         ]);
+
+        $report = $this->finalizeReportForViewer($request, 'billing_summary', $report);
 
         return response()->json($this->withOptionalRowPagination($report, $request));
     }
 
     /**
-     * FR-030: Outstanding balances report.
      */
     public function outstandingBalances(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.outstandingBalances');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.outstandingBalances', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
@@ -83,17 +81,17 @@ class ReportController extends Controller
             'due_to' => $validated['due_to'] ?? null,
         ]);
 
+        $report = $this->finalizeReportForViewer($request, 'outstanding_balances', $report);
+
         return response()->json($this->withOptionalRowPagination($report, $request));
     }
 
     /**
-     * FR-032: Export occupancy report to CSV.
      */
     public function occupancyExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.occupancyExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.occupancyExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
@@ -108,14 +106,11 @@ class ReportController extends Controller
     }
 
     /**
-     * FR-015: Per-bed occupancy via `vw_occupancy_status` (CCR-005).
      */
     public function occupancyStatus(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.occupancyStatus');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.occupancyStatus', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
@@ -128,17 +123,17 @@ class ReportController extends Controller
             'bed_status' => $validated['bed_status'] ?? null,
         ]);
 
+        $report = $this->finalizeReportForViewer($request, 'occupancy_status', $report);
+
         return response()->json($this->withOptionalRowPagination($report, $request));
     }
 
     /**
-     * FR-032: Export bed-level occupancy report to CSV.
      */
     public function occupancyStatusExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.occupancyStatusExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.occupancyStatusExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
@@ -147,6 +142,8 @@ class ReportController extends Controller
         ]);
 
         $report = ReportService::occupancyStatus($validated);
+
+        $report = $this->finalizeReportForViewer($request, 'occupancy_status', $report);
 
         return $this->csvDownload('occupancy-status', $report, 'occupancy-status-report.csv');
     }
@@ -157,9 +154,7 @@ class ReportController extends Controller
     public function activeContracts(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.activeContracts');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.activeContracts', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
@@ -170,17 +165,17 @@ class ReportController extends Controller
             'room_id' => $validated['room_id'] ?? null,
         ]);
 
+        $report = $this->finalizeReportForViewer($request, 'active_contracts', $report);
+
         return response()->json($this->withOptionalRowPagination($report, $request));
     }
 
     /**
-     * FR-032: Export active contracts report to CSV.
      */
     public function activeContractsExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.activeContractsExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.activeContractsExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
@@ -189,37 +184,38 @@ class ReportController extends Controller
 
         $report = ReportService::activeContracts($validated);
 
+        $report = $this->finalizeReportForViewer($request, 'active_contracts', $report);
+
         return $this->csvDownload('active-contracts', $report, 'active-contracts-report.csv');
     }
 
     /**
-     * FR-032: Export billing summary report to CSV.
      */
     public function billingSummaryExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.billingSummaryExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.billingSummaryExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
+            'current_month' => ['nullable', 'boolean'],
         ]);
 
         $report = ReportService::billingSummary($validated);
+
+        $report = $this->finalizeReportForViewer($request, 'billing_summary', $report);
 
         return $this->csvDownload('billing-summary', $report, 'billing-summary-report.csv');
     }
 
     /**
-     * FR-032: Export outstanding balances report to CSV.
      */
     public function outstandingBalancesExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.outstandingBalancesExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.outstandingBalancesExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
@@ -230,18 +226,17 @@ class ReportController extends Controller
 
         $report = ReportService::outstandingBalances($validated);
 
+        $report = $this->finalizeReportForViewer($request, 'outstanding_balances', $report);
+
         return $this->csvDownload('outstanding-balances', $report, 'outstanding-balances-report.csv');
     }
 
     /**
-     * FR-032b: Collections performance report.
      */
     public function collectionsPerformance(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.collectionsPerformance');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.collectionsPerformance', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
@@ -256,17 +251,17 @@ class ReportController extends Controller
             'payment_method' => $validated['payment_method'] ?? null,
         ]);
 
+        $report = $this->finalizeReportForViewer($request, 'collections_performance', $report);
+
         return response()->json($this->withOptionalRowPagination($report, $request));
     }
 
     /**
-     * FR-032, FR-032b: Export collections performance report to CSV.
      */
     public function collectionsPerformanceExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.collectionsPerformanceExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.collectionsPerformanceExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
@@ -277,18 +272,17 @@ class ReportController extends Controller
 
         $report = ReportService::collectionsPerformance($validated);
 
+        $report = $this->finalizeReportForViewer($request, 'collections_performance', $report);
+
         return $this->csvDownload('collections-performance', $report, 'collections-performance-report.csv');
     }
 
     /**
-     * FR-031, FR-032: Tenant contract history (view-backed).
      */
     public function tenantHistory(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.tenantHistory');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.tenantHistory', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
@@ -304,18 +298,18 @@ class ReportController extends Controller
         ];
 
         $report = ReportService::tenantHistory($filters);
+
+        $report = $this->finalizeReportForViewer($request, 'tenant_history', $report);
 
         return response()->json($this->withOptionalRowPagination($report, $request));
     }
 
     /**
-     * FR-032: Export tenant history report to CSV.
      */
     public function tenantHistoryExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.tenantHistoryExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.tenantHistoryExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
@@ -332,18 +326,17 @@ class ReportController extends Controller
 
         $report = ReportService::tenantHistory($filters);
 
+        $report = $this->finalizeReportForViewer($request, 'tenant_history', $report);
+
         return $this->csvDownload('tenant-history', $report, 'tenant-history-report.csv');
     }
 
     /**
-     * FR-032a: Detailed tenant ledger.
      */
     public function tenantLedger(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.tenantLedger');
-
-            return response()->json(['message' => 'Unauthorized to view reports.'], 403);
+            return $this->forbidden($request, 'reports.tenantLedger', 'Unauthorized to view reports.');
         }
 
         $validated = $request->validate(array_merge([
@@ -352,17 +345,17 @@ class ReportController extends Controller
 
         $report = ReportService::tenantLedger((int) $validated['tenant_id']);
 
+        $report = $this->finalizeReportForViewer($request, 'tenant_ledger', $report);
+
         return response()->json($this->withOptionalRowPagination($report, $request, 'entries'));
     }
 
     /**
-     * FR-032, FR-032a: Export tenant ledger to CSV.
      */
     public function tenantLedgerExport(Request $request): StreamedResponse
     {
         if (! AuthorizationService::canViewReports($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'reports.tenantLedgerExport');
-            abort(403, 'Unauthorized to export reports.');
+            $this->forbiddenExport($request, 'reports.tenantLedgerExport', 'Unauthorized to export reports.');
         }
 
         $validated = $request->validate([
@@ -370,9 +363,23 @@ class ReportController extends Controller
         ]);
 
         $report = ReportService::tenantLedger((int) $validated['tenant_id']);
-        $tenantName = str_replace(' ', '_', strtolower($report['tenant']->name ?? 'tenant'));
+
+        $report = $this->finalizeReportForViewer($request, 'tenant_ledger', $report);
+
+        $tenantName = str_replace(' ', '_', strtolower($report['tenant']['name'] ?? 'tenant'));
 
         return $this->csvDownload('tenant-ledger', $report, "ledger-{$tenantName}.csv");
+    }
+
+    /**
+     * Apply NFR-015 Viewer masking to report payloads (JSON and CSV).
+     *
+     * @param  array<string, mixed>  $report
+     * @return array<string, mixed>
+     */
+    private function finalizeReportForViewer(Request $request, string $reportKey, array $report): array
+    {
+        return PiiMaskingService::maskReportForViewer($request->user(), $reportKey, $report);
     }
 
     /**

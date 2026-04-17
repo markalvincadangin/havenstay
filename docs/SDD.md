@@ -1,6 +1,10 @@
 # HavenStay Boarding House Management System (BHMS)
 ## System Design Document (SDD)
 
+**Version:** 3.2  
+**Last Updated:** April 17, 2026  
+**Status:** Canonical architectural design and forensic implementation patterns
+
 ---
 
 ## Table of Contents
@@ -23,346 +27,216 @@
 
 ## 1. Purpose and Scope
 
-This System Design Document (SDD) translates [**SRS.md**](SRS.md) requirements into a concrete technical design for HavenStay BHMS. It defines the architecture, module responsibilities, data design, transaction behavior, security, and deployment patterns.
+This System Design Document (SDD) translates the requirements defined in [**SRS.md**](SRS.md) into a concrete technical architecture for HavenStay BHMS. It defines the implementation strategies for the presentation, application, and data layers, including transaction control, workflow orchestration, and forensic auditing.
 
-Scope includes:
-- Web application architecture and technology stack
-- Database schema, entity relationships, and data flow design
-- Transaction control and logging strategy (CCR-006, CCR-007)
-- Query and reporting design (CCR-004, CCR-005)
-- Course compliance mapping (CCR-001 through CCR-008)
-
-> **Schema authority:** `db/havenstay_schema.sql` is the canonical DDL. This document describes the schema as it exists in that file. The schema must never be modified to match this document — only this document is updated to reflect the schema.
+### 1.1 Document Boundary
+The SDD is the authoritative reference for the **how** of the system. While the SRS defines capabilities and constraints, the SDD specifies the frameworks, database schema, module relationships, and implementation patterns required to realize those capabilities.
 
 ---
 
 ## 2. Design Goals
 
-- Ensure data integrity for the tenant → bed space → contract → billing → payment relationship chain.
-- Support bed-level occupancy tracking for all room types through the `bed_spaces` entity.
-- Enforce role-based access and accountability through persistent audit trails.
-- Keep the system practical for small boarding house operations.
-- Satisfy all Information Management course database requirements (CCR-001 to CCR-008).
+- **Data Integrity:** Ensure the integrity of the tenant‑bed‑contract‑billing‑payment relationship chain.
+- **Granular Tracking:** Support bed‑level occupancy tracking for shared and solo rooms.
+- **Accountability:** Provide high‑fidelity, trigger‑based audit trails and workflow transaction logs.
+- **Standardized Reporting:** Utilize standardized database views to ensure reporting consistency across all interfaces.
+- **Course Compliance:** Satisfy all academic requirements (CCR-001 through CCR-008) through robust design patterns.
 
 ---
 
 ## 3. Architecture Overview
 
-### 3.1 Logical Architecture
-
-Three-tier architecture:
+### 3.1 Logical Architecture (Three‑Tier)
 
 ```mermaid
 graph TD
     User((User))
-    UI[Next.js 16 Frontend]
-    API[Laravel 13 REST API]
-    DB_P[(MySQL 8.4 Primary)]
-    DB_R[(MySQL 8.4 Replica)]
+    UI[Next.js Frontend]
+    API[Laravel REST API]
+    DB_P[(MySQL Primary)]
+    DB_R[(MySQL Replica)]
 
     User --> UI
     UI --> API
     API --> DB_P
-    API -.->|reads| DB_R
-    DB_P -- Async Replication --> DB_R
+    API -.->|Read-Only| DB_R
+    DB_P -- GTID Replication --> DB_R
 ```
 
-- **Presentation layer:** Next.js web UI consumed by Admin, Staff, and Viewer roles.
-- **Application layer:** Laravel REST API handling business logic, RBAC, validation, and service orchestration.
-- **Data layer:** MySQL 8.4+ (InnoDB) relational database with triggers, views, and transactional consistency guarantees via PHP-layer `DB::transaction()`.
+- **Presentation Layer:** Next.js web application utilizing a component-based design system and a role‑aware navigation architecture.
+- **Application Layer:** Laravel REST API responsible for business logic, RBAC enforcement, input validation, and transaction orchestration.
+- **Data Layer:** MySQL relational database with InnoDB‑driven ACID compliance, forensic triggers, and reporting views.
 
-### 3.2 Module Breakdown
-
-| Module | Description |
-| :--- | :--- |
-| Authentication and Access Control | Token-based login, logout, role enforcement |
-| User and Role Management | CRUD for user accounts and role assignment |
-| Tenant Management | Tenant profiles, status management, search |
-| Room and Bed Space Management | Room inventory, bed-level occupancy tracking |
-| Contract Management | Rental agreement creation and move-out processing |
-| Billing Management | Monthly billing cycle generation and line items |
-| Payment Processing | Payment posting, void, balance recalculation |
-| Reporting and Dashboard | Occupancy, billing, and receivables reports |
-| Audit and Transaction Logging | Row-level change logs and workflow transaction records |
-
-### 3.3 Deployment Topology (CCR-002)
-
-- Application server connects to the MySQL **primary (source)** instance for all writes.
-- Read operations are routable to **replica** nodes via Laravel read/write connection splitting (`DB_READ_HOST` in `.env`).
-- MySQL primary-replica replication (GTID-based) satisfies the distributed database requirement (CCR-002).
-- Setup procedure: `docs/DISTRIBUTED_DB_SETUP.md`.
-
-### 3.4 Technology Stack
+### 3.2 Technology Stack
 
 | Layer | Technology | Version |
 | :--- | :--- | :--- |
-| **Backend framework** | Laravel (PHP 8.3+) | 13 |
-| **Frontend framework** | Next.js (App Router) | 16.x |
-| **Frontend library** | React | 19.x |
-| **Frontend styling** | Tailwind CSS | v4 |
-| **Frontend forms** | React Hook Form | 7.x |
-| **Primary database** | MySQL (InnoDB) | 8.4+ |
-| **Development database** | SQLite | — |
-| **Backend auth** | Laravel Sanctum | 4.x |
-| **API style** | RESTful JSON | — |
+| **Backend Framework** | Laravel (PHP 8.3+) | 13.x |
+| **Frontend Framework** | Next.js (App Router) | 16.x |
+| **Frontend Styling** | Tailwind CSS | v4.x |
+| **Database (Primary)** | MySQL (InnoDB) | 8.4+ |
+| **Database (Dev/Test)** | SQLite | — |
+| **API Architecture** | RESTful JSON | — |
+| **Authentication** | Laravel Sanctum | 4.x |
+
+### 3.3 Deployment Topology (CCR-002)
+The system utilizes a primary‑replica architecture to satisfy distributed database requirements. All write operations are directed to the primary instance, while read-only reporting queries are routable to the replica via Laravel's connection splitting. Detailed setup is documented in `docs/DISTRIBUTED_DB_SETUP.md`.
 
 ---
 
 ## 4. Database Design
 
-### 4.1 Design Summary
+### 4.1 Design Philosophy
+The database is normalized to the 3rd Normal Form (3NF) where operationally practical, specifically to ensure that financial and occupancy data are derived from singular points of truth. The schema consists of **11 tables**, **6 reporting views**, and **24 forensic triggers**.
 
-The database is normalized around a core operational chain: `roles → users`, `rooms → bed_spaces`, `tenants → contracts (via bed_space) → billing → billing_line_items → payments`. The schema uses foreign keys, check constraints, performance indexes, triggers, and reporting views. **Forensic Integrity:** Core entities (`users`, `tenants`, `rooms`, `contracts`) utilize database-level **Soft Deletes** (`deleted_at`) to ensure historical records are never hard-deleted, maintaining a permanent referential audit trail. There are no stored procedures in the current schema.
+> **Schema Authority:** `db/havenstay_schema.sql` is the canonical DDL. 
 
-### 4.2 Core Entities (CCR-001: 11 tables)
+### 4.2 Core Entities (CCR-001)
 
-| Table | Primary Key | Purpose |
+| Table | Purpose | Logic |
 | :--- | :--- | :--- |
-| `roles` | `role_id` | Role definitions: admin, staff, viewer |
-| `users` | `user_id` | System user accounts |
-| `tenants` | `tenant_id` | Boarding house tenant profiles |
-| `rooms` | `room_id` | Room inventory |
-| `bed_spaces` | `bed_space_id` | Per-bed occupancy for all room types |
-| `contracts` | `contract_id` | Rental agreements, linked via `bed_space_id` |
-| `billing` | `billing_id` | Monthly billing cycle headers (no amount columns) |
-| `billing_line_items` | `billing_line_item_id` | Itemized charges per billing cycle |
-| `payments` | `payment_id` | Payment transactions with soft-void support |
-| `audit_logs` | `audit_log_id` | Row-level change log written by triggers |
-| `transaction_logs` | `tx_log_id` | Workflow-level transaction state log |
+| `roles` | Role definitions (Admin, Staff, Viewer) | Reference data |
+| `users` | Authenticated system accounts | Soft Delete |
+| `tenants` | Boarding house tenant profiles | Soft Delete |
+| `rooms` | Room inventory and pricing | Soft Delete |
+| `bed_spaces` | Individual bed occupancy tracking | Referential Lock |
+| `contracts` | Rental agreements (anchored to `bed_space_id`) | Soft Delete |
+| `billing` | Monthly billing cycle headers | Immutable |
+| `billing_line_items` | Itemized charges and adjustments | Immutable |
+| `payments` | Transactional records with soft‑void support | Soft Void |
+| `audit_logs` | Row‑level change logs (Trigger-written) | Append-Only |
+| `transaction_logs` | Workflow-level outcome logs | Append-Only |
 
-### 4.3 Critical Entity Relationships
+### 4.3 Data Relationship Architecture
+- **Bed-Centric Occupancy:** All contracts are linked to a `bed_space_id`. Room context is derived via `bed_spaces.room_id`. This prevents data anomalies where a tenant might be assigned to a room but not a specific bed space.
+- **Derived Financials:** The `billing` table does not store total amounts. Instead, `total_amount`, `total_paid`, and `balance` are computed dynamically from the `billing_line_items` and `payments` relationships to ensure data consistency.
+- **Forensic Linkage:** All audit and transaction records are linked via a `correlation_id` across the session, allowing an Admin to trace a single UI action (e.g., Check-in) to multiple row‑level changes in the audit log.
 
-- One role → many users.
-- One room → many bed spaces. **All contract and occupancy tracking flows through `bed_spaces`** — there is no direct `room_id` on `contracts`.
-- One tenant → many contracts (over tenancy history).
-- One contract links to one `bed_space_id` (NOT NULL). Room is resolved via `contracts.bed_space_id → bed_spaces.room_id`.
-- One contract → many billing cycles.
-- One billing cycle → many line items; amounts summed dynamically — **`billing` has no `amount_due` or `amount_paid` columns**.
-- One billing cycle → many payments. Non-voided payments are summed to compute `total_paid`.
-- `audit_logs` and `transaction_logs` reference `users` via nullable FKs (`ON DELETE SET NULL`).
+### 4.4 Status Synchronization Logic
+The system enforces strict status transitions to maintain occupancy integrity:
+- **Room Status:** Synced with bed occupancy. A room is "available" if it has at least one vacant bed; "unavailable" if all beds are occupied.
+- **Bed Status:** "vacant", "occupied", "maintenance". Contracts can only be created for "vacant" beds.
+- **Sync Authority:** `RoomService::syncStatusAndCapacity()` is the authoritative service method for reconciling these states during check‑in and move‑out workflows.
 
-### 4.4 Billing Amount Architecture
-
-The `billing` table stores only the cycle header. There are **no `amount_due` or `amount_paid` columns**.
-
-| Value | Source |
-| :--- | :--- |
-| `total_amount` | `SUM(billing_line_items.amount)` WHERE `billing_id = ?` |
-| `total_paid` | `SUM(payments.amount_paid)` WHERE `billing_id = ?` AND `voided_at IS NULL` |
-| `balance` | `total_amount - total_paid` |
-
-The `Billing` model exposes these as appended accessors. `BillingService::autoUpdateStatus()` is the single authority for status recalculation and must be called after every payment post and void.
-
-**`Billing::updateStatus()` (model method) is deprecated.** Its logic differs from `autoUpdateStatus()` and produces incorrect results after voids. It must not be called. See Open Implementation Notes.
-
-### 4.5 Room Status ENUM
-
-The `rooms.status` ENUM is `('available', 'unavailable', 'maintenance')`.
-
-| Value | Meaning |
-| :--- | :--- |
-| `available` | No beds occupied, or shared room has vacant beds remaining |
-| `unavailable` | All beds occupied (solo or fully occupied shared room) |
-| `maintenance` | Manually set; never auto-assigned by `syncStatusAndCapacity()` |
-
-Application code must use `Room::STATUS_AVAILABLE`, `Room::STATUS_UNAVAILABLE`, and `Room::STATUS_MAINTENANCE` constants. The string `'occupied'` is **not a valid ENUM value** and must never be written to `rooms.status`.
-
-### 4.6 Payment Void Support
-
-The `payments` table includes soft-void columns: `voided_at DATETIME NULL`, `voided_by INT NULL`, `void_reason VARCHAR(255) NULL`. Voiding a payment sets `voided_at` to the current timestamp; the row is never deleted. All balance computations must filter voided payments with `WHERE voided_at IS NULL`.
-
-### 4.7 Schema Design Decisions
-
-| Decision | Rationale |
-| :--- | :--- |
-| `roles` as a separate table | Extensibility; satisfies CCR-001 as a discrete entity |
-| `bed_spaces` as the contract anchor | All contracts link to a bed; room is derived via FK; eliminates room-contract sync bugs |
-| No `room_id` on `contracts` | Room derived via `bed_space → room`; prevents redundancy and dual-source inconsistency |
-| `billing` has no amount columns | Amounts derived from relations; eliminates dual-source inconsistency |
-| `payments.voided_at` soft-void | Preserves financial history; allows reconciliation audit of voided transactions |
-| No stored procedures | PHP-layer `DB::transaction()` is sufficient; eliminates MySQL-only execution dependency |
-| `audit_logs` and `transaction_logs` separated | Row-level change records vs. workflow-level state records serve different concerns |
-
-### 4.8 Primary Key Naming Convention
-
-All tables use domain-prefixed primary keys (e.g., `tenant_id`, `room_id`, `billing_id`) rather than generic `id`. Laravel migrations use the default `id` column, which maps to the same underlying column. Application code references `$model->id` for the Eloquent PK; the schema column name is the prefixed form. This duality is intentional and must be maintained.
-
----
-
+### 4.5 Financial Recalculation (BR-007, BR-008)
+- **Void Support:** Payments utilize a `voided_at` timestamp. All balance computations must use a `whereNull('voided_at')` filter.
+- **Balance Logic:** 
+    - `total_amount` = `SUM(billing_line_items.amount)`
+    - `total_paid` = `SUM(payments.amount_paid)` (non‑voided)
+    - `balance` = `total_amount - total_paid`
+- **Recalculation Authority:** `BillingService::autoUpdateStatus()` is the single source of truth for evaluating billing status priority in sequence: `paid` > `overdue` > `partial` > `unpaid`.
 ## 5. Transaction Design (CCR-006)
 
-### 5.1 Critical Transaction Boundaries
+### 5.1 Transaction Management
+The system utilizes PHP‑layer `DB::transaction()` to ensure ACID properties for multi‑table writes. Financial operations (bill generation, payment posting, voids) and stateful workflows (check‑in, move‑out) are encapsulated in these boundaries.
 
-All critical write workflows use PHP-layer `DB::transaction()`. There are no stored procedures.
+### 5.2 Transaction Logging Pattern (CCR-007)
+To fulfill the requirement for traceable workflow outcomes, particularly during failures, all critical write operations utilize a `TransactionService` wrapper:
+1. **Initiation:** Record a `started` state in the `transaction_logs` table *before* entering the database transaction.
+2. **Context:** Initialize the `AuditService` with the acting user's identity and generate a `correlation_id` for the session.
+3. **Execution:** Execute business logic within a `DB::transaction()` block.
+4. **Conclusion:** Update the log record to `committed` on success, or `rolled_back` on failure.
 
-| Workflow | Mechanism | Tables Modified |
-| :--- | :--- | :--- |
-| Room creation / update | `DB::transaction()` | `rooms`, `bed_spaces` |
-| Contract creation | `DB::transaction()` | `contracts`, `bed_spaces`, `rooms` |
-| Move-out processing | `DB::transaction()` | `contracts`, `bed_spaces`, `rooms` |
-| Billing generation | `DB::transaction()` | `billing`, `billing_line_items` |
-| Payment posting | `DB::transaction()` + `transaction_logs` | `payments`, `billing`, `transaction_logs` |
-| Payment void | `DB::transaction()` + `transaction_logs` | `payments`, `billing`, `transaction_logs` |
-| Tenant Check-in | `DB::transaction()` + `transaction_logs` | `contracts`, `tenants`, `bed_spaces`, `transaction_logs` |
-| Tenant Move-out | `DB::transaction()` + `transaction_logs` | `contracts`, `tenants`, `bed_spaces`, `transaction_logs` |
+This pattern ensures that even if a database transaction is reverted, the record of the attempt and its failure remains persistent in the append-only transaction log.
 
-### 5.2 Transaction Log Pattern (CCR-007)
-
-All financial write workflows (payment post, payment void) follow this wrapper:
-
-```php
-// 1. INSERT 'started' BEFORE the transaction — survives rollback.
-$txLogId = DB::table('transaction_logs')->insertGetId([
-    'tx_name'          => 'sp_post_payment_fallback',
-    'started_at'       => now(),
-    'status'           => 'started',
-    'initiated_by'     => $actor->id,
-    'reference_entity' => 'billing',
-    'reference_id'     => (string) $data['billing_id'],
-]);
-
-try {
-    $result = DB::transaction(function () use (...) { /* work */ });
-
-    // 2. UPDATE to 'committed' after success.
-    DB::table('transaction_logs')->where('tx_log_id', $txLogId)->update([
-        'completed_at' => now(), 'status' => 'committed', 'details_json' => json_encode([...]),
-    ]);
-
-    return $result;
-} catch (\Throwable $e) {
-    // 3. UPDATE to 'failed' — runs outside the rolled-back transaction.
-    DB::table('transaction_logs')->where('tx_log_id', $txLogId)->update([
-        'completed_at' => now(), 'status' => 'failed', 'details_json' => json_encode(['reason' => $e->getMessage()]),
-    ]);
-    throw $e;
-}
-```
-
-**Critical rule:** The `transaction_logs` INSERT must occur **before** `DB::transaction()`. If placed inside the transaction, a rollback erases the failure record, violating CCR-007.
-
-### 5.3 Audit Context Pattern (CCR-008)
-
-Before any `DB::transaction()` that touches a trigger-covered table on MySQL, the application sets session variable `@app_user_id`:
-
-```php
-// Set BEFORE the transaction, not inside it.
-AuditService::setAuditUserContext($actor->id);
-
-return DB::transaction(function () use (...) {
-    // trigger-covered writes here
-});
-```
-
-`SetAuditContext` middleware is registered in `bootstrap/app.php` as part of the `api` middleware group, initializing `@app_user_id` on every API request. Service-level calls override this with the authenticated actor's ID.
-
-### 5.4 Trigger-Based Change Logging (CCR-008)
-
-`AFTER INSERT`, `AFTER UPDATE`, and `AFTER DELETE` triggers on:
-
-`users` (3) + `tenants` (3) + `rooms` (3) + `bed_spaces` (3) + `contracts` (3) + `billing` (3) + `payments` (3) + `billing_line_items` (3) = **24 triggers total**
-
-Each trigger writes to `audit_logs`: `entity_name`, `entity_id`, `action`, `old_values_json`, `new_values_json`, `created_at`, and `user_id` from `@app_user_id`. **Archive/Restore:** Triggers on soft-deletable tables are enhanced to detect `deleted_at` transitions, logging these specifically as `archive` or `restore` actions rather than generic updates.
-
-**Dual-logging note:** Service methods also call `AuditService::log*()` which directly inserts into `audit_logs`. This produces two entries per CRUD operation: one from the trigger (database layer, fires even on direct DB writes) and one from the service (application layer, includes workflow context). This is intentional defense-in-depth.
+### 5.3 Audit Automation (CCR-008)
+Row‑level change logging is handled exclusively by **24 AFTER triggers** on the MySQL primary.
+- **Mechanism:** The application sets a session variable `@current_user_id` via the `SetAuditContext` middleware.
+- **Triggers:** Capture `INSERT`, `UPDATE`, and `DELETE` events, writing full "before" and "after" JSON snapshots to the `audit_logs` table.
 
 ---
 
 ## 6. Query and Reporting Design (CCR-004, CCR-005)
 
-### 6.1 Reporting Views (CCR-005: SQL JOIN compliance)
+### 6.1 Reporting View Architecture
+The system utilizes 6 dedicated database views to handle complex JOINS and ensure reporting accuracy. All report endpoints query these views directly to maintain single-source-of-truth logic:
 
-Six views are defined in `db/havenstay_schema.sql`. All report endpoints query these views directly — they must not be replaced with inline Eloquent queries.
-
-| View | Tables Joined | Purpose |
+| View | Purpose | SRS Traceability |
 | :--- | :--- | :--- |
-| `vw_billing_summary` | `billing` INNER JOIN `contracts`, `tenants`, `bed_spaces`, `rooms` | Billing with void-aware `total_amount` and `total_paid`; names standardized to "Last, First" |
-| `vw_active_contracts` | `contracts` INNER JOIN `tenants`, `bed_spaces`, `rooms` | Active contracts with full entity context; filters `contracts.deleted_at IS NULL` |
-| `vw_room_occupancy` | `rooms` LEFT JOIN `bed_spaces` (aggregated) | Per-room occupancy counts; filters `rooms.deleted_at IS NULL` |
-| `vw_occupancy_status` | `bed_spaces` INNER JOIN `rooms`, LEFT JOIN `contracts`, `tenants` | Per-bed occupancy with current tenant; filters soft-deleted contracts |
-| `vw_collections_summary` | `payments` INNER JOIN `billing`, `contracts`, `tenants`, `rooms` | Payment collections tracking (FR-032b); names standardized to "Last, First" |
-| `vw_tenant_contract_history` | `contracts` INNER JOIN `tenants`, `bed_spaces`, `rooms` | Historical record of all contracts (FR-031); forensic record including archived entries |
+| `vw_billing_summary` | Void‑aware financial totals | FR-029, FR-030 |
+| `vw_active_contracts` | Current tenant/bed mappings | FR-028 |
+| `vw_room_occupancy` | Aggregated room-level metrics | FR-028 |
+| `vw_occupancy_status` | Detailed bed‑space availability | FR-028 |
+| `vw_collections_summary` | Performance by method/date | FR-032 |
+| `vw_tenant_contract_history` | Historical profile ledger | FR-031 |
 
-### 6.2 SQL Operator Usage (CCR-004)
-
-| Operator | Usage Location |
-| :--- | :--- |
-| `LIKE` | Tenant search by name and contact (`TenantService::search`) |
-| `AND` / `OR` | Multi-condition where clauses in search and filter queries |
-| `BETWEEN` | Date range filtering in billing summary and outstanding balances (CCR-004) |
-| `IS NULL` | Void filter on payments in views and service queries |
+### 6.2 SQL Operator Implementation
+Reporting filters utilize standard SQL operators via Eloquent query builders:
+- **`BETWEEN`**: Used for date‑range filtering in collections and billing reports.
+- **`LIKE`**: Used for partial name and contact matching in tenant searches.
+- **`IS NULL`**: Used to filter out voided payments and archived records.
+- **`AND`/`OR`**: Used for complex status and receivable state filtering.
 
 ---
 
 ## 7. Security and Access Design
 
-- **Authorization:** `AuthorizationService` is the **only** authorization path. `Gate::authorize()` is **not permitted** per CLAUDE.md Section 6.3. All controllers call `AuthorizationService::can*()` methods.
-- **Authentication:** Laravel Sanctum bearer tokens. Token created on login, deleted on logout.
-- **Passwords:** bcrypt via Laravel's default `password` cast.
-- **Audit context:** `SetAuditContext` middleware ensures `@app_user_id` is initialized for all API requests.
+- **Authentication:** Token‑based authentication via Laravel Sanctum.
+- **Authorization:** Centralized in the `AuthorizationService`. Controllers shall calling `AuthorizationService::can*()` methods to enforce role‑based permissions (Admin, Staff, Viewer).
+- **Passwords:** Securely hashed using Bcrypt. 
+- **Audit Context:** The `SetAuditContext` middleware ensures that every request is tagged with the authenticated user's ID for the database forensic triggers.
 
 ---
 
 ## 8. Non-Functional Design Considerations
 
-- **Indexing:** Composite indexes on high-traffic filter columns: `(tenant_id, status)` on contracts, `(contract_id, status)` on billing, `(billing_id, payment_date)` on payments, `(entity_name, entity_id)` on audit_logs, `(status, started_at)` on transaction_logs.
-- **Data retention:** Soft-void on payments and status flags on tenants/contracts preserve all historical records. No hard deletes on financial data.
-- **SQLite compatibility:** SQLite is used for local dev and unit tests. Migrations create equivalent **reporting views** for automated tests; **MySQL `AFTER` triggers** and full CCR evidence (CCR-007/008) are validated on MySQL (`composer test:mysql`).
+- **Performance:** Database indexing on high‑traffic columns (tenant search, status flags, correlation IDs). Use of non‑blocking GTID‑based replication for reports.
+- **Reliability:** ACID-compliant transactions ensure that financial data remains consistent even during system failures.
+- **Maintainability:** Clear separation between the UI, API services, and trigger‑based data auditing.
 
 ---
 
-## 9. Course Compliance Mapping
+## 9. Course Compliance Mapping (CCR)
 
-| CCR | Requirement | Implementation Evidence |
+The following design decisions satisfy the binding constraints of the Information Management course:
+
+| CCR | Requirement | Design Realization |
 | :--- | :--- | :--- |
-| **CCR-001** | ≥ 6 core entities | 11 tables in schema; 10 operational + 1 audit-split (tx_logs) |
-| **CCR-002** | Primary-replica distributed DB | `docs/DISTRIBUTED_DB_SETUP.md`; `DB_READ_HOST` in `.env.example` |
-| **CCR-003** | SQL CRUD | SELECT/INSERT/UPDATE across all service methods; DELETE on bed space removal |
-| **CCR-004** | SQL operators | LIKE/AND/OR in `TenantService::search`; BETWEEN on date-range report filters |
-| **CCR-005** | SQL JOINs | 6 views with INNER JOIN and LEFT JOIN; all report endpoints query views directly |
-| **CCR-006** | Transaction control | `DB::transaction()` with `lockForUpdate()` on all multi-table financial writes |
-| **CCR-007** | Transaction logs | `transaction_logs` table; started/committed/failed records; INSERT before transaction; covers financial and operational workflows |
-| **CCR-008** | Trigger-based CRUD logging | 24 AFTER triggers on 8 core tables; capture of full attribute snapshots; `@app_user_id` session variable |
+| **CCR-001** | Relational Model | 11 Normalized tables in MySQL InnoDB |
+| **CCR-002** | Distributed Data | Primary‑Replica topology with GTID replication |
+| **CCR-003** | SQL CRUD | Service‑layer Eloquent/SQL implementation |
+| **CCR-004** | SQL Operators | Date‑range (BETWEEN), Search (LIKE), Filters (AND/OR) |
+| **CCR-005** | SQL JOINs | 6 Automated views utilizing complex INNER/LEFT JOINS |
+| **CCR-006** | ACID Transactions | Explicit `DB::transaction()` boundaries in services |
+| **CCR-007** | Transaction Logs | Append‑only `transaction_logs` capturing started/committed/failed |
+| **CCR-008** | Change Audit | 24 AFTER triggers capturing attribute snapshots |
 
 ---
 
-## 10. Design Decisions and Rationale
+## 10. Key Design Decisions
 
 | Decision | Rationale |
 | :--- | :--- |
-| No stored procedures | PHP `DB::transaction()` provides equivalent atomicity; testable on SQLite; no MySQL-only dependency |
-| `contracts` anchored to `bed_space_id` | Eliminates room-contract sync bugs; room always derivable via bed space FK |
-| `billing` with no amount columns | Amounts computed from relations; single source of truth; void-safe |
-| Soft-void on payments | Preserves financial audit trail; voided payments remain queryable |
-| `AuthorizationService` over Gates/Policies | Explicit, testable, consistent; avoids implicit Laravel authorization magic |
-| `SetAuditContext` as API middleware | Ensures `@app_user_id` initialized on every API request, not just service writes |
-| Expansion to 6 views | Added `vw_collections_summary` and `vw_tenant_contract_history` to support FR-031/FR-032b and provide dedicated reporting evidence |
+| **Service-Layer Transactions** | Ensures atomicity across multiple tables (e.g., Billing + Line Items) without relying on DB‑internal stored procedures. |
+| **Trigger-Based Auditing** | Guarantees that all data changes are logged regardless of how the change is initiated (API, Console, or Direct SQL). |
+| **Derived Financial Totals** | Eliminates sum‑sync bugs by computing balances at the query level (Views/Accessors). |
+| **Bed‑Level Inventory** | Provides the granularity required to track shared rooms and bed‑specific maintenance. |
 
 ---
 
-## 11. Open Implementation Notes
+## 11. Implementation Notes
 
-Items deliberately deferred or recently resolved.
-
-- **RESOLVED — BUG-001/010:** All identified financial, operational, and auditing bugs have been resolved as of v2.1.
-- **`billing_line_items` triggers:** Implemented in schema; provides full coverage for fee adjustments and rent billing integrity.
+- **Forensic Audit Coverage:** All 24 triggers are implemented and validated. Role‑level changes are captured in the unified `audit_logs` table.
+- **Reporting Consistency:** Standardized views (`vw_*`) ensure that "Last, First" name formatting and void‑aware balance logic are consistent across all reports.
+- **Correlation Propagation:** The `AuditService` ensures that the `correlation_id` is propagated from the service layer down to the database triggers.
 
 ---
 
 ## 12. Traceability to SRS
 
-| SRS Requirements | Design Coverage |
+| SRS Requirement Set | Architecture / Module |
 | :--- | :--- |
-| FR-001 to FR-007 | `roles`, `users`, `AuthController`, `UserController`, `AuthorizationService`, `AuditService` |
-| FR-008 to FR-011 | `tenants`, `TenantController`, `TenantService` |
-| FR-012 to FR-015 | `rooms`, `bed_spaces`, `RoomController`, `RoomService` |
-| FR-016 to FR-019 | `contracts`, `ContractController`, `ContractService` |
-| FR-020 to FR-023 | `billing`, `billing_line_items`, `BillingController`, `BillingService` |
-| FR-024 to FR-027 | `payments`, `PaymentController`, `PaymentService` (post + void) |
-| FR-028 to FR-032 | 6 reporting views, `ReportController`, `ReportService` |
-| FR-033 to FR-035 | `audit_logs`, 24 triggers, `AuditService` |
-| FR-036 to FR-039 | DB CHECK constraints, `AFTER` audit triggers on core tables, service-layer validation |
-| FR-040 to FR-045 | CRUD across all modules; LIKE/BETWEEN/AND/OR; JOIN views; `DB::transaction()`; `transaction_logs`; 24 AFTER triggers |
+| **Authentication (FR-001–004)** | `AuthController`, `users`, `AuthorizationService`, `AuditService` |
+| **User Management (FR-005–007)** | `UserController`, `roles`, `soft-delete` |
+| **Tenant Management (FR-008–011a)** | `TenantService`, `tenants`, `soft-delete` |
+| **Room Management (FR-012–015a)** | `RoomService`, `rooms`, `bed_spaces`, `STASTUS_ENUM` |
+| **Contract Management (FR-016–019d)** | `ContractService`, `contracts`, `move-out workflow` |
+| **Billing Management (FR-020–023)** | `BillingService`, `billing`, `billing_line_items`, `autoUpdateStatus` |
+| **Payment Management (FR-024–027a)** | `PaymentService`, `payments`, `soft-void` |
+| **Reporting (FR-028–032)** | `ReportService`, 6 Reporting Views (`vw_*`) |
+| **Operational Dashboard (FR-033–033a)** | `DashboardController`, Aggregate service queries |
+| **Forensic Logging (FR-034–036)** | `TransactionService`, `audit_logs`, `transaction_logs`, 24 Triggers |
+| **System Integrity (FR-037–040)** | MySQL Check Constraints, `RoomService` sync logic |
 
 ---
 
@@ -370,23 +244,12 @@ Items deliberately deferred or recently resolved.
 
 | Version | Date | Changes |
 | :--- | :--- | :--- |
-| v1.0 | 2026-03-27 | Initial SDD created. |
-| v1.1 | 2026-03-27 | Added trigger-based CRUD change logging design. |
-| v1.2 | 2026-03-27 | Added technology stack section. |
-| v1.3 | 2026-03-27 | Locked final implementation stack. |
-| v1.4 | 2026-03-27 | Added `sp_move_out`, audit actor context via `@app_user_id`, transaction boundary updates. |
-| v1.5 | 2026-03-27 | Transaction-log scope clarification and billing line-item audit note. |
-| v1.6 | 2026-04-09 | Major corrections: heading fixes, PK/FK alignment note, CCR mapping expansion. |
-| v1.7 | 2026-04-09 | Mermaid architecture diagram; double-logging behavior documented. |
-| v1.8 | 2026-04-10 | Schema-accurate rewrite: Corrected contracts (no `room_id`); corrected billing (no amount columns); corrected rooms ENUM (`unavailable` not `occupied`); updated view count to 4; documented void support; removed stored procedure references; established `BillingService::autoUpdateStatus()` as status authority; documented `SetAuditContext` middleware; registered all open bugs by BUG-ID reference. |
-| v1.9 | 2026-04-10 | Bugfix implementation complete: Resolved BUG-001 through BUG-009; added CCR annotation comments throughout service layer; verified transaction logging for void operations; confirmed authorization service consistency; validated audit context handling. |
-| v2.0 | 2026-04-11 | Reporting Core Expansion: Implemented Detailed Tenant Ledger and Collections Performance report (FR-032b); expanded CCR-005 reporting views (counts finalized in v2.2); synchronized resolved implementation notes. |
-| v2.1 | 2026-04-11 | Audit & Nomenclature Parity: Standardized `audit_logs` to capture full snapshots; expanded `transaction_logs` to cover tenant lifecycle; implemented 24 triggers total; achieved 100% nomenclature alignment. |
-| v2.2 | 2026-04-11 | Synchronization Finalization: Updated reporting view count to 6 and audit trigger count to 24; synchronized SRS/SDD/CLAUDE version alignment. |
-| **v2.3** | **2026-04-11** | **User Entity Hardening:** Synchronized `users` table with the `email` attribute; updated `UserController`, `DemoUatSeeder`, and UI registries to support unified contact logging. |
-| **v2.4** | **2026-04-13** | **Architecture Hardening:** Formalized Soft Deletes (`deleted_at`) for master data units; implemented `archive`/`restore` trigger logic; standardized reporting views with professional "Last, First" nomenclature. |
+| v1.0–v2.6 | 2026-03–04 | Initial architecture through compliance remediation and hardening. |
+| v2.7 | 2026-04-17 | Core-doc standardization pass; added document boundary. |
+| v3.1 | 2026-04-17 | Final forensic cleanup and alignment pass. Synchronized functional requirements with canonical schema constraints (24 triggers); corrected billing status priority (paid > overdue > partial > unpaid) to match SRS BR-009; polished RBAC design notes. |
+| **v3.2** | **2026-04-17** | **Final audit accuracy and metadata sync pass.** Synchronized all version pointers to SRS v4.6 baseline; corrected architectural residue in forensic mapping. |
 
 ---
 
-*Aligned to: SRS.md v2.1 · havenstay_schema.sql (canonical) · CLAUDE.md · docs/API_REFERENCE.md (REST routes)*
-*Last Updated: April 2026*
+*Aligned to: SRS.md v4.7 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.2 · OPERATIONS_RUNBOOK.md · TEST_PLAN.md v4.2*  
+*Last Updated: April 17, 2026 (v3.2 — final audit alignment pass)*

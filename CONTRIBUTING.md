@@ -31,11 +31,17 @@ By participating in this project, you are expected to uphold our [Code of Conduc
 - Use strict typing where possible (`declare(strict_types=1);`).
 - Business logic should reside in **Services**, keeping **Controllers** thin.
 - All transactional writes must include audit context via `AuditService::setAuditUserContext()`.
+- Follow `docs/BACKEND_CODING_BLUEPRINT.md` as the backend implementation standard.
+- For authorization deny responses, use `HandlesAuthorization` helpers in API controllers:
+  - `forbidden(...)` for JSON endpoints.
+  - `forbiddenExport(...)` for export endpoints.
+- Avoid direct `AuditService::logAccessDenied(...)` in controllers that already use the helper trait.
 
 ### Frontend (Next.js)
 - Use functional components and React Hooks.
 - Follow the existing component structure in `frontend/src/app/_components/`.
 - Use Tailwind CSS for styling.
+- **Forensic UX**: All loading states must use structural Skeletons instead of generic Spinners.
 - Ensure all components are responsive and accessible.
 
 ## Git Workflow
@@ -52,6 +58,18 @@ Before submitting a pull request, ensure all tests pass:
 ```bash
 cd backend
 php artisan test
+```
+
+Recommended targeted quality gates for backend convention compliance:
+
+```bash
+cd backend
+php artisan test --filter=ControllerAuthorizationConsistencyTest
+php artisan test --filter=TenantArchitectureConventionTest
+php artisan test --filter=RoomArchitectureConventionTest
+php artisan test --filter=ContractArchitectureConventionTest
+php artisan test --filter=BillingPaymentArchitectureConventionTest
+php artisan test --filter=ReportingSecurityConventionTest
 ```
 
 ### Frontend

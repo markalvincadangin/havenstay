@@ -1,80 +1,114 @@
 # HavenStay Database Documentation
 
-This document provides a comprehensive overview of the HavenStay Boarding House Management System (BHMS) database architecture. The system is designed for strict data integrity, auditability, and operational reporting.
+**Version:** 2.2  
+**Last Updated:** April 17, 2026  
+**Status:** Canonical schema specification and forensic data design
 
-## Canonical schema files
+## 1. Document Boundary
+This document is the authoritative specification for the HavenStay data layer. It defines individual entity schemas, relationship constraints, forensic triggers, and reporting views required to support the system capabilities defined in [**SRS.md**](SRS.md). Technical implementation logic is documented in [**SDD.md**](SDD.md).
 
-The **same** InnoDB DDL is maintained in two locations (keep them identical when changing schema):
+---
 
-- `db/havenstay_schema.sql` — repository canonical path cited by SRS/SDD/CLAUDE.md  
-- `backend/database/sql/havenstay_schema.sql` — loaded by `2026_04_09_092954_create_havenstay_master_schema.php` on MySQL
+## 2. Distributed Architecture (CCR-002)
 
-SQLite test/dev builds use the migration’s `createTables()` / `createViews()` mirror of this schema.
+The system utilizes a **Primary-Replica** topology to ensure data durability and optimize reporting performance:
+- **Primary Node (`db-primary`):** Processes all Data Manipulation Language (DML) operations (INSERT, UPDATE, DELETE). This node is the authoritative host for all 24 forensic triggers.
+- **Replica Node (`db-replica`):** A read‑only instance synchronized via GTID‑based asynchronous replication. It handles all reporting queries and dashboard aggregations (`vw_*` views).
+- **Service Routing:** Laravel's database configuration automatically splits "read" and "write" connections based on the operational context.
 
-## Schema Overview
+---
 
-The database consists of **11 tables**, **6 views**, and **24 audit triggers**. It uses the InnoDB engine for transactional support and referential integrity. Core master entities (`users`, `tenants`, `rooms`, `contracts`) utilize **Soft Deletes** (`deleted_at`) for historical retention.
+## 3. Schema Authority and State
 
-### Primary Database Entities
+The system maintains a strict **Canonical Schema** to ensure environment parity:
+- **Authority:** `db/havenstay_schema.sql` (InnoDB DDL / MySQL 8.4+).
+- **Runtime:** `backend/database/sql/havenstay_schema.sql` (Used for deployment/CI).
+- **Forensic Engine:** The MySQL engine is utilized for high‑fidelity auditing (Triggers). 
+- **Migration Strategy:** The development environment uses SQLite for rapid testing, but all CCR‑008 compliance validation is conducted on MySQL.
 
-1.  **`roles`**: Defines system access levels (`admin`, `staff`, `viewer`).
-2.  **`users`**: System operators and administrators.
-3.  **`tenants`**: Comprehensive tenant profiles and status tracking.
-4.  **`rooms`**: Physical room management (Solo/Shared, Rate, Status).
-5.  **`bed_spaces`**: Specific occupancy units within rooms.
-6.  **`contracts`**: The binding relationship between tenants and bed spaces.
-7.  **`billing`**: Periodic billing cycles for active contracts.
-8.  **`billing_line_items`**: Granular breakdown of charges (Rent, Utilities, Penalties).
-9.  **`payments`**: Payment processing and voidance history.
-10. **`audit_logs`**: Row-level change log populated by **CCR-008** triggers (and optional `AuditService` inserts).
-11. **`transaction_logs`**: Workflow-level events for **CCR-007** (application-layer `DB::transaction()` boundaries).
+---
 
-### `transaction_logs.status` values
+## 4. Entity Architecture
 
-| Status | When it is used |
-| :--- | :--- |
-| `started` | Row inserted by `TransactionService::logStarted()` before the workflow runs. |
-| `committed` | `TransactionService::logCommitted()` after a successful workflow. |
-| `rolled_back` | `TransactionService::logRolledBack()` after a **`DB::transaction()`** closure throws (Laravel rolls back SQL work). Used by contract, payment, billing, and room configuration workflows. |
-| `failed` | `TransactionService::logFailed()` for workflows **without** a multi-statement `DB::transaction()` rollback (e.g. `TenantService` create/update). |
+The database consists of **11 Normalized Tables** utilizing the InnoDB engine for full ACID compliance.
 
-The system includes six core views designed to simplify complex reporting joins and satisfy CCR-005:
-
-| View Name | Purpose | Key Joins |
+### 4.1 Master and Operational Tables
+| Table | Application Purpose | Integrity Pattern |
 | :--- | :--- | :--- |
-| **`vw_billing_summary`** | Provides a complete financial profile for each billing cycle; names standardized to "Last, First". | 5-table join |
-| **`vw_active_contracts`** | Lists all current occupants; filters out soft-deleted records. | 5-table join |
-| **`vw_room_occupancy`** | Real-time aggregation of room capacity and vacancy; ignores archived rooms. | Aggregation |
-| **`vw_occupancy_status`** | Per-bed occupancy tracking; ignores soft-deleted contracts. | 5-table join |
-| **`vw_collections_summary`** | Detailed payment collections tracking; names standardized to "Last, First". | 5-table join |
-| **`vw_tenant_contract_history`** | Complete historical record of all contracts for all tenants (FR-031). | 4-table join |
+| `roles` | RBAC Role Definitions | Reference |
+| `users` | Operator Accounts | Soft Delete |
+| `tenants` | Boarding House Residents | Soft Delete |
+| `rooms` | Room Inventory and Pricing | Soft Delete |
+| `bed_spaces` | Individual Occupancy Units | Referential Lock |
+| `contracts` | Rental Agreements | Soft Delete |
+| `billing` | Monthly Cycle Headers | Immutable |
+| `billing_line_items`| Itemized Ledger Charges | Immutable |
+| `payments` | Financial Transaction Records | Soft Void |
+| `audit_logs` | Trigger‑driven DML History | Append-Only |
+| `transaction_logs` | Workflow State Tracking | Append-Only |
 
-## Compliance & Audit (CCR-008)
+### 4.2 Monetary Standards (BR-013)
+To ensure financial integrity across all operational modules, the following standards are enforced in the schema:
+- **Data Type:** `DECIMAL(10,2)` for all currency fields.
+- **Precision:** Supports up to ₱99,999,999.99.
+- **Engine-Level Constraints:**
+    - `chk_payment_amount`: `amount_paid > 0`
+    - `chk_line_amount`: `amount <> 0`
+    - `chk_bed_rate`: `base_rate >= 0`
 
-To ensure strict compliance with audit requirements, the database implements **24 dedicated triggers**.
+### 4.3 Retention and Archiving
+- **Soft Deletes:** Master entities (`users`, `tenants`, `rooms`, `contracts`) use a `deleted_at` timestamp. Triggers are configured to capture the `DELETE` event while preserving the row for forensic history.
+- **Soft Void:** Payments are never physically deleted or soft-deleted; they are "voided" via `voided_at`. This preserves the transaction's place in the financial history and audit trail.
 
-- **Scope**: Every `INSERT`, `UPDATE`, and `DELETE` on the 8 core tables is automatically logged to `audit_logs`.
-- **Soft Delete Monitoring**: Triggers on master tables are logic-aware; they detect `deleted_at` changes and log specific `archive` or `restore` actions.
-- **Logic Isolation**: Triggers are strictly for auditing. Business logic and status transitions are handled at the Application (Service) layer to ensure maintainability.
-- **Context Injection**: The `audit_logs` table captures the `user_id` of the operator responsible for the change by referencing the `@app_user_id` session variable set by the `AuditService`.
+## 5. Forensic Engineering (CCR-007, CCR-008)
 
-## Entity Relationships
+The system utilizes two distinct logging mechanisms to ensure a verifiable audit trail of all operational and financial events.
 
-> [!NOTE]
-> All primary keys use the specific naming convention `<entity>_id` (e.g., `tenant_id`) rather than generic `id` to ensure clarity in complex multi-table joins.
+### 5.1 Workflow Transaction Logs (CCR-007)
+The `transaction_logs` table records the outcomes of high‑level business workflows. It captures the transition from a "started" state to either a "committed" or "rolled_back" terminal state.
+
+| Status | Triggering Event | Rationale |
+| :--- | :--- | :--- |
+| **`started`** | Workflow Initiation | Captures intent before data mutation begins. |
+| **`committed`** | Successful Completion | Confirmed state change in the database. |
+| **`rolled_back`**| System Exception | Transaction reverted via `DB::rollBack()`. |
+| **`failed`** | Validation Error | Workflow halted before entering a database transaction. |
+
+### 5.2 Row-Level Audit Triggers (CCR-008)
+The MySQL primary node hosts **24 dedicated AFTER triggers** (INSERT, UPDATE, DELETE across 8 tables).
+- **Automation:** Triggers automatically capture full JSON snapshots of the `OLD` and `NEW` attributes.
+- **Correlation:** Every record is tagged with an `@current_user_id` and a `correlation_id` to link row changes to the initiating workflow.
+
+---
+
+## 6. Analytical Engine (CCR-005)
+
+To maintain reporting consistency and ensure that complex JOINS do not leak into the application logic, the database provides 6 standardized views. All analytical reports query these views exclusively.
+
+| View | Primary Pattern | Business Use Case |
+| :--- | :--- | :--- |
+| `vw_billing_summary` | 5-Table INNER JOIN | Financial aging and void‑aware balance. |
+| `vw_active_contracts` | 4-Table INNER JOIN | Active tenant‑bed mappings. |
+| `vw_room_occupancy` | Aggregation / LEFT JOIN | Real‑time vacancy per room. |
+| `vw_occupancy_status` | 5-Table LEFT JOIN | Individual bed space vacancy list. |
+| `vw_collections_summary` | 6-Table INNER JOIN | Collections performance by period/method. |
+| `vw_tenant_contract_history`| 4-Table INNER JOIN | Forensic ledger of all historical contracts. |
+
+## 7. Entity Relationships
 
 ```mermaid
 erDiagram
-    tenant ||--o{ contract : has
+    tenant ||--o{ contract : maintains
     room ||--o{ bed_space : contains
-    bed_space ||--o{ contract : occupied_by
+    bed_space ||--o{ contract : anchors
     contract ||--o{ billing : generates
     billing ||--o{ billing_line_item : details
     billing ||--o{ payment : tracks
-    user ||--o{ contract : creates
-    user ||--o{ payment : processes
+    user ||--o{ audit_logs : triggers
+    user ||--o{ transaction_logs : initiates
 ```
 
 ---
 
-*Last Updated: April 2026*
+*Aligned to: SRS.md v4.7 · SDD.md v3.2 · API_REFERENCE.md v2.2 · db/havenstay_schema.sql (canonical)*  
+*Last Updated: April 17, 2026 (v2.2 — final audit alignment pass)*

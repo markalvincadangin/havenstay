@@ -1,109 +1,95 @@
 # Reports Page Design Specification
 
 > **PROJECT:** HavenStay BHMS
-> **Authoritative Specification:** Aligned to `MASTER.md` (Design Goals §1, Typography §3, Table §14, Components §19)
-> **Implementation Scope:** `/reports`, `/reports/occupancy`, `/reports/collections`, `/reports/billing-summary`, `/reports/outstanding-balances`, `/reports/tenant-ledger`, `/reports/tenant-history`
+> **Authoritative Specification:** Aligned to `MASTER.md` (Section 4, 5.1, 5.8, 21, 23, 24)
+> **Implementation Scope:** `/reports`, `/reports/occupancy`, `/reports/collections`, `/reports/billing-summary`, `/reports/outstanding-balances`, `/reports/tenant-ledger`, `/reports/tenant-history`, `/reports/active-contracts`, `/reports/occupancy-status`
 
 ---
 
 ## 1. Visual Architecture
 
-The reporting module follows the **"Analytical Stack"** pattern. Unlike standard list pages, reports emphasize **quantitative fidelity** and **time-series comparison**. Every report surface must adhere to the vertical stacking order defined below.
+The reporting module follows the **Analytical Stack** pattern. Reports prioritize quick interpretation, consistent filtering, and clean export-ready data views.
 
----
-
-## 2. Layout Structure (Master §4)
-
-### 2.1 Inventory Overview
-- **Occupancy Report**: Operational utilization tracking.
-- **Purpose**: High-density table highlighting `Room Code`, `Bed Label`, and `Occupant Name`.
 ### 1.1 Page Construction (Stacking Order)
 
-1.  **PageHeader**: Title (Standardized §21), Subtitle (Microcopy §21), Breadcrumbs, and Actions (UserRoleBadge + Export Button).
-2.  **Summary Layer**: A grid of `KpiCard` units (Section 19) providing aggregate snapshots.
-3.  **Filter card**: A **Registry Card (§5.1)** with search wells, date pickers, and categories. Strip title **Filters** (registry standard — **MASTER §5.8.3**).
-4.  **Data Card**: A high-density card containing the **Embedded Table (Section 5.8)**.
+1. **PageHeader**: Title + subtitle from `MASTER.md` Section 21, breadcrumbs, and actions (`UserRoleBadge`, `Export CSV` when available).
+2. **Summary Layer**: `KpiCard` grid for high-priority metrics.
+3. **Filter Card**: Registry `Card` with strip title **Filters**, controls, and `FilterChips`.
+4. **Data Card**: Embedded `Table` for review and export parity.
 
 ### 1.2 Non-Negotiable Standards
 
-- **Color Mood**: Neutral stone-50 backdrops with teal-600 focus. Do not use random color gradients.
-- **Typography**: Numeric data (amounts, IDs, dates) must use **DM Mono** (`text-tabular`).
-- **Surface**: Every major block must use the `rounded-2xl` shell with `stone-200` borders.
+- **Readable first**: Data should be understandable in under 5 seconds for common tasks.
+- **Chart discipline**: Use bar and line charts for quantity and trends; avoid decorative chart types that reduce readability.
+- **Numeric consistency**: Amounts, IDs, and timestamps use `DM Mono` (`tabular-nums`).
+- **Surface consistency**: Use `rounded-2xl` card shells with stone borders.
+- **Data freshness**: Show generated timestamp where applicable.
 
 ---
 
-## 2. Core Components & Mapping
+## 2. Core Components and Behavior
 
-### 2.1 The Reports Hub (`/reports`)
-The index page serves as the entry point for operational oversight.
+### 2.1 Reports Hub (`/reports`)
 
-- **Layout**: Hub pattern (§4.3) with a responsive grid of `HubItem` navigation cards.
-- **Visuals**: Each card uses a `rounded-2xl` white surface with a bottom-aligned "Observe Report" CTA.
-- **Iconography**: Standardized Lucide nodes per report type (see §3 below).
+- Use the hub-card pattern with clear report names and plain-language descriptions.
+- Card CTA label should be **Generate Report**.
+- Do not use technical labels in card descriptions.
 
-### 2.2 Report Header & Actions
-- **Primary CTA**: The **"Export CSV"** button must be present in the `actions` slot of the `PageHeader`. It uses the `variant="teal"` styling (Section 5.5).
-- **Secondary**: A **Refresh** button (ghost variant) may reload data from the API.
-- **Timestamp**: Display a discrete generated timestamp (`text-[10px] uppercase cursor-default text-stone-400 font-mono`) either in the PageHeader subtitle or top-right action well.
+### 2.2 Filters and Table
 
-### 2.3 Aggregate Summaries (`KpiCard`)
-Summary layers must NOT use custom "Metric" or "Tile" components. Use the authoritative `KpiCard` primitives.
+- Filters must be discoverable and visibly active when applied.
+- Provide search + date + status/category filters based on report context.
+- Always include `FilterChips` and **Clear all** behavior.
+- Empty states must explain why no rows appear and provide a next step.
 
-- **Grid Row**: `grid gap-4 sm:grid-cols-2 lg:grid-cols-4`.
-- **Styling**: `rounded-2xl`, `shadow-sm`, and `DM Mono` for the primary `value`.
+### 2.3 Data Table Rules
+
+- Prioritize columns needed for find, compare, and export tasks.
+- Use frozen/sticky headers where large datasets are expected.
+- Keep column labels human-readable and stable across report + CSV.
 
 ---
 
 ## 3. Standardized Report Views
 
-### 3.1 Occupancy Registry
-- **Route**: `/reports/occupancy`
-- **Purpose**: Operational utilization tracking.
-- **KPI Metrics**: 
-    - `Total Beds` (Stone)
-    - `Occupied Units` (Teal)
-    - `Vacant Status` (Rose/Danger if vacancy > 20%) 
-    - `Occupancy Rate` (Teal + Progress Bar variant)
-- **Table Structure**: Bed-level granularity highlighting `Room Code`, `Bed Label`, and `Occupant Name`.
+### 3.1 Occupancy (`/reports/occupancy`, `/reports/occupancy-status`)
+- Purpose: Room and bed utilization.
+- Key metrics: Total beds, occupied beds, vacant beds, occupancy rate.
 
-### 3.2 Collections Performance
-- **Route**: `/reports/collections`
-- **Purpose**: Cash-flow throughput analysis.
-- **KPI Metrics**:
-    - `Net Collected` (Teal + PHP Currency)
-    - `Payment Throughput` (Total transaction count)
-    - `Top Method` (Most used payment method this period)
-- **Data Table**: Chronological ledger including `Payment ID`, `Method`, `Reference`, and `Allocated Bill`.
+### 3.2 Billing and Collections (`/reports/billing-summary`, `/reports/collections`)
+- Purpose: Billing totals and payment performance.
+- Key metrics: Total billed, total collected, outstanding balance.
 
-### 3.3 Billing Aggregate
-- **Route**: `/reports/billing-summary`
-- **Purpose**: Yield observation.
-- **KPI Metrics**: `Total Billed`, `Settled Amount`, `Partial Balance`, `Past Due`.
+### 3.3 Outstanding Balances (`/reports/outstanding-balances`)
+- Purpose: Unpaid and past-due monitoring.
+- Key metrics: Total outstanding, past-due accounts, highest due balance.
 
-### 3.4 Outstanding balances
-- **Route**: `/reports/outstanding-balances`
-- **Purpose**: Liability management and debt collection.
-- **KPI Metrics**: `Total Outstanding Liability`, `Overdue Accounts`, `Oldest Cycle`, `Risk Index`.
-- **Visuals**: High-contrast rose tints for overdue amounts.
+### 3.4 Tenant Financial History (`/reports/tenant-ledger`, `/reports/tenant-history`)
+- Purpose: Resident-level payment/billing timeline and status history.
+- Key metrics: Running balance, billed amount, paid amount, outstanding amount.
+
+### 3.5 Active Contracts (`/reports/active-contracts`)
+- Purpose: Current contract commitments and room assignment context.
+- Key metrics: Active contracts, occupied bed spaces, monthly contract total.
 
 ---
 
-## 4. UI Patterns for Data Density
+## 4. Accessibility and UX Quality Gates
 
-### 4.1 Comparison Chips (`FilterChips`)
-Every filter applied must be reflected in **`FilterChips`** inside the filter card. **Clear all** resets filters and the table to match.
+- All filter controls are keyboard-accessible with visible focus states.
+- Pointer targets should be at least 24x24 CSS px minimum (prefer 44x44 for primary actions on mobile).
+- Error and empty states use clear, plain language and one recovery step.
+- Keep labels persistent (do not rely on placeholder-only forms for meaning).
 
-### 4.2 Empty States (`EmptyState`)
-If a filter range yields zero results, do not show an empty table header. Render the `EmptyState` component (§5.16) with the `Search` icon and guidance to "Adjust filter parameters."
+---
+
+## 5. Page Titles and Subtitles (Master Section 21 Exact)
+
+| Route area | Title (H1) | Subtitle |
+| :--- | :--- | :--- |
+| `/reports` | `Reports` | `Operational exports and summaries.` |
+| `/reports/*` | `*(Report name)*` | `Filter, review, and export - columns match the CSV.` |
 
 ---
 
-## 5. Implementation Roadmap (Reference)
-
-1.  **Normalization**: Ensure all report titles match Section 21 and use `hs-page-title`.
-2.  **Encapsulation**: Replace custom metric tiers with standardized `KpiCard` rows.
-3.  **Harden Filters**: Standardize date pickers and select dropdowns inside `rounded-2xl` shells.
-4.  **Audit Logs (Parity)**: Reports must align visually with the Audit Trail and Transaction Logs for consistent "Observer" experience.
-
----
-*End of Design Specification. Aligned to HavenStay MASTER v4.3.*
+*End of Design Specification. Aligned to HavenStay MASTER v4.7.*

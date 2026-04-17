@@ -29,8 +29,9 @@ export const TENANT_STATUS_LABELS = {
 
 // 3. Room Statuses
 export const ROOM_STATUS_LABELS = {
-  available: "Available",
-  unavailable: "Unavailable",
+  vacant: "Vacant",
+  partially_occupied: "Partially Occupied",
+  fully_occupied: "Fully Occupied",
   maintenance: "Maintenance",
 };
 
@@ -43,16 +44,14 @@ export const ROOM_STATUS_KEYS = Object.keys(ROOM_STATUS_LABELS);
  */
 export const ROOM_UNIT_OFFLINE_BED_HINT = {
   maintenance: "Unit in maintenance — beds are not bookable until the unit is available again.",
-  unavailable: "Unit unavailable — beds are not bookable for new assignments.",
 };
 
 /**
  * Room edit form — descriptive `<option>` text (same keys as ROOM_STATUS_LABELS).
  */
 export const ROOM_STATUS_OPTION_LABELS = {
-  available: "Available (in inventory)",
-  unavailable: "Unavailable",
-  maintenance: "On Maintenance",
+  vacant: "Vacant (Available)",
+  maintenance: "Maintenance",
 };
 
 /**
@@ -91,6 +90,12 @@ export const BILLING_STATUS_LABELS = {
   overdue: "Past Due",
 };
 
+export const BILLING_AGING_FILTER_LABELS = {
+  all: "All balances",
+  current: "Current (not yet due)",
+  past_due: "Past-due balances",
+};
+
 // 8. Billing Line Item Categories
 export const BILLING_ITEM_TYPE_LABELS = {
   base_rent: "Base Rent",
@@ -102,6 +107,9 @@ export const BILLING_ITEM_TYPE_LABELS = {
 
 // 9. Audit & System Actions
 export const AUDIT_ACTION_LABELS = {
+  INSERT: "Row Created",
+  UPDATE: "Row Updated",
+  DELETE: "Row Deleted",
   create: "Record Created",
   update: "Record Updated",
   delete: "Record Removed",
@@ -109,9 +117,11 @@ export const AUDIT_ACTION_LABELS = {
   logout: "User Logout",
   access_denied: "Security Alert",
   status_change: "Status Transition",
+  archive: "Record Archived",
+  restore: "Record Restored",
 };
 
-/** `audit_logs.entity_name` display names (filters + table). */
+/** `audit_logs.target_table` display names (filters + table). */
 export const AUDIT_ENTITY_LABELS = {
   tenants: "Tenants",
   rooms: "Rooms",
@@ -120,7 +130,7 @@ export const AUDIT_ENTITY_LABELS = {
   payments: "Payments",
   users: "Users",
   bed_spaces: "Bed Spaces",
-  /** Matches `audit_logs.entity_name` from billing_line_items triggers (havenstay_schema.sql). */
+  /** Matches `audit_logs.target_table` from billing_line_items triggers (havenstay_schema.sql). */
   billing_line_items: "Line Items",
 };
 
@@ -137,7 +147,7 @@ export const AUDIT_ENTITY_FILTER_KEYS = [
 ];
 
 /**
- * Human labels for `audit_logs.entity_name` when it stores an app permission / resource key
+ * Human labels for `audit_logs.target_table` when it stores an app permission / resource key
  * (see `AuditService::logAccessDenied()`), not a table name. Keys must match backend strings exactly.
  */
 export const AUDIT_RESOURCE_LABELS = {
@@ -190,7 +200,7 @@ export const AUDIT_RESOURCE_LABELS = {
 };
 
 /**
- * Display `audit_logs.entity_name` — DB table names, permission keys, or request paths.
+ * Display `audit_logs.target_table` — DB table names, permission keys, or request paths.
  */
 export function formatAuditEntityOrResource(entityName) {
   if (entityName == null || entityName === "") return "—";
@@ -205,7 +215,7 @@ export function formatAuditEntityOrResource(entityName) {
     .trim();
 }
 
-/** Display `audit_logs.entity_id`; hides sentinel `denied` for access-denied rows. */
+/** Display `audit_logs.record_id`; hides sentinel `denied` for access-denied rows. */
 export function formatAuditEntityIdDisplay(entityId, action) {
   if (entityId == null || entityId === "") return "—";
   const s = String(entityId);
@@ -243,8 +253,34 @@ export const ROLE_NAME_LABELS = {
   viewer: "Viewer",
 };
 
+/** Shared fallback when role lookup API is unavailable. */
+export const USER_ROLE_FALLBACK_OPTIONS = [
+  { role_id: 1, role_name: "admin" },
+  { role_id: 2, role_name: "staff" },
+  { role_id: 3, role_name: "viewer" },
+];
+
 export const USER_ACCOUNT_STATUS_FILTER_LABELS = {
   all: "All statuses",
   active: "Active",
   inactive: "Inactive",
 };
+
+/** Normalize enum-like backend keys for safe comparisons. */
+export function normalizeEnumKey(value) {
+  return String(value ?? "").toLowerCase().trim();
+}
+
+export function isContractActive(status) {
+  return normalizeEnumKey(status) === "active";
+}
+
+export function isPaymentMethodCash(method) {
+  return normalizeEnumKey(method) === "cash";
+}
+
+/** Billing rows that are valid for manual collection selection. */
+export function isBillingCollectibleStatus(status) {
+  const key = normalizeEnumKey(status);
+  return key === "unpaid" || key === "partial";
+}

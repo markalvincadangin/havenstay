@@ -11,10 +11,11 @@ import { ADMIN_NAV_ITEMS, OPERATIONS_NAV_ITEMS } from "../../lib/navItems";
 
 
 
-export default function MobileNav({ user, onLogout, pathname }) {
+export default function MobileNav({ user, loading, onLogout, pathname }) {
   const [open, setOpen] = useState(false);
   const isAdmin = canManageUsers(user);
-  const allNav = isAdmin ? [...OPERATIONS_NAV_ITEMS, ...ADMIN_NAV_ITEMS] : OPERATIONS_NAV_ITEMS;
+  const showAdminNav = isAdmin || (loading && !user);
+  const allNav = showAdminNav ? [...OPERATIONS_NAV_ITEMS, ...ADMIN_NAV_ITEMS] : OPERATIONS_NAV_ITEMS;
 
   return (
     <>
@@ -22,7 +23,7 @@ export default function MobileNav({ user, onLogout, pathname }) {
         <div className="flex items-center justify-between gap-3">
           <Link href="/dashboard" className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-primary)]">
-              <Image src="/logo.svg" alt="HavenStay" width={16} height={16} className="w-4 h-4" />
+              <Image src="/brand/logo-light.svg" alt="HavenStay" width={16} height={16} className="w-4 h-4" />
             </div>
             <span className="text-sm font-black tracking-tight text-stone-900 [word-spacing:0.06em]">HavenStay</span>
           </Link>
@@ -75,7 +76,16 @@ export default function MobileNav({ user, onLogout, pathname }) {
                 })}
               </nav>
               <div className="p-6 border-t border-white/5">
-                <button onClick={onLogout} className="w-full py-3 text-[10px] font-black uppercase text-white/60">Logout</button>
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onLogout();
+                  }} 
+                  className="w-full py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white/50 border border-white/5 rounded-xl hover:bg-white/5 hover:text-rose-400 hover:border-rose-400/20 active:scale-95 transition-all text-center"
+                >
+                  Logout
+                </button>
               </div>
             </motion.div>
           </div>

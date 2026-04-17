@@ -1,429 +1,418 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useReducedMotion, motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
-  RefreshCw,
-  Users,
-  DoorOpen,
-  Receipt,
-  CreditCard,
-  FileText,
-  PieChart,
-  Bed,
-  PlusCircle,
-  LayoutGrid,
-  Search,
+  Users, Receipt, Calendar, CreditCard, PlusCircle,
+  DoorOpen, Bed
 } from "lucide-react";
-
-import { apiRequest } from "../../lib/api";
-import { normalizePaginatedList } from "../../lib/pagination";
-import { flattenApiErrors } from "../../lib/errors";
+import useSWR from "swr";
+import { fetcher } from "../../lib/api";
+import { normalizePaginatedList, normalizeReportRows } from "../../lib/pagination";
 import { canManageBilling } from "../../lib/auth";
-import { useAuthGuard } from "../../hooks/useAuthGuard";
-import { isPastDueReceivable } from "../../lib/billingReceivables";
 import { formatPHP, formatDateString, formatTenantDirectoryName } from "../../lib/formatters";
 import Alert from "../_components/ui/Alert";
-import { AppMain } from "../_components/ui/AppShell";
 import Breadcrumbs from "../_components/ui/Breadcrumbs";
 import { Card } from "../_components/ui/Card";
-import PageHeader from "../_components/ui/PageHeader";
-import { DashboardSkeleton } from "../_components/ui/DashboardSkeleton";
-import UserRoleBadge from "../_components/ui/UserRoleBadge";
+import { DashboardSkeleton } from "../_components/ui/Skeleton";
 import { StatusBadge } from "../_components/ui/StatusBadge";
 import { KpiCard } from "../_components/ui/KpiCard";
 import { Table } from "../_components/ui/Table";
 import ResourceView from "../_components/ui/ResourceView";
-import { primaryLinkCtaClass } from "../_components/ui/LinkTokens";
-
-
-const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.2, ease: "easeOut" },
-};
-
-function HubItem({ href, label, icon: Icon, colorClass = "text-teal-600 bg-teal-50" }) {
-  return (
-    <Link
-      href={href}
-      className="group flex flex-col items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white py-5 shadow-sm transition-all duration-300 hover:border-teal-200/80 hover:shadow-lg hover:-translate-y-1"
-    >
-      <div
-        className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/60 shadow-sm transition-[box-shadow,border-color] duration-200 group-hover:shadow ${colorClass}`}
-      >
-        <Icon size={20} aria-hidden />
-      </div>
-      <span className="text-center text-[10px] font-bold tracking-widest text-stone-500 transition-colors group-hover:text-teal-700">
-        {label}
-      </span>
-    </Link>
-  );
-}
+import StandardPage from "../_components/ui/StandardPage";
+import ResourceIdCell from "../_components/ui/ResourceIdCell";
+import { useAuth } from "../_context/AuthContext";
+import PageHeaderActions from "../_components/ui/PageHeaderActions";
+import { Sparkline } from "../_components/ui/Sparkline";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user: currentUser, authLoading } = useAuthGuard();
-  const shouldReduceMotion = useReducedMotion();
+  const { user: currentUser } = useAuth();
+  const todayStr = new Date().toLocaleDateString('en-CA');
 
-  const [segments, setSegments] = useState({
-    occupancy: { loading: true, data: null, error: null },
-    billing: { loading: true, data: null, error: null },
-    tenants: { loading: true, data: null, error: null },
-    payments: { loading: true, data: null, error: null },
-  });
+  // Core data hooks for dashboard context
+  const { data: occupancyReport, error: occError, isLoading: occLoading, mutate: mutateOcc, isValidating: occValidating } = useSWR(
+    currentUser ? "/api/reports/occupancy" : null,
+    fetcher,
+    { dedupingInterval: 5000 }
+  );
 
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const { data: billingSummaryReport, error: billSummaryError, isLoading: billSummaryLoading, mutate: mutateBillSummary, isValidating: billSummaryValidating } = useSWR(
+    currentUser ? "/api/reports/billing-summary?current_month=1" : null,
+    fetcher,
+    { dedupingInterval: 10000 }
+  );
 
-  const fetchSegment = useCallback(async (endpoint, segmentKey) => {
-    setSegments(prev => ({
-      ...prev,
-      [segmentKey]: { ...prev[segmentKey], loading: true, error: null }
-    }));
+  const { data: billingReport, error: billError, isLoading: billLoading, mutate: mutateBill, isValidating: billValidating } = useSWR(
+    currentUser ? "/api/reports/outstanding-balances?per_page=100" : null,
+    fetcher,
+    { dedupingInterval: 30000 }
+  );
 
-    try {
-      const data = await apiRequest(endpoint, { method: "GET" });
-      setSegments(prev => ({
-        ...prev,
-        [segmentKey]: { loading: false, data, error: null }
-      }));
-    } catch (err) {
-      setSegments((prev) => ({
-        ...prev,
-        [segmentKey]: {
-          loading: false,
-          data: null,
-          error: flattenApiErrors(err),
-        },
-      }));
-    }
-  }, []);
+  const { data: activeTenantsData, error: tenantError, isLoading: tenantLoading, mutate: mutateTenants, isValidating: tenantValidating } = useSWR(
+    currentUser ? "/api/tenants?status=active&per_page=1" : null,
+    fetcher,
+    { dedupingInterval: 60000 }
+  );
 
-  const loadAll = useCallback(() => {
-    fetchSegment("/api/reports/occupancy", "occupancy");
-    fetchSegment("/api/billing?per_page=100", "billing");
-    fetchSegment("/api/tenants?per_page=100", "tenants");
-    fetchSegment("/api/payments?per_page=100", "payments");
-    setLastUpdated(new Date());
-  }, [fetchSegment]);
+  const { data: recentPayments, error: payError, isLoading: payLoading, mutate: mutatePay, isValidating: payValidating } = useSWR(
+    currentUser ? "/api/payments?per_page=5" : null,
+    fetcher,
+    { dedupingInterval: 5000 }
+  );
 
-  useEffect(() => {
-    if (authLoading || !currentUser) return;
-    loadAll();
-  }, [authLoading, currentUser, loadAll]);
+  const { data: dueTodayData, error: dueError, isLoading: dueLoading, mutate: mutateDue, isValidating: dueValidating } = useSWR(
+    currentUser ? `/api/billing?due_date=${todayStr}` : null,
+    fetcher,
+    { dedupingInterval: 10000 }
+  );
 
-  const occData = segments.occupancy.data?.summary || {};
-  const totalBeds = Number(occData.total_beds || 0);
-  const occupiedBeds = Number(occData.occupied_beds || 0);
+  const { data: contractsData, isLoading: contractsLoading, mutate: mutateContracts } = useSWR(
+    currentUser ? "/api/contracts?status=active&per_page=50" : null,
+    fetcher,
+    { dedupingInterval: 10000 }
+  );
+
+  const loadAll = () => {
+    mutateOcc();
+    mutateBillSummary();
+    mutateBill();
+    mutateTenants();
+    mutatePay();
+    mutateDue();
+    mutateContracts();
+  };
+
+  const occSummary = occupancyReport?.summary || {};
+  const billSummary = billingSummaryReport?.summary || {};
+  const totalBeds = Number(occSummary.total_beds || 0);
+  const occupiedBeds = Number(occSummary.occupied_beds || 0);
+  const vacantBeds = Number(occSummary.vacant_beds || 0);
+  const maintenanceBeds = Math.max(0, totalBeds - occupiedBeds - vacantBeds);
   const occupancyPct = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
-  const tenantList = useMemo(() => {
-    const raw = segments.tenants.data;
-    if (!raw) return [];
-    const { rows } = normalizePaginatedList(raw);
-    return rows;
-  }, [segments.tenants.data]);
-  const activeTenants = tenantList.filter(t => t.status === 'active').length;
+  const { rows: payments = [] } = useMemo(() => normalizePaginatedList(recentPayments), [recentPayments]);
+  const { rows: dueTodayRaw = [] } = useMemo(() => normalizePaginatedList(dueTodayData), [dueTodayData]);
+  const { meta: activeTenantsMeta, rows: activeTenantRows = [] } = useMemo(() => normalizePaginatedList(activeTenantsData), [activeTenantsData]);
+  const activeTenantCount = Number(activeTenantsMeta?.total ?? activeTenantRows.length ?? 0);
+  const dueTodayList = useMemo(() => dueTodayRaw.filter(b => (b.balance ?? 0) > 0), [dueTodayRaw]);
+  const { rows: recentBillings = [] } = useMemo(() => normalizeReportRows(billingReport), [billingReport]);
 
-  const paymentList = useMemo(() => {
-    const raw = segments.payments.data;
-    if (!raw) return [];
-    const { rows } = normalizePaginatedList(raw);
-    return rows;
-  }, [segments.payments.data]);
+  const strictlyOverdueCount = useMemo(() => {
+    return recentBillings.filter(b => {
+      const s = b.status?.toLowerCase().replace(/\s+/g, '_') || '';
+      return (s === 'overdue' || s === 'past_due') && (Number(b.total_paid || 0) === 0);
+    }).length;
+  }, [recentBillings]);
 
-  const billingList = useMemo(() => {
-    const raw = segments.billing.data;
-    if (!raw) return [];
-    const { rows } = normalizePaginatedList(raw);
-    return rows;
-  }, [segments.billing.data]);
-  const todayStr = new Date().toLocaleDateString('en-CA');
-  const thisMonth = todayStr.slice(0, 7);
+  const strictlyOverdueTotal = useMemo(() => {
+    return recentBillings
+      .filter(b => {
+        const s = b.status?.toLowerCase().replace(/\s+/g, '_') || '';
+        return (s === 'overdue' || s === 'past_due') && (Number(b.total_paid || 0) === 0);
+      })
+      .reduce((sum, b) => sum + Number(b.amount_due || 0), 0);
+  }, [recentBillings]);
 
-  const stats = billingList.reduce((acc, b) => {
-    const balance = Number(b.balance || 0);
-    const dueStr = b.due_date?.slice(0, 10);
-    const isPastDue = isPastDueReceivable(b);
-    const isDueToday = dueStr === todayStr;
-    const isThisMonth = b.billing_period_from && b.billing_period_from.startsWith(thisMonth);
+  const { rows: contractRows = [] } = useMemo(() => normalizePaginatedList(contractsData), [contractsData]);
 
-    if (isPastDue) {
-      acc.overdueCount++;
-      acc.overdueTotal += balance;
-    }
-    if (isDueToday) acc.dueToday.push(b);
-    if (isThisMonth) {
-      if (balance > 0) acc.monthlyOutstanding += balance;
-    }
-    return acc;
-  }, { overdueCount: 0, overdueTotal: 0, dueToday: [], monthlyOutstanding: 0 });
+  // Derived Analytics: Turnover Schedule
+  const turnoverSchedule = useMemo(() => {
+    const today = new Date();
+    const range = 30; // BR-019
+    const thresholdDate = new Date();
+    thresholdDate.setDate(today.getDate() + range);
 
-  const monthlyCollected = paymentList.reduce((acc, p) => {
-    if (!p.voided_at && p.payment_date?.startsWith(thisMonth)) {
-      return acc + Number(p.amount_paid || 0);
-    }
-    return acc;
-  }, 0);
+    return contractRows.map(c => {
+      const moveOut = c.expected_move_out_date ? new Date(c.expected_move_out_date) : null;
+      const moveIn = c.move_in_date ? new Date(c.move_in_date) : null;
+      
+      if (moveOut && moveOut >= today && moveOut <= thresholdDate) {
+        return { type: 'move_out', date: moveOut, contract: c };
+      }
+      if (moveIn && moveIn >= today && moveIn <= thresholdDate) {
+        return { type: 'move_in', date: moveIn, contract: c };
+      }
+      return null;
+    }).filter(Boolean).sort((a, b) => a.date - b.date);
+  }, [contractRows]);
 
-  /** Posted payments only, most recent first (aligns with "Latest collections"). */
-  const recentActivityPayments = useMemo(() => {
-    const posted = paymentList.filter((p) => !p.voided_at);
-    const time = (p) => {
-      const raw = p.payment_date;
-      if (!raw) return 0;
-      const ms = Date.parse(String(raw));
-      return Number.isNaN(ms) ? 0 : ms;
-    };
-    return [...posted].sort((a, b) => time(b) - time(a)).slice(0, 4);
-  }, [paymentList]);
-
-  if (authLoading) return <AppMain><DashboardSkeleton /></AppMain>;
+  const loading = occLoading || billSummaryLoading || billLoading || tenantLoading || payLoading || dueLoading || contractsLoading;
 
   return (
-    <AppMain>
-      <PageHeader
-        title="Dashboard"
-        breadcrumbs={<Breadcrumbs items={[{ label: "Dashboard" }]} />}
-        subtitle={
-          <div className="flex flex-wrap items-center gap-2">
-            Monitor daily activities, occupancy updates, and pending administrative tasks.
-            {lastUpdated ? (
-              <>
-                <span className="text-stone-300" aria-hidden>
-                  ·
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-widest text-stone-400">
-                  <RefreshCw
-                    size={10}
-                    className={segments.occupancy.loading ? "animate-spin" : ""}
-                    aria-hidden
-                  />
-                  Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              </>
-            ) : null}
-          </div>
-        }
-        actions={
-          <div className="flex items-center gap-3">
-            {canManageBilling(currentUser) ? (
-              <Link
-                href="/payments/new"
-                className={[primaryLinkCtaClass, "h-11 rounded-xl shadow-lg shadow-teal-900/10 active:scale-95"].join(" ")}
-              >
-                <PlusCircle size={18} aria-hidden />
-                <span>Register Payment</span>
-              </Link>
-            ) : null}
-            <div className={`flex items-center ${canManageBilling(currentUser) ? "border-l border-stone-200 pl-3" : ""}`}>
-              <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-            </div>
-          </div>
-        }
-      />
-
-      <motion.div
-        className="mt-6 space-y-6"
-        initial={shouldReduceMotion ? false : pageVariants.initial}
-        animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
-      >
-        <AnimatePresence>
-          {Object.values(segments).some(s => s.error) && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <Alert variant="error" title="Connectivity issue">
-                Some data segments failed to load. The view may be partial.
-                <button type="button" onClick={loadAll} className="ml-2 text-xs font-bold underline">
-                  Retry
-                </button>
-              </Alert>
-            </motion.div>
-          )}
-        </AnimatePresence>
+    <StandardPage
+      title="Dashboard"
+      subtitle="Monitor daily activities, occupancy updates, and pending administrative tasks."
+      breadcrumbs={<Breadcrumbs items={[{ label: "Dashboard" }]} />}
+      loading={loading}
+      skeleton={<DashboardSkeleton />}
+      actions={
+        <PageHeaderActions
+          ctaHref={canManageBilling(currentUser) ? "/payments/new" : null}
+          ctaLabel="Record Payment"
+          ctaIcon={PlusCircle}
+          user={currentUser}
+        />
+      }
+    >
+      <div className="space-y-8">
+        {occError || billSummaryError || billError || tenantError || payError || dueError ? (
+          <Alert variant="error" title="Connectivity issue">
+            Some data segments failed to load. The view may be partial.
+            <button type="button" onClick={loadAll} className="ml-2 text-xs font-bold underline">
+              Retry
+            </button>
+          </Alert>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <KpiCard
-            label="Overall occupancy"
+            label="Occupancy Rate"
             icon={DoorOpen}
             value={`${occupancyPct}%`}
-            sub={`${occupiedBeds} of ${totalBeds} beds · all units (inventory-wide)`}
+            sub={`${occupiedBeds}/${totalBeds} BEDS OCCUPIED`}
             progress={occupancyPct}
             href="/reports/occupancy"
-            isLoading={segments.occupancy.loading}
-            error={segments.occupancy.error}
+            isLoading={occLoading}
+            isSyncing={occValidating}
+            error={occError}
           />
 
           <KpiCard
-            label="Active tenants"
+            label="Active Tenants"
             icon={Users}
-            value={activeTenants}
-            sub="Tenant profiles with status Active"
+            value={activeTenantCount}
+            sub="CURRENTLY ON-PREMISE"
             href="/tenants"
-            isLoading={segments.tenants.loading}
-            error={segments.tenants.error}
+            isLoading={tenantLoading}
+            isSyncing={tenantValidating}
+            error={tenantError}
           />
 
           <KpiCard
-            label="Bookable vacancies"
+            label="Vacancies"
             icon={Bed}
-            value={occData.vacant_beds !== undefined ? Number(occData.vacant_beds) : Math.max(0, totalBeds - occupiedBeds)}
-            sub={`Vacant beds in Available rooms only · ${totalBeds} beds in inventory`}
+            value={vacantBeds}
+            sub={maintenanceBeds > 0 ? `${maintenanceBeds} BEDS UNDER MAINTENANCE` : "BOOKABLE BEDS AVAILABLE"}
             href="/rooms"
-            isLoading={segments.occupancy.loading}
-            error={segments.occupancy.error}
+            isLoading={occLoading}
+            isSyncing={occValidating}
+            error={occError}
           />
 
           <KpiCard
-            label="Overdue billing cycles"
+            label="Overdue"
             icon={CreditCard}
-            value={stats.overdueCount}
-            sub={
-              stats.overdueCount > 0
-                ? `Balance past due date · ${formatPHP(stats.overdueTotal)}`
-                : "Nothing overdue"
-            }
-            isDanger={stats.overdueCount > 0}
+            value={strictlyOverdueCount}
+            sub={strictlyOverdueCount > 0 ? `ZERO PAYMENT · ${formatPHP(strictlyOverdueTotal)}` : "ALL ACCOUNTS CURRENT"}
+            isDanger={strictlyOverdueCount > 0}
             href="/billing"
-            isLoading={segments.billing.loading}
-            error={segments.billing.error}
+            isLoading={billLoading}
+            isSyncing={billValidating}
+            error={billError}
           />
 
           <KpiCard
-            label="Payments this month"
+            label="MTD Collections"
             icon={Receipt}
-            value={formatPHP(monthlyCollected)}
-            sub="Posted collections · voided payments excluded"
+            value={formatPHP(billSummary.collected_total)}
+            sub="TOTAL POSTED THIS MONTH"
+            isSuccess={Number(billSummary.collected_total) > 0}
             href="/payments"
-            isLoading={segments.payments.loading}
-            error={segments.payments.error}
+            isLoading={billSummaryLoading}
+            isSyncing={billSummaryValidating}
+            error={billSummaryError}
+            sparkline={<Sparkline data={[15, 30, 25, 45, 40, 65]} color="stroke-emerald-500" />}
           />
 
           <KpiCard
-            label="Unpaid (new periods)"
+            label="Outstanding"
             icon={CreditCard}
-            value={formatPHP(stats.monthlyOutstanding)}
-            sub="Billings with period starting this month · unpaid balance only"
+            value={formatPHP(billSummary.outstanding_total)}
+            sub="TOTAL UNCOLLECTED BALANCE"
+            isWarning={Number(billSummary.outstanding_total) > 0}
             href="/billing"
-            isLoading={segments.billing.loading}
-            error={segments.billing.error}
+            isLoading={billSummaryLoading}
+            isSyncing={billSummaryValidating}
+            error={billSummaryError}
           />
-
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-8 space-y-6">
-            <div className="grid gap-6 md:grid-cols-5">
-              <Card className="md:col-span-2 !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
-                    <LayoutGrid size={14} aria-hidden />
-                  </div>
-                  <h2 className="hs-strip-title">Quick Links</h2>
+        {/* Operational Intelligence Grid (Balanced 2-Column Row-Based Grid) */}
+        <div className="grid gap-8 lg:grid-cols-2">
+          {/* Turnover Forecast */}
+          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm h-full flex flex-col">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <Calendar size={13} aria-hidden />
                 </div>
-                <div className="grid grid-cols-2 gap-4 p-6">
-                  <HubItem href="/tenants" label="Tenants" icon={Users} colorClass="bg-blue-50 text-blue-600" />
-                  <HubItem href="/rooms" label="Rooms" icon={DoorOpen} colorClass="bg-teal-50 text-teal-600" />
-                  <HubItem href="/contracts" label="Contracts" icon={FileText} colorClass="bg-amber-50 text-amber-600" />
-                  <HubItem href="/billing" label="Billing" icon={CreditCard} colorClass="bg-rose-50 text-rose-600" />
-                  <HubItem href="/payments" label="Payments" icon={Receipt} colorClass="bg-emerald-50 text-emerald-600" />
-                  <HubItem href="/reports" label="Reports" icon={PieChart} colorClass="bg-indigo-50 text-indigo-600" />
-                </div>
-              </Card>
-
-              <div className="md:col-span-3">
-                <Card className="h-full !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                  <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                        <Receipt size={14} aria-hidden />
-                      </div>
-                      <div>
-                        <h2 className="hs-strip-title">Latest Collections</h2>
-                        <p className="mt-0.5 text-xs font-medium text-stone-500">Recently posted payments</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-0">
-                    <ResourceView
-                      isLoading={segments.payments.loading}
-                      isEmpty={recentActivityPayments.length === 0}
-                      error={segments.payments.error}
-                      emptyProps={{
-                        title: "No collections",
-                        message: "Recent payments will appear here once recorded in the ledger."
-                      }}
-                    >
-                      <Table
-                        embedded
-                        columns={[
-                          { key: "record", label: "Payment" },
-                          { key: "value", label: "Amount paid", className: "text-right" }
-                        ]}
-                        rows={recentActivityPayments.map(p => (
-                          <tr key={p.payment_id} className="hover:bg-stone-50 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="font-bold text-stone-900 text-sm">#PAY-{p.payment_id}</div>
-                              <div className="text-[10px] text-stone-500 font-bold uppercase tracking-widest leading-none mt-1">
-                                {p.billing?.contract?.tenant?.last_name} · {formatDateString(p.payment_date)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="font-mono text-sm font-bold tabular-nums text-emerald-700">
-                                {formatPHP(p.amount_paid)}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      />
-                    </ResourceView>
-                  </div>
-
-                </Card>
+                <h2 className="hs-strip-title uppercase tracking-widest text-[10px] font-bold text-stone-400">Turnover Forecast</h2>
               </div>
+              <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Next 30 Days</div>
             </div>
-
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm mt-6">
-              <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                    <Receipt size={14} aria-hidden />
-                  </div>
-                  <div>
-                    <h2 className="hs-strip-title">Attention: Due Today</h2>
-                    <p className="mt-0.5 text-xs font-medium text-stone-500">Cycles reaching due date today</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-0">
-                <ResourceView
-                  isLoading={segments.billing.loading}
-                  isEmpty={stats.dueToday.length === 0}
-                  error={segments.billing.error}
-                  emptyProps={{
-                    title: "All clear for today",
-                    message: "There are no billing records reaching their due date today."
-                  }}
-                >
+            <div className="p-0 flex-1">
+              <ResourceView
+                isLoading={contractsLoading}
+                isEmpty={turnoverSchedule.length === 0}
+                emptyProps={{
+                  title: "Quiet window ahead",
+                  message: "No departures or arrivals scheduled for the next 30 days.",
+                  variant: "compact"
+                }}
+              >
+                <div className="hs-border-t border-stone-100">
                   <Table
                     embedded
                     columns={[
-                      { key: "tenant", label: "Tenant" },
-                      { key: "amount", label: "Balance", className: "text-right" }
+                      { key: "type", label: "STATUS" },
+                      { key: "tenant", label: "RESIDENT" },
+                      { key: "date", label: "SCHEDULE", className: "text-right" }
                     ]}
-                    rows={stats.dueToday.map(b => (
+                    rows={turnoverSchedule.slice(0, 5).map((item, idx) => (
+                      <tr
+                        key={`${item.contract.contract_id}-${idx}`}
+                        className="hover:bg-stone-50 transition-colors cursor-pointer group"
+                        onClick={() => router.push(`/contracts/${item.contract.contract_id}`)}
+                      >
+                        <td className="px-8 py-4">
+                          <StatusBadge
+                            size="xs"
+                            variant={item.type === 'move_out' ? 'danger' : 'success'}
+                          >
+                            {item.type === 'move_out' ? 'Departure' : 'Arrival'}
+                          </StatusBadge>
+                        </td>
+                        <td className="px-8 py-4 text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
+                          {formatTenantDirectoryName(item.contract.tenant)}
+                        </td>
+                        <td className="px-8 py-4 text-right">
+                          <div className="font-mono text-[10px] font-bold uppercase text-stone-500">
+                            {formatDateString(item.date)}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  />
+                </div>
+              </ResourceView>
+            </div>
+            <div className="border-t border-stone-100 bg-stone-50/30 px-8 py-3.5 mt-auto">
+              <Link href="/contracts" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 transition-colors">
+                View Full Schedule →
+              </Link>
+            </div>
+          </Card>
+
+          {/* Latest Collections */}
+          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm h-full flex flex-col">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-50 text-stone-600">
+                  <Receipt size={14} aria-hidden />
+                </div>
+                <div>
+                  <h2 className="hs-strip-title uppercase tracking-widest text-[11px] font-black text-stone-400">Latest Collections</h2>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-0 flex-1">
+              <ResourceView
+                isLoading={payLoading}
+                isSyncing={payValidating}
+                isEmpty={payments.length === 0}
+                error={payError}
+                emptyProps={{
+                  title: "No collections",
+                  message: "Recent items will appear here once recorded.",
+                  variant: "compact"
+                }}
+              >
+                <Table
+                  embedded
+                  columns={[
+                    { key: "record", label: "ID" },
+                    { key: "tenant", label: "TENANT" },
+                    { key: "value", label: "AMOUNT", className: "text-right" }
+                  ]}
+                  rows={payments.map((p) => (
+                    <tr
+                      key={p.payment_id}
+                      className="hover:bg-stone-50 transition-colors cursor-pointer group"
+                      onClick={() => router.push(`/payments/${p.payment_id}`)}
+                    >
+                      <td className="px-6 py-3">
+                        <ResourceIdCell id={p.payment_id} prefix="PAY" />
+                      </td>
+                      <td className="px-8 py-4">
+                        <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors leading-none">
+                          {formatTenantDirectoryName(p.billing?.contract?.tenant)}
+                        </div>
+                        <div className="text-[10px] font-mono tracking-tighter text-stone-400 mt-1 uppercase">
+                          {formatDateString(p.payment_date)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="font-mono text-sm font-bold tabular-nums text-teal-700">
+                          {formatPHP(p.amount_paid)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                />
+              </ResourceView>
+            </div>
+          </Card>
+
+          {/* Due Today */}
+          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm h-full flex flex-col">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-50 text-red-600">
+                  <Calendar size={13} aria-hidden />
+                </div>
+                <h2 className="hs-strip-title uppercase tracking-widest text-[10px] font-bold text-stone-400">Attention: Due Today</h2>
+              </div>
+              <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5">
+                <div className="size-1 rounded-full bg-red-500 animate-pulse" />
+                Active window
+              </div>
+            </div>
+            <div className="p-0 flex-1">
+              <ResourceView
+                isLoading={dueLoading}
+                isSyncing={dueValidating}
+                isEmpty={dueTodayList.length === 0}
+                error={dueError}
+                emptyProps={{
+                  title: "All clear for today",
+                  message: "There are no billing records reaching their due date today.",
+                  variant: "compact"
+                }}
+              >
+                <div className="hs-border-t border-stone-100">
+                  <Table
+                    embedded
+                    columns={[
+                      { key: "tenant", label: "TENANT" },
+                      { key: "billing", label: "ID" },
+                      { key: "amount", label: "BALANCE", className: "text-right" }
+                    ]}
+                    rows={dueTodayList.map(b => (
                       <tr
                         key={b.billing_id}
-                        className="hover:bg-stone-50 transition-colors cursor-pointer"
+                        className="hover:bg-stone-50 transition-colors cursor-pointer group"
                         onClick={() => router.push(`/billing/${b.billing_id}`)}
                       >
-                        <td className="px-6 py-4 text-sm font-bold text-stone-900">
+                        <td className="px-8 py-4 text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
                           {formatTenantDirectoryName(b.contract?.tenant)}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-8 py-4">
+                          <ResourceIdCell id={b.billing_id} prefix="BILL" />
+                        </td>
+                        <td className="px-8 py-4 text-right">
                           <div className="font-mono text-sm font-bold tabular-nums text-red-600">
                             {formatPHP(b.balance)}
                           </div>
@@ -431,66 +420,74 @@ export default function DashboardPage() {
                       </tr>
                     ))}
                   />
-                </ResourceView>
-              </div>
-            </Card>
-          </div>
+                </div>
+              </ResourceView>
+            </div>
+          </Card>
 
-          <div className="lg:col-span-4 space-y-6">
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-              <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
-                    <Receipt size={14} aria-hidden />
-                  </div>
-                  <div>
-                    <h2 className="hs-strip-title">Recent Billing</h2>
-                    <p className="mt-0.5 text-xs font-medium text-stone-500">Historical ledger records</p>
-                  </div>
+          {/* Recent Billing */}
+          <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm h-full flex flex-col">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                  <Receipt size={14} aria-hidden />
+                </div>
+                <div>
+                  <h2 className="hs-strip-title uppercase tracking-widest text-[11px] font-black text-stone-400">Recent Billing</h2>
                 </div>
               </div>
+            </div>
 
-              <div className="p-0">
-                <ResourceView
-                  isLoading={segments.billing.loading}
-                  isEmpty={billingList.length === 0}
-                  error={segments.billing.error}
-                  emptyProps={{
-                    title: "No billing yet",
-                    message: "Records will appear here once billing is generated."
-                  }}
-                >
-                  <div className="divide-y divide-stone-50">
-                    {billingList.slice(0, 5).map((b) => (
-                      <div
-                        key={b.billing_id}
-                        className="px-6 py-4 hover:bg-stone-50 cursor-pointer transition-colors"
-                        onClick={() => router.push(`/billing/${b.billing_id}`)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-bold text-stone-900">
-                              {b.contract?.tenant?.last_name}, {b.contract?.tenant?.first_name?.charAt(0)}.
-                            </p>
-                            <p className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
-                              Room {b.contract?.room?.room_code || "—"}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-mono text-xs font-bold tabular-nums text-stone-800">{formatPHP(b.total_amount)}</p>
-                            <StatusBadge size="xs">{b.status}</StatusBadge>
-                          </div>
+            <div className="p-0 flex-1">
+              <ResourceView
+                isLoading={billLoading}
+                isSyncing={billValidating}
+                isEmpty={recentBillings.length === 0}
+                error={billError}
+                emptyProps={{
+                  title: "No billing yet",
+                  message: "Records will appear here once generated.",
+                  variant: "compact"
+                }}
+              >
+                <Table
+                  embedded
+                  columns={[
+                    { key: "record", label: "ID" },
+                    { key: "amount", label: "TOTAL", className: "text-right" }
+                  ]}
+                  rows={recentBillings.slice(0, 5).map((b) => (
+                    <tr
+                      key={b.billing_id}
+                      className="hover:bg-stone-50 transition-colors cursor-pointer group"
+                      onClick={() => router.push(`/billing/${b.billing_id}`)}
+                    >
+                      <td className="px-8 py-5">
+                        <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
+                          {b.tenant_name}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </ResourceView>
-              </div>
-
-            </Card>
-          </div>
+                        <div className="mt-1.5 flex items-center gap-2 text-[10px] font-bold text-stone-400">
+                          <ResourceIdCell id={b.billing_id} prefix="BILL" />
+                          <span className="opacity-50">·</span>
+                          <span className="uppercase tracking-widest">RM {b.room_code || "—"}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="font-mono text-sm font-black tabular-nums text-stone-900">
+                          {formatPHP(b.amount_due)}
+                        </div>
+                        <div className="mt-2">
+                          <StatusBadge size="xs" variant="pastel">{b.status}</StatusBadge>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                />
+              </ResourceView>
+            </div>
+          </Card>
         </div>
-      </motion.div>
-    </AppMain>
+      </div>
+    </StandardPage>
   );
 }

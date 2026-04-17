@@ -33,9 +33,10 @@ final class PaginationResponse
      *
      * @param  array<string, int|float|string|bool|null>  $extraMeta
      */
-    public static function fromPaginator(LengthAwarePaginator $paginator, array $extraMeta = []): JsonResponse
+    public static function fromPaginator(LengthAwarePaginator $paginator, array $extraMeta = [], string $message = 'Records retrieved successfully.'): JsonResponse
     {
         return response()->json([
+            'message' => $message,
             'data' => $paginator->items(),
             'meta' => array_merge([
                 'current_page' => $paginator->currentPage(),

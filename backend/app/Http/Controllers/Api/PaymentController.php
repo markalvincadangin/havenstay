@@ -2,27 +2,28 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Payment\StorePaymentRequest;
+use App\Http\Requests\Payment\VoidPaymentRequest;
 use App\Models\Payment;
-use App\Services\AuditService;
 use App\Services\AuthorizationService;
 use App\Services\PaymentService;
+use App\Services\PiiMaskingService;
 use App\Support\PaginationResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class PaymentController extends Controller
 {
+    use HandlesAuthorization;
+
     /**
-     * FR-027: View payment history by tenant/contract/billing filters.
      */
     public function index(Request $request): JsonResponse
     {
         if (! AuthorizationService::canViewBilling($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'payments.index');
-
-            return response()->json(['message' => 'Unauthorized to view payment history.'], 403);
+            return $this->forbidden($request, 'payments.index', 'Unauthorized to view payment history.');
         }
 
         $validated = $request->validate(array_merge([
@@ -57,81 +58,58 @@ class PaymentController extends Controller
     }
 
     /**
-     * FR-027: View a single payment (posted or voided) with billing context.
      */
     public function show(Request $request, Payment $payment): JsonResponse
     {
         if (! AuthorizationService::canViewBilling($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'payments.show');
-
-            return response()->json(['message' => 'Unauthorized to view payment details.'], 403);
+            return $this->forbidden($request, 'payments.show', 'Unauthorized to view payment details.');
         }
 
-        $payment->load([
-            'billing.contract.tenant',
-            'billing.contract.bedSpace.room',
-            'billing.contract.room',
-            'processor',
-        ]);
+        $loadedPayment = PaymentService::getById((int) $payment->payment_id);
+        if (! $loadedPayment) {
+            return response()->json(['message' => 'Payment not found.'], 404);
+        }
 
-        return response()->json($payment);
+        $payload = PiiMaskingService::maskPaymentNestedTenant($request->user(), $loadedPayment->toArray());
+
+        return response()->json([
+            'message' => 'Payment retrieved successfully.',
+            'data' => $payload,
+        ]);
     }
 
     /**
-     * FR-024..FR-026, TC-PAYMENT-001/002/003, TC-TX-001/002/003: Record payment.
      */
-    public function store(Request $request): JsonResponse
+    public function store(StorePaymentRequest $request): JsonResponse
     {
         if (! AuthorizationService::canManageBilling($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'payments.store');
-
-            return response()->json(['message' => 'Unauthorized to record payments.'], 403);
+            return $this->forbidden($request, 'payments.store', 'Unauthorized to record payments.');
         }
 
-        $refRaw = $request->input('reference_number');
-        $trimmedRef = is_string($refRaw) ? trim($refRaw) : '';
-        $request->merge([
-            'reference_number' => $trimmedRef === '' ? null : $trimmedRef,
-        ]);
-
-        $validated = $request->validate([
-            'billing_id' => ['required', 'integer'],
-            'amount_paid' => ['required', 'numeric'],
-            'payment_date' => ['required', 'date'],
-            'payment_method' => ['sometimes', 'in:cash,gcash,bank_transfer,other'],
-            'reference_number' => [
-                'nullable',
-                'string',
-                'max:100',
-                Rule::requiredIf(fn () => $request->input('payment_method', 'cash') !== 'cash'),
-            ],
-            'remarks' => ['nullable', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $billing = PaymentService::record($request->user(), $validated);
 
         return response()->json([
             'message' => 'Payment recorded successfully.',
-            'billing' => $billing,
+            'data' => $billing,
         ], 201);
     }
 
     /**
-     * FR-024..FR-026: Soft void a payment.
      */
-    public function destroy(Request $request, Payment $payment): JsonResponse
+    public function destroy(VoidPaymentRequest $request, Payment $payment): JsonResponse
     {
         if (! AuthorizationService::canManageBilling($request->user())) {
-            AuditService::logAccessDenied($request->user(), 'payments.void');
-
-            return response()->json(['message' => 'Unauthorized to void payments.'], 403);
+            return $this->forbidden($request, 'payments.void', 'Unauthorized to void payments.');
         }
 
-        $reason = $request->input('void_reason');
+        $reason = $request->validated()['void_reason'] ?? null;
         PaymentService::void($request->user(), $payment, $reason);
 
         return response()->json([
             'message' => 'Payment voided successfully.',
+            'data' => null,
         ]);
     }
 }

@@ -1,0 +1,18 @@
+# Production-ready configuration for HavenStay
+# Use this with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  backend:
+    build:
+      target: production
+    volumes: [] # Remove dev volumes
+    restart: always
+
+  frontend:
+    build:
+      target: runner
+    volumes: [] # Remove dev volumes
+    environment:
+      - NODE_ENV=production
+      - WATCHPACK_POLLING=false
+    restart: always

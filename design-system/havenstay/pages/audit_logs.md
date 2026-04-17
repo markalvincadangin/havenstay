@@ -1,10 +1,10 @@
-# Audit & Transaction Logs Design Specification — v4.3 (Master-Aligned)
+# Audit Trail Design Specification — v4.3 (Master-Aligned)
 
 > **PROJECT:** HavenStay Boarding House Management System (BHMS)
 > **Last Updated:** 2026-04-12
 > **Page Type:** Administration / Security Oversight
 > **Routes:** `/audit-logs`
-> **Requirements:** SRS FR-033 (Audit Triggers), FR-034 (Transaction Logs)
+> **Requirements:** SRS FR-034 (Audit Trail), FR-036 (Correlation Linkage)
 
 > [!IMPORTANT]
 > This specification follows the **Analytical Reporting Stack** defined in **[../MASTER.md](../MASTER.md)** (Section 23). It mandates absolute data fidelity for immutable security trails.
@@ -23,7 +23,7 @@ The Audit Trail provides a tamper-proof record of all system interactions and st
 ## 2. Layout Structure (Analytical Stack §23)
 
 ### 2.1 Audit Hub (`/audit-logs`)
-1.  **Page Header**: `Audit Trail` — subtitle per **MASTER §21**. Breadcrumbs, secondary outline link **Transaction logs** → `/transaction-logs`, **Export CSV** (primary teal per **MASTER §23.1**), User Role Badge. Do not embed the transaction table here (**MASTER §5.8.2**).
+1.  **Page Header**: `Audit Trail` with subtitle `Who changed what: data changes, sign-ins, and access denied (admin).` Breadcrumbs, secondary outline link **Transaction logs** → `/transaction-logs`, **Export CSV** (primary teal per **MASTER §23.1**), User Role Badge. Do not embed the transaction table here (**MASTER §5.8.2**).
 2.  **Summary KPIs** (§23): Two tiles only — **Rows after filters** (filtered `meta.total`, all pages) and **Access denied** (denials within that total). Filters and table sit *below* the KPI row; subcopy must not use misleading “above.” No third KPI (cross-page workflow totals belong on **Transaction logs**).
 3.  **Activity Filter Strip**: `Registry Card` titled **Filters** (strip pattern per **MASTER §5.8.2**).
     - Combined Search (User/IP).
@@ -90,6 +90,14 @@ Mappings must match `db/havenstay_schema.sql` exactly.
 - **Immutable State**: Audit logs are read-only. No Edit/Delete actions permitted.
 - **Export control**: **MASTER §23.1** — include **Export CSV** in `PageHeader` actions for downloadable audit evidence.
 - **Paging**: Infinity scroll or paginated table (25 rows/page default).
+
+---
+
+## 7. Page Titles and Subtitles (Master §21 Exact)
+
+| Route | Title (H1) | Subtitle |
+| :--- | :--- | :--- |
+| `/audit-logs` | `Audit Trail` | `Who changed what: data changes, sign-ins, and access denied (admin).` |
 
 ---
 

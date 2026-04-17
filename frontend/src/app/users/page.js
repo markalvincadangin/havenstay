@@ -1,110 +1,80 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { flushSync } from "react-dom";
-import { motion, useReducedMotion } from "framer-motion";
+import { useMemo, useState } from "react";
 import { Edit2, Search, Shield, Users, UserPlus, UserCheck, ShieldCheck } from "lucide-react";
-import { apiRequest } from "../../lib/api";
+import useSWR from "swr";
+import { apiRequest, fetcher } from "../../lib/api";
 import { flattenApiErrors } from "../../lib/errors";
 import { canManageUsers } from "../../lib/auth";
 import { useAuthGuard } from "../../hooks/useAuthGuard";
+import { useTableSort } from "../../hooks/useTableSort";
+import { sortClientRows } from "../../lib/tableSort";
 import Alert from "../_components/ui/Alert";
-import { AppMain } from "../_components/ui/AppShell";
 import Breadcrumbs from "../_components/ui/Breadcrumbs";
 import Button from "../_components/ui/Button";
 import { Card } from "../_components/ui/Card";
 import FilterChips from "../_components/ui/FilterChips";
 import { Field, Input, Select } from "../_components/ui/Fields";
-import PageHeader from "../_components/ui/PageHeader";
 import { SkeletonListPage } from "../_components/ui/Skeleton";
-import UserRoleBadge from "../_components/ui/UserRoleBadge";
+import PageHeaderActions from "../_components/ui/PageHeaderActions";
 import { StatusBadge } from "../_components/ui/StatusBadge";
 import { Table } from "../_components/ui/Table";
 import { KpiCard } from "../_components/ui/KpiCard";
+import ResourceView from "../_components/ui/ResourceView";
 import TablePagination from "../_components/ui/TablePagination";
+import StandardPage from "../_components/ui/StandardPage";
+import ResourceIdCell from "../_components/ui/ResourceIdCell";
 import { ROLE_NAME_LABELS, USER_ACCOUNT_STATUS_FILTER_LABELS } from "../../lib/constants";
 import {
-  buildPaginationQuery,
   normalizePaginatedList,
-  readStoredPerPage,
 } from "../../lib/pagination";
-
-const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.2, ease: "easeOut" },
-};
+import { usePaginatedFilters } from "../../hooks/usePaginatedFilters";
 
 function safeLower(value) {
   return String(value ?? "").toLowerCase();
 }
 
 export default function UsersPage() {
-  const { user: currentUser, authLoading } = useAuthGuard();
-  const shouldReduceMotion = useReducedMotion();
-  const [loading, setLoading] = useState(true);
-  const [viewDenied, setViewDenied] = useState(false);
-  const [apiError, setApiError] = useState("");
-  const [users, setUsers] = useState([]);
-  const [actionError, setActionError] = useState("");
+  const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
+    usePaginatedFilters({
+      initialFilters: { query: "", role: "all", status: "all" },
+      debounceKeys: ["query"],
+      buildExtraParams: ({ filters: current, debounced }) => {
+        const extra = {};
+        const q = String(debounced.query ?? "").trim();
+        if (q) extra.q = q;
+        if (current.role !== "all") extra.role = current.role;
+        if (current.status === "active") extra.account_status = "active";
+        else if (current.status === "inactive") extra.account_status = "inactive";
+        return extra;
+      },
+    });
+  const query = filters.query;
+  const roleFilter = filters.role;
+  const statusFilter = filters.status;
+  const [apiError, setApiError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
-  const [listMeta, setListMeta] = useState(null);
+  const { sortColumn, sortDirection, onSortChange } = useTableSort();
 
   const canAccess = useMemo(() => canManageUsers(currentUser), [currentUser]);
+  const viewDenied = !authLoading && currentUser !== null && !canAccess;
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => clearTimeout(t);
-  }, [query]);
+  const { data: usersData, error: usersError, isValidating: isSyncing, mutate: refetchUsers } = useSWR(
+    !authLoading && currentUser && canAccess ? `/api/users${queryString}` : null,
+    fetcher,
+    { keepPreviousData: true }
+  );
 
-  const fetchUsers = useCallback(async () => {
-    setApiError("");
-    setLoading(true);
-    try {
-      const extra = {};
-      if (debouncedQuery) extra.q = debouncedQuery;
-      if (roleFilter !== "all") extra.role = roleFilter;
-      if (statusFilter === "active") extra.account_status = "active";
-      else if (statusFilter === "inactive") extra.account_status = "inactive";
+  const { rows: users = [], meta: listMeta = null } = useMemo(() => {
+    if (!usersData) return { rows: [], meta: null };
+    return normalizePaginatedList(usersData);
+  }, [usersData]);
 
-      const qs = buildPaginationQuery(page, perPage, extra);
-      const data = await apiRequest(`/api/users${qs}`, { method: "GET" });
-      const { rows, meta } = normalizePaginatedList(data);
-      setUsers(rows);
-      setListMeta(meta);
-    } catch (error) {
-      setApiError(flattenApiErrors(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [page, perPage, debouncedQuery, roleFilter, statusFilter]);
+  const loading = !usersData && !usersError;
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
-    if (!canManageUsers(currentUser)) {
-      setViewDenied(true);
-      setLoading(false);
-      return;
-    }
-    fetchUsers();
-  }, [authLoading, currentUser, canAccess, fetchUsers]);
-
-  useEffect(() => {
-    flushSync(() => {
-      setPage(1);
-    });
-  }, [debouncedQuery, roleFilter, statusFilter]);
+  const fetchUsers = () => refetchUsers();
 
   const activeCount = useMemo(() => users.filter((u) => u.is_active).length, [users]);
   const adminCount = useMemo(
@@ -112,57 +82,64 @@ export default function UsersPage() {
     [users],
   );
 
+  const sortedRows = useMemo(() => {
+    if (!sortColumn) return users;
+    return sortClientRows(users, sortColumn, sortDirection, (u) => {
+      switch (sortColumn) {
+        case "user_id": return Number(u.user_id) || 0;
+        case "user": return [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
+        case "username": return (u.username || "").toLowerCase();
+        case "email": return (u.email || "").toLowerCase();
+        case "role": return (u?.role?.role_name || "").toLowerCase();
+        case "status": return u.is_active ? "active" : "inactive";
+        default: return "";
+      }
+    });
+  }, [users, sortColumn, sortDirection]);
+
   async function handleToggleActive(user) {
     const nextActive = !user.is_active;
     const action = nextActive ? "reactivate" : "deactivate";
-    setActionError("");
     setActionLoading(user.user_id);
     try {
       await apiRequest(`/api/users/${user.user_id}/${action}`, {
         method: "POST",
       });
-      setUsers((prev) =>
-        prev.map((u) => (u.user_id === user.user_id ? { ...u, is_active: nextActive } : u)),
-      );
-    } catch (error) {
-      setActionError(flattenApiErrors(error));
+      refetchUsers();
+    } catch (uError) {
+      setApiError(flattenApiErrors(uError));
+      console.error("Request Error:", uError);
     } finally {
       setActionLoading(null);
     }
   }
 
-  if (authLoading || loading) {
-    return <SkeletonListPage rows={6} />;
-  }
+  if (isUnauthorized) return null;
 
   return (
-    <AppMain>
-      <motion.div
-        className="space-y-6"
-        initial={shouldReduceMotion ? false : pageVariants.initial}
-        animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
-      >
-        <PageHeader
-          title="User Directory"
-          subtitle="Staff accounts and roles (Admin only)."
-          breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "User Directory" }]} />}
-          actions={
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-              <Button
-                variant="primary"
-                onClick={() => window.location.href = "/users/new"}
-                className="!h-11 rounded-xl bg-teal-600 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
-              >
-                <UserPlus size={14} className="mr-2" />
-                Register Account
-              </Button>
-            </div>
-          }
+    <StandardPage
+      title="User Directory"
+      subtitle="Staff accounts and roles (Admin only)."
+      breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "User Directory" }]} />}
+      loading={authLoading || loading}
+      skeleton={<SkeletonListPage rows={6} />}
+      actions={
+        <PageHeaderActions
+          ctaHref="/users/new"
+          ctaLabel="Register Account"
+          ctaIcon={UserPlus}
+          ctaClassName="!h-11 rounded-xl bg-teal-600 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
+          user={currentUser}
         />
-
-        {viewDenied ? (
+      }
+    >
+      <div className="space-y-6">
+            {apiError && (
+              <Alert variant="error" title="Request Error">
+                {apiError}
+              </Alert>
+            )}
+            {viewDenied ? (
           <Alert variant="warning" title="Access restricted" data-testid="access-denied-users">
             You do not have permission to view this page. Only administrators can open the user directory.
             Contact an admin if you need changes to accounts or roles.
@@ -171,52 +148,39 @@ export default function UsersPage() {
 
         {!viewDenied && (
           <>
-            {apiError ? (
-              <Alert variant="error" title="Could not load accounts">
-                {apiError}
-                <button
-                  type="button"
-                  onClick={() => fetchUsers()}
-                  className="mt-2 text-xs font-bold underline hover:opacity-80"
-                >
-                  Retry
-                </button>
-              </Alert>
-            ) : null}
-
-            {actionError ? (
-              <Alert variant="error" title="Action failed">
-                {actionError}
-                <button
-                  type="button"
-                  onClick={() => setActionError("")}
-                  className="mt-2 text-xs font-bold underline hover:opacity-80"
-                >
-                  Dismiss
-                </button>
-              </Alert>
-            ) : null}
-
-            {canAccess && !apiError ? (
-              <>
+              <ResourceView
+                isLoading={loading}
+                isSyncing={isSyncing}
+                error={usersError}
+                isEmpty={users.length === 0}
+                onRetry={fetchUsers}
+                skeleton={<SkeletonListPage rows={10} />}
+                emptyProps={{
+                  title: "No staff accounts match filters",
+                  message: "Clear filters or adjust search criteria to see system accounts."
+                }}
+              >
                 <div className="grid gap-4 sm:grid-cols-3">
                   <KpiCard 
                     label="Total Accounts" 
                     value={listMeta?.total ?? users.length} 
                     icon={Users}
                     sub="Matching filters"
+                    isSyncing={isSyncing}
                   />
                   <KpiCard 
                     label="Active" 
                     value={activeCount} 
                     icon={UserCheck}
                     sub="On this page"
+                    isSyncing={isSyncing}
                   />
                   <KpiCard 
                     label="Administrators" 
                     value={adminCount} 
                     icon={ShieldCheck}
                     sub="On this page"
+                    isSyncing={isSyncing}
                   />
                 </div>
 
@@ -242,7 +206,7 @@ export default function UsersPage() {
                   <div className="p-8">
                     <div className="grid items-end gap-6 md:grid-cols-12">
                       <div className="md:col-span-12 lg:col-span-5">
-                        <Field label="Cross-reference search">
+                        <Field label="Search">
                           <div className="group relative">
                             <Search
                               className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600"
@@ -250,7 +214,7 @@ export default function UsersPage() {
                             />
                             <Input
                               value={query}
-                              onChange={(e) => setQuery(e.target.value)}
+                              onChange={(e) => updateFilter("query", e.target.value)}
                               placeholder="Name, username, email, or user ID…"
                               className="!h-12 border-stone-200 pl-11 font-medium transition-[border-color,box-shadow] focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5"
                             />
@@ -261,7 +225,9 @@ export default function UsersPage() {
                         <Field label="Role">
                           <Select
                             value={roleFilter}
-                            onChange={(e) => setRoleFilter(e.target.value)}
+                            onChange={(e) => {
+                              updateFilter("role", e.target.value);
+                            }}
                             className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                           >
                             <option value="all">All roles</option>
@@ -277,7 +243,9 @@ export default function UsersPage() {
                         <Field label="Account status">
                           <Select
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            onChange={(e) => {
+                              updateFilter("status", e.target.value);
+                            }}
                             className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                           >
                             {Object.entries(USER_ACCOUNT_STATUS_FILTER_LABELS).map(([value, label]) => (
@@ -293,12 +261,12 @@ export default function UsersPage() {
                     <FilterChips
                       className="mt-6"
                       items={[
-                        { key: "q", label: "Query", value: query, onClear: () => setQuery("") },
+                        { key: "q", label: "Query", value: query, onClear: () => updateFilter("query", "") },
                         {
                           key: "role",
                           label: "Role",
                           value: roleFilter !== "all" ? ROLE_NAME_LABELS[roleFilter] || roleFilter : "",
-                          onClear: () => setRoleFilter("all"),
+                          onClear: () => updateFilter("role", "all"),
                         },
                         {
                           key: "status",
@@ -307,14 +275,10 @@ export default function UsersPage() {
                             statusFilter !== "all"
                               ? USER_ACCOUNT_STATUS_FILTER_LABELS[statusFilter] || statusFilter
                               : "",
-                          onClear: () => setStatusFilter("all"),
+                          onClear: () => updateFilter("status", "all"),
                         },
                       ]}
-                      onClearAll={() => {
-                        setQuery("");
-                        setRoleFilter("all");
-                        setStatusFilter("all");
-                      }}
+                      onClearAll={resetFilters}
                     />
                   </div>
                 </Card>
@@ -324,21 +288,26 @@ export default function UsersPage() {
                     embedded={true}
                     caption={`${listMeta?.total ?? users.length} staff accounts`}
                     ariaLabel="User accounts and roles"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSortChange={onSortChange}
                     columns={[
                         {
                           key: "user_id",
                           label: "User ID",
+                          sortable: true,
+                          sortKey: "user_id",
                           className: "w-[7.5rem]",
                           headerClassName: "!px-4",
                         },
-                        { key: "user", label: "Name" },
-                        { key: "username", label: "Username" },
-                        { key: "email", label: "Email" },
-                        { key: "role", label: "Role" },
-                        { key: "status", label: "Status" },
+                        { key: "user", label: "Name", sortable: true, sortKey: "user" },
+                        { key: "username", label: "Username", sortable: true, sortKey: "username" },
+                        { key: "email", label: "Email", sortable: true, sortKey: "email" },
+                        { key: "role", label: "Role", sortable: true, sortKey: "role" },
+                        { key: "status", label: "Status", sortable: true, sortKey: "status" },
                         { key: "actions", label: "", className: "text-right min-w-[5.5rem]" },
                     ]}
-                    rows={users.map((row) => {
+                    rows={sortedRows.map((row) => {
                         const displayName = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "—";
                         const isSelf = row.user_id === currentUser?.user_id;
                         return (
@@ -347,9 +316,7 @@ export default function UsersPage() {
                             className="border-t border-stone-100 transition-colors hover:bg-stone-50"
                         >
                             <td className="px-4 py-4 align-middle">
-                              <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
-                                #USER-{row.user_id}
-                              </span>
+                              <ResourceIdCell id={row.user_id} prefix="USER" />
                             </td>
                             <td className="px-6 py-4">
                               <span className="text-xs font-bold text-stone-900">{displayName}</span>
@@ -368,7 +335,7 @@ export default function UsersPage() {
                                         type="button"
                                         variant="secondary"
                                         size="sm"
-                                        onClick={() => window.location.href = `/users/${row.user_id}/edit`}
+                                        onClick={() => (window.location.href = `/users/${row.user_id}/edit`)}
                                         aria-label={`Edit user ${row.username}`}
                                         className="!h-8 !w-8 !p-0 flex items-center justify-center rounded-lg border-stone-200"
                                         title="Edit Profile"
@@ -424,11 +391,10 @@ export default function UsersPage() {
                       disabled={loading}
                     />
                 </Card>
-              </>
-            ) : null}
+              </ResourceView>
           </>
         )}
-      </motion.div>
-    </AppMain>
+      </div>
+    </StandardPage>
   );
 }

@@ -42,11 +42,11 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('users')->group(functi
 // FR-008..FR-011: Tenant management endpoints (Admin/Staff)
 Route::middleware(['auth:sanctum', 'auth.check'])->prefix('tenants')->group(function (): void {
     Route::get('/', [TenantController::class, 'index']);
+    Route::get('summary', [TenantController::class, 'summary']);
     Route::post('/', [TenantController::class, 'store']);
     Route::get('search', [TenantController::class, 'search']);
-    Route::get('{tenant}', [TenantController::class, 'show']);
+    Route::get('{id}', [TenantController::class, 'show'])->whereNumber('id');
     Route::put('{tenant}', [TenantController::class, 'update']);
-    Route::post('{tenant}/deactivate', [TenantController::class, 'deactivate']);
     Route::post('{tenant}/reactivate', [TenantController::class, 'reactivate']);
     Route::post('{tenant}/archive', [TenantController::class, 'archive']);
     Route::post('{id}/restore', [TenantController::class, 'restore']);
@@ -55,6 +55,7 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('tenants')->group(func
 // FR-012..FR-015: Room and bed-space management endpoints (Admin/Staff)
 Route::middleware(['auth:sanctum', 'auth.check'])->prefix('rooms')->group(function (): void {
     Route::get('/', [RoomController::class, 'index']);
+    Route::get('stats', [RoomController::class, 'stats']);
     Route::post('/', [RoomController::class, 'store']);
     Route::get('availability', [RoomController::class, 'availability']);
     Route::get('{room}', [RoomController::class, 'show']);

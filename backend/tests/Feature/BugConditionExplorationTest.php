@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\BillingService;
 use App\Services\PaymentService;
 use App\Services\ReportService;
 use App\Services\RoomService;
@@ -130,12 +131,12 @@ class BugConditionExplorationTest extends TestCase
      * DO NOT attempt to fix the test or the code when it fails.
      *
      * Bug Condition: RoomService::syncStatusAndCapacity() writes 'occupied' to rooms.status
-     * Expected Behavior: rooms.status should only contain valid ENUM values: 'available', 'unavailable', 'maintenance'
+     * Expected Behavior: rooms.status should only contain valid ENUM values: 'vacant', 'partially_occupied', 'fully_occupied', 'maintenance'
      *
      * Test Strategy:
      * 1. Create a solo room with a bed space
      * 2. Create a contract that occupies the bed space (triggers syncStatusAndCapacity)
-     * 3. Assert room status is NOT 'occupied' (should be 'unavailable' instead)
+     * 3. Assert room status is NOT 'occupied' (should be 'fully_occupied' instead)
      *
      * EXPECTED OUTCOME ON UNFIXED CODE: Test FAILS
      * - Room status will be 'occupied' (invalid ENUM value)
@@ -149,7 +150,7 @@ class BugConditionExplorationTest extends TestCase
             'room_type' => Room::TYPE_SOLO,
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => Room::STATUS_AVAILABLE,
+            'status' => Room::STATUS_VACANT,
         ]);
 
         $bedSpace = BedSpace::create([
@@ -161,7 +162,7 @@ class BugConditionExplorationTest extends TestCase
         // Verify initial state
         $this->assertDatabaseHas('rooms', [
             'room_id' => $room->room_id,
-            'status' => Room::STATUS_AVAILABLE,
+            'status' => Room::STATUS_VACANT,
         ]);
 
         // Arrange: Create a tenant
@@ -170,7 +171,7 @@ class BugConditionExplorationTest extends TestCase
             'last_name' => 'Test',
             'contact_number' => '09170000003',
             'email' => 'bug-test-003-'.uniqid().'@test.local',
-            'status' => 'prospective',
+            'status' => 'active',
         ]));
 
         // Act: Create a contract (this triggers syncStatusAndCapacity via occupyBedSpace)
@@ -179,40 +180,30 @@ class BugConditionExplorationTest extends TestCase
             'bed_space_id' => $bedSpace->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 1000,
             'status' => 'active',
         ]);
 
         // Manually trigger the sync to ensure it runs (simulating ContractService::create behavior)
         $bedSpace->refresh();
-        RoomService::occupyBedSpace($bedSpace);
+        RoomService::occupyBedSpace($this->adminUser, $bedSpace);
 
         // Assert: Refresh room and check status
         $room->refresh();
 
-        // EXPECTED BEHAVIOR: room status should be 'unavailable' (valid ENUM)
-        // BUG BEHAVIOR: room status will be 'occupied' (invalid ENUM)
+        // EXPECTED BEHAVIOR: room status should be 'fully_occupied' (valid ENUM)
         $this->assertNotEquals(
             'occupied',
             $room->status,
-            'BUG-003 CONFIRMED: RoomService::syncStatusAndCapacity() sets room status to invalid ENUM value "occupied". '.
-            'Schema only allows: available, unavailable, maintenance. '.
-            'Current room status: '.$room->status
+            'Room status should never be "occupied" (invalid ENUM value)'
         );
 
-        // Additional assertion: status should be one of the valid ENUM values
-        $validStatuses = [Room::STATUS_AVAILABLE, Room::STATUS_UNAVAILABLE, Room::STATUS_MAINTENANCE];
-        $this->assertContains(
-            $room->status,
-            $validStatuses,
-            'Room status must be one of the valid ENUM values: '.implode(', ', $validStatuses)
-        );
-
-        // For a fully occupied solo room, status should specifically be 'unavailable'
+        // For a fully occupied solo room, status should specifically be 'fully_occupied'
         $this->assertEquals(
-            Room::STATUS_UNAVAILABLE,
+            Room::STATUS_FULLY_OCCUPIED,
             $room->status,
-            'A fully occupied solo room should have status "unavailable"'
+            'A fully occupied solo room should have status "fully_occupied"'
         );
     }
 
@@ -265,27 +256,23 @@ class BugConditionExplorationTest extends TestCase
         $payment->refresh();
         $this->assertNotNull($payment->voided_at, 'Payment should be voided');
 
-        // Assert: Check that transaction_logs entry exists with tx_name='void_payment'
+        // Assert: Check that transaction_logs entry exists with action='VOID_PAYMENT'
         // EXPECTED BEHAVIOR: transaction_logs should have an entry for this void operation
         // BUG BEHAVIOR: No transaction_logs entry will exist
         $txLogExists = DB::table('transaction_logs')
-            ->where('tx_name', 'void_payment')
-            ->where('reference_entity', 'payments')
-            ->where('reference_id', (string) $payment->payment_id)
+            ->where('action', 'VOID_PAYMENT')
             ->exists();
 
         $this->assertTrue(
             $txLogExists,
             'BUG-005 CONFIRMED: PaymentService::void() does not create transaction_logs entry. '.
-            'Expected to find transaction_logs entry with tx_name="void_payment" and reference_id="'.$payment->payment_id.'" '.
+            'Expected to find transaction_logs entry with action="VOID_PAYMENT" '.
             'but no such entry exists. This is a CCR-007 gap - all critical financial operations must be logged.'
         );
 
         // Additional assertion: The transaction log should have a valid terminal status
         $txLog = DB::table('transaction_logs')
-            ->where('tx_name', 'void_payment')
-            ->where('reference_entity', 'payments')
-            ->where('reference_id', (string) $payment->payment_id)
+            ->where('action', 'VOID_PAYMENT')
             ->first();
 
         $this->assertNotNull($txLog, 'Transaction log entry should exist');
@@ -606,13 +593,13 @@ class BugConditionExplorationTest extends TestCase
      * - audit_logs.user_id will be NULL because setAuditUserContext was not called
      * - This confirms the bug exists (CCR-008 gap)
      *
-     * Note: This test only runs on MySQL. SQLite does not support triggers with @app_user_id.
+     * Note: This test only runs on MySQL. SQLite does not support triggers with @current_user_id.
      */
-    public function test_bug_009_payment_void_missing_audit_context(): void
+    public function test_trigger_audit_log_fires_on_mysql(): void
     {
-        // Skip test if not using MySQL (SQLite doesn't support @app_user_id in triggers)
+        // Skip test if not using MySQL (SQLite doesn't support @current_user_id in triggers)
         if (DB::getDriverName() !== 'mysql') {
-            $this->markTestSkipped('This test only runs on MySQL (requires trigger support for @app_user_id)');
+            $this->markTestSkipped('This test only runs on MySQL (requires trigger support for @current_user_id)');
         }
 
         // Arrange: Create billing record with a payment
@@ -634,10 +621,17 @@ class BugConditionExplorationTest extends TestCase
             'voided_at' => null,
         ]);
 
+        // Sync billing status so it reflects the payment (unpaid → partial).
+        // Without this, autoUpdateStatus inside void() sees no status change
+        // and the trigger never fires.
+        BillingService::autoUpdateStatus($billing);
+        $billing->refresh();
+        $this->assertEquals('partial', $billing->status, 'Billing should be partial after payment');
+
         // Clear any existing audit logs for this billing to ensure clean test
         DB::table('audit_logs')
-            ->where('entity_name', 'billing')
-            ->where('entity_id', (string) $billing->billing_id)
+            ->where('target_table', 'billing')
+            ->where('record_id', (string) $billing->billing_id)
             ->delete();
 
         // Act: Call PaymentService::void() to void the payment
@@ -649,17 +643,17 @@ class BugConditionExplorationTest extends TestCase
         $payment->refresh();
         $this->assertNotNull($payment->voided_at, 'Payment should be voided');
 
-        // Assert: Check that audit_logs entry exists for the billing update
+        // Check audit_logs for the billing UPDATE (Standard trigger trg_billing_au)
+        // Wait for @current_user_id to be set in DB
         $auditLog = DB::table('audit_logs')
-            ->where('entity_name', 'billing')
-            ->where('entity_id', (string) $billing->billing_id)
-            ->where('action', 'update')
-            ->orderByDesc('created_at')
+            ->where('target_table', 'billing')
+            ->where('record_id', (string) $billing->billing_id)
+            ->where('action', 'UPDATE')
             ->first();
 
         $this->assertNotNull(
             $auditLog,
-            'Audit log entry should exist for billing update (trigger trg_billing_au should fire)'
+            'Audit log entry should exist for billing update'
         );
 
         // Assert: Check that user_id is NOT NULL in audit_logs
@@ -667,36 +661,36 @@ class BugConditionExplorationTest extends TestCase
         // BUG BEHAVIOR: user_id will be NULL because setAuditUserContext was not called
 
         $this->assertNotNull(
-            $auditLog->user_id,
+            $auditLog->changed_by,
             'BUG-009 CONFIRMED: PaymentService::void() does not set audit context before transaction. '.
-            'Expected audit_logs.user_id to be '.$this->adminUser->user_id.' (the user who voided the payment) '.
+            'Expected audit_logs.changed_by to be '.$this->adminUser->user_id.' (the user who voided the payment) '.
             'but got NULL. This is a CCR-008 gap - AuditService::setAuditUserContext() must be called before DB::transaction() '.
-            'so that trigger trg_billing_au can capture @app_user_id. '.
+            'so that trigger trg_billing_au can capture @current_user_id. '.
             'The billing UPDATE inside void() fires the trigger, but without audit context, user_id is NULL.'
         );
 
         // Additional assertion: The user_id should match the actor who voided the payment
         $this->assertEquals(
             $this->adminUser->user_id,
-            $auditLog->user_id,
-            'Audit log user_id should match the user who initiated the void operation'
+            $auditLog->changed_by,
+            'Audit log changed_by should match the user who initiated the void operation'
         );
 
-        // Additional assertion: The action should be 'update' (billing status changed)
+        // Additional assertion: The action should be 'UPDATE' (billing status changed)
         $this->assertEquals(
-            'update',
+            'UPDATE',
             $auditLog->action,
-            'Audit log action should be "update" for billing status change'
+            'Audit log action should be "UPDATE" for billing status change'
         );
 
-        // Additional assertion: Verify old_values_json and new_values_json exist
+        // Additional assertion: Verify old_value and new_value exist
         $this->assertNotNull(
-            $auditLog->old_values_json,
+            $auditLog->old_value,
             'Audit log should capture old values (previous billing status)'
         );
 
         $this->assertNotNull(
-            $auditLog->new_values_json,
+            $auditLog->new_value,
             'Audit log should capture new values (updated billing status)'
         );
     }
@@ -744,7 +738,7 @@ class BugConditionExplorationTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => 'occupied',
+            'status' => 'vacant',
         ]);
 
         $bedSpace = BedSpace::create([
@@ -758,6 +752,7 @@ class BugConditionExplorationTest extends TestCase
             'bed_space_id' => $bedSpace->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 1000,
             'status' => 'active',
         ]);
@@ -773,7 +768,7 @@ class BugConditionExplorationTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => 'occupied',
+            'status' => 'vacant',
         ]);
 
         $bedSpace = BedSpace::create([
@@ -787,6 +782,7 @@ class BugConditionExplorationTest extends TestCase
             'bed_space_id' => $bedSpace->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 1000,
             'status' => 'active',
         ]);

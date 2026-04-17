@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   AlertTriangle,
-  ArrowLeft,
   Edit2,
   User,
   DoorOpen,
@@ -21,7 +21,7 @@ import {
   Clock,
 } from "lucide-react";
 
-import { apiRequest } from "../../../lib/api";
+import { apiRequest, fetcher } from "../../../lib/api";
 import { canManageContracts } from "../../../lib/auth";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { flattenApiErrors } from "../../../lib/errors";
@@ -31,18 +31,21 @@ import {
   formatPHP,
   formatTenantDirectoryName,
 } from "../../../lib/formatters";
-import Spinner from "../../_components/ui/Spinner";
+import { isContractActive } from "../../../lib/constants";
+import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
 import Alert from "../../_components/ui/Alert";
-import { AppMain } from "../../_components/ui/AppShell";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import Button from "../../_components/ui/Button";
 import { Card } from "../../_components/ui/Card";
 import { Field, Input, Textarea } from "../../_components/ui/Fields";
-import PageHeader from "../../_components/ui/PageHeader";
-import UserRoleBadge from "../../_components/ui/UserRoleBadge";
 import { StatusBadge } from "../../_components/ui/StatusBadge";
 import { Table } from "../../_components/ui/Table";
 import { secondaryOutlineLinkClass } from "../../_components/ui/LinkTokens";
+import StandardPage from "../../_components/ui/StandardPage";
+import ResourceIdCell from "../../_components/ui/ResourceIdCell";
+import PageHeaderActions from "../../_components/ui/PageHeaderActions";
+import { normalizePaginatedList } from "../../../lib/pagination";
+import SectionCard from "../../_components/ui/SectionCard";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -52,12 +55,12 @@ const pageVariants = {
 
 function DetailRow({ label, value, icon: Icon, mono = false }) {
   return (
-    <div className="flex items-start justify-between border-b border-stone-50 py-3.5 last:border-0">
+    <div className="flex items-start justify-between border-b border-stone-50 py-3.5 last:border-0 hover:bg-stone-50/50 transition-colors">
       <div className="flex items-center gap-2.5">
         <div className="text-stone-300">
-          <Icon size={14} />
+          <Icon size={14} strokeWidth={2.5} />
         </div>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">{label}</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">{label}</span>
       </div>
       <span
         className={`max-w-[220px] text-right text-sm font-semibold text-stone-900 ${mono ? "font-mono tabular-nums" : ""}`}
@@ -70,12 +73,12 @@ function DetailRow({ label, value, icon: Icon, mono = false }) {
 
 function MetricItem({ label, value, icon: Icon }) {
   return (
-    <div className="flex items-center gap-4 border-b border-stone-100 py-4 last:border-0">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-stone-50 text-stone-400">
-        <Icon size={18} />
+    <div className="flex items-center gap-4 border-b border-stone-100 py-4 last:border-0 hover:bg-stone-50/30 transition-colors">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-stone-50 text-stone-400 border border-white/60 shadow-sm">
+        <Icon size={18} strokeWidth={2.5} />
       </div>
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 leading-none mb-1">{label}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 leading-none mb-1.5">{label}</p>
         <p className="text-sm font-black text-stone-900 tabular-nums leading-none">{value}</p>
       </div>
     </div>
@@ -104,11 +107,11 @@ function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !isSubmitting) onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open, isSubmitting, onClose]);
 
   if (!open) return null;
 
@@ -123,6 +126,7 @@ function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
         type="button"
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
         aria-label="Close move-out dialog"
+        disabled={isSubmitting}
         onClick={onClose}
       />
 
@@ -135,11 +139,12 @@ function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
             <h2 id="moveout-modal-title" className="text-xl font-black tracking-tight text-stone-900">
               Process Move-out
             </h2>
-            <p className="mt-0.5 text-sm text-stone-500">Record final completion of this agreement.</p>
+            <p className="mt-0.5 text-sm text-stone-500">This will finalize the active agreement and release its occupied inventory while preserving historical and audit records.</p>
           </div>
         </div>
 
         <div className="mb-6 rounded-2xl border border-stone-100 bg-stone-50/50 p-5 space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Record</p>
           <div className="flex justify-between items-center">
             <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Resident</span>
             <span className="text-sm font-black text-stone-900">{tenant ? formatTenantDirectoryName(tenant) : "—"}</span>
@@ -158,6 +163,7 @@ function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
           <Field label="Actual Move-out Date" required error={errors.actual_move_out?.message}>
             <Input
               type="date"
+              lang="en-PH"
               hasError={Boolean(errors.actual_move_out)}
               className="!h-11 border-stone-200"
               {...register("actual_move_out", {
@@ -202,47 +208,31 @@ export default function ContractDetailsPage() {
   const router = useRouter();
   const contractId = params?.id;
 
-  const { user: currentUser, authLoading } = useAuthGuard();
+  const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
-  const [contract, setContract] = useState(null);
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
+  const { data: contract, error: contractError, mutate: refetchContract } = useSWR(
+    !authLoading && currentUser && contractId ? `/api/contracts/${contractId}` : null,
+    fetcher
+  );
+
+  const { data: paymentsData } = useSWR(
+    !authLoading && currentUser && contractId ? `/api/payments?contract_id=${contractId}` : null,
+    fetcher
+  );
+
+  const payments = useMemo(() => {
+    return normalizePaginatedList(paymentsData).rows;
+  }, [paymentsData]);
+
+  const loading = !contract && !contractError;
+  const fetchError = contractError ? contractError.message || "Failed to load contract details." : "";
   const [successMessage, setSuccessMessage] = useState("");
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
   const [isSubmittingMoveOut, setIsSubmittingMoveOut] = useState(false);
+  const pageTitle = "Contract Details";
 
-  const loadContract = useCallback(async () => {
-    const data = await apiRequest(`/api/contracts/${contractId}`, { method: "GET" });
-    setContract(data);
-  }, [contractId]);
-
-  const loadPayments = useCallback(async () => {
-    try {
-      const data = await apiRequest(`/api/payments?contract_id=${contractId}`, {
-        method: "GET",
-      });
-      setPayments(Array.isArray(data) ? data : data?.payments || []);
-    } catch {
-      setPayments([]);
-    }
-  }, [contractId]);
-
-  useEffect(() => {
-    if (authLoading || !currentUser || !contractId) return;
-
-    const fetchData = async () => {
-      try {
-        await Promise.all([loadContract(), loadPayments()]);
-      } catch (error) {
-        setApiError(error.message || "Failed to load contract details.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [authLoading, currentUser, contractId, loadContract, loadPayments]);
+  const loadContract = () => refetchContract();
 
   const handleMoveOut = async (values) => {
     setApiError("");
@@ -269,22 +259,61 @@ export default function ContractDetailsPage() {
     }
   };
 
-  if (authLoading || loading) {
-    return (
-      <AppMain>
-        <Spinner label="Loading lease profile…" />
-      </AppMain>
-    );
-  }
+  if (isUnauthorized) return null;
 
   const tenant = contract?.tenant;
   const room = contract?.room;
   const bedSpace = contract?.bed_space || contract?.bedSpace;
-  const isActive = contract?.status === "active";
+  const isActive = isContractActive(contract?.status);
   const tenantDisplay = tenant ? formatTenantDirectoryName(tenant) : "Agreement";
-
   return (
-    <AppMain>
+    <StandardPage
+      title={pageTitle}
+      subtitle={
+        contract ? (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <ResourceIdCell id={contract.contract_id} prefix="CONTRACT" />
+              <span className="text-stone-300">·</span>
+              <StatusBadge size="sm">{contract.status}</StatusBadge>
+            </div>
+            <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
+              Lease terms, billing, and payment history.
+            </p>
+          </div>
+        ) : (
+          "Loading contract details..."
+        )
+      }
+      loading={loading}
+      skeleton={<SkeletonDetailPage />}
+      error={contractError}
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: "Contracts", href: "/contracts" },
+            { label: `Agreement ${contractId}` },
+          ]}
+        />
+      }
+      actions={
+        <PageHeaderActions
+          backHref="/contracts"
+          backLabel="Back to Contracts"
+          user={currentUser}
+        >
+          {canManageContracts(currentUser) && isActive && (
+            <Link
+              href={`/contracts/${contractId}/edit`}
+              className={secondaryOutlineLinkClass + " px-6"}
+            >
+              <Edit2 size={16} aria-hidden />
+              Update details
+            </Link>
+          )}
+        </PageHeaderActions>
+      }
+    >
       <MoveOutModal
         open={showMoveOutModal}
         contract={contract}
@@ -299,64 +328,7 @@ export default function ContractDetailsPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
         className="space-y-6"
       >
-        <PageHeader
-          title={contract ? `Agreement Portfolio` : `Lease Profile`}
-          subtitle={
-            contract ? (
-              <div className="flex flex-col gap-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
-                    #CONTRACT-{contract.contract_id}
-                  </span>
-                  <span className="text-stone-300">·</span>
-                  <StatusBadge size="sm">{contract.status}</StatusBadge>
-                </div>
-                <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
-                  Lease terms, billing, and payment history.
-                </p>
-              </div>
-            ) : (
-              "Retrieving registry data…"
-            )
-          }
-          breadcrumbs={
-            <Breadcrumbs
-              items={[
-                { label: "Contract Ledger", href: "/contracts" },
-                { label: `Agreement ${contractId}` },
-              ]}
-            />
-          }
-          actions={
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/contracts")}
-                className="inline-flex size-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-500 transition-colors hover:bg-stone-50"
-                aria-label="Back to Contract Ledger"
-              >
-                <ArrowLeft size={18} aria-hidden />
-              </button>
-              {canManageContracts(currentUser) && isActive && (
-                <Link
-                  href={`/contracts/${contractId}/edit`}
-                  className={secondaryOutlineLinkClass + " px-6"}
-                >
-                  <Edit2 size={16} aria-hidden />
-                  Update details
-                </Link>
-              )}
-              <div className="border-l border-stone-200 pl-3">
-                <UserRoleBadge
-                  username={currentUser?.username}
-                  roleName={currentUser?.role?.role_name}
-                />
-              </div>
-            </div>
-          }
-        />
-
-        {apiError && <Alert variant="error" title="Action Failed">{apiError}</Alert>}
+        {(fetchError || apiError) && <Alert variant="error" title="Action Failed">{fetchError || apiError}</Alert>}
         {successMessage && <Alert variant="success">{successMessage}</Alert>}
 
         {contract ? (
@@ -417,17 +389,12 @@ export default function ContractDetailsPage() {
             </aside>
 
             <main className="space-y-6 lg:col-span-8">
-              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                      <User size={14} aria-hidden />
-                    </div>
-                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Resident & Assignment</h2>
-                  </div>
-                </div>
-                <div className="p-8">
-                  <div className="grid gap-x-12 gap-y-1 md:grid-cols-2">
+              <SectionCard
+                title="Resident & Assignment"
+                icon={User}
+                iconClassName="bg-teal-50 text-teal-600"
+              >
+                <div className="grid gap-x-12 gap-y-1 md:grid-cols-2">
                     <DetailRow
                       label="Primary Tenant"
                       value={
@@ -468,35 +435,30 @@ export default function ContractDetailsPage() {
                     />
                     <DetailRow label="Bed Label" value={bedSpace?.bed_label} icon={DoorOpen} />
                   </div>
-                </div>
-              </Card>
+              </SectionCard>
 
               <div className="grid gap-6 md:grid-cols-2">
-                <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                  <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                      <Wallet size={14} aria-hidden />
-                    </div>
-                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Financial Terms</h2>
-                  </div>
-                  <div className="p-8 space-y-1">
+                <SectionCard
+                  title="Financial Terms"
+                  icon={Wallet}
+                  iconClassName="bg-emerald-50 text-emerald-600"
+                >
+                  <div className="space-y-1">
                     <DetailRow label="Deposit Amount" value={formatPHP(contract.deposit_amount)} icon={FileCheck} mono />
                     <DetailRow label="Monthly Rate" value={formatPHP(contract.monthly_rate)} icon={Receipt} mono />
                   </div>
-                </Card>
+                </SectionCard>
 
-                <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-                  <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                      <Calendar size={14} aria-hidden />
-                    </div>
-                    <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Contract Dates</h2>
-                  </div>
-                  <div className="p-8 space-y-1">
+                <SectionCard
+                  title="Contract Dates"
+                  icon={Calendar}
+                  iconClassName="bg-blue-50 text-blue-600"
+                >
+                  <div className="space-y-1">
                     <DetailRow label="Inception" value={formatDateString(contract.move_in_date)} icon={Calendar} />
                     <DetailRow label="Expected Out" value={contract.expected_move_out_date ? formatDateString(contract.expected_move_out_date) : "Open Ended"} icon={Calendar} />
                   </div>
-                </Card>
+                </SectionCard>
               </div>
 
               {contract.actual_move_out_date && (
@@ -529,18 +491,18 @@ export default function ContractDetailsPage() {
                   <div className="flex size-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
                     <History size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Payment History Ledger</h2>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Payment History</h2>
                 </div>
                 <div className="p-0">
                   <Table
                     embedded
                     caption="Payments posted against this contract"
                     columns={[
-                      { key: "payment_date", label: "Date" },
-                      { key: "amount", label: "Amount", className: "text-right" },
-                      { key: "period", label: "Billing Term" },
-                      { key: "status", label: "Status" },
-                      { key: "reference", label: "Reference" },
+                      { key: "payment_date", label: "DATE" },
+                      { key: "amount", label: "AMOUNT", className: "text-right" },
+                      { key: "period", label: "BILLING TERM" },
+                      { key: "status", label: "STATUS" },
+                      { key: "reference", label: "REFERENCE" },
                     ]}
                     rows={payments.map((p) => (
                       <tr
@@ -567,13 +529,11 @@ export default function ContractDetailsPage() {
                           </StatusBadge>
                         </td>
                         <td className="px-6 py-4">
-                           <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
-                            #PAY-{p.payment_id}
-                          </span>
+                          <ResourceIdCell id={p.payment_id} prefix="PAY" />
                         </td>
                       </tr>
                     ))}
-                    emptyTitle="Ledger Empty"
+                    emptyTitle="No Payments Yet"
                     emptyDescription="No payment records have been posted for this agreement."
                   />
                 </div>
@@ -595,6 +555,6 @@ export default function ContractDetailsPage() {
           </div>
         )}
       </motion.div>
-    </AppMain>
+    </StandardPage>
   );
 }

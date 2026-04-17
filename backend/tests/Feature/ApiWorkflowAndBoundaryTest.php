@@ -138,6 +138,32 @@ class ApiWorkflowAndBoundaryTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_active_contract_cannot_be_transitioned_via_update(): void
+    {
+        $contract = $this->makeActiveContract();
+
+        $this->actingAs($this->adminUser)->putJson("/api/contracts/{$contract->contract_id}", [
+            'status' => 'completed',
+        ])->assertUnprocessable();
+    }
+
+    public function test_active_contract_cannot_set_actual_move_out_via_update(): void
+    {
+        $contract = $this->makeActiveContract();
+
+        $this->actingAs($this->adminUser)->putJson("/api/contracts/{$contract->contract_id}", [
+            'actual_move_out' => '2026-08-01',
+        ])->assertUnprocessable();
+    }
+
+    public function test_active_contract_cannot_be_archived(): void
+    {
+        $contract = $this->makeActiveContract();
+
+        $this->actingAs($this->adminUser)->postJson("/api/contracts/{$contract->contract_id}/archive", [])
+            ->assertUnprocessable();
+    }
+
     public function test_billing_create_requires_non_empty_line_items(): void
     {
         $contract = $this->makeActiveContract();
@@ -155,7 +181,7 @@ class ApiWorkflowAndBoundaryTest extends TestCase
     public function test_contract_create_missing_required_fields_returns_422(): void
     {
         $this->actingAs($this->adminUser)->postJson('/api/contracts', [])->assertUnprocessable()
-            ->assertJsonValidationErrors(['tenant_id', 'room_id', 'move_in_date']);
+            ->assertJsonValidationErrors(['tenant_id', 'move_in_date']);
     }
 
     public function test_user_create_rejects_short_password(): void
@@ -233,7 +259,7 @@ class ApiWorkflowAndBoundaryTest extends TestCase
         $response = $this->actingAs($this->adminUser)->get('/api/audit-logs/export');
         $response->assertOk();
         $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
-        $this->assertStringContainsString('audit_log_id', $response->streamedContent());
+        $this->assertStringContainsString('ID', $response->streamedContent());
     }
 
     public function test_staff_cannot_export_audit_logs_csv(): void
@@ -372,7 +398,7 @@ class ApiWorkflowAndBoundaryTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'available',
+            'status' => 'vacant',
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
@@ -429,7 +455,7 @@ class ApiWorkflowAndBoundaryTest extends TestCase
             'room_type' => 'solo',
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'occupied',
+            'status' => 'fully_occupied',
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
@@ -442,6 +468,7 @@ class ApiWorkflowAndBoundaryTest extends TestCase
             'bed_space_id' => $bed->bed_space_id,
             'created_by' => $this->adminUser->user_id,
             'move_in_date' => '2026-04-01',
+            'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 0,
             'status' => 'active',
         ]);

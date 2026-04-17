@@ -1,48 +1,48 @@
-import { apiRequest, clearAuthToken } from "./api";
+import { apiRequest } from "./api";
+
+/**
+ * Authorization Helpers
+ * Sanitizes role comparison to prevent jank during replication or case-mismatches.
+ */
+const getRole = (user) => String(user?.role?.role_name || "").toLowerCase().trim();
 
 export function canManageContracts(user) {
-  const roleName = user?.role?.role_name;
-  return roleName === "admin" || roleName === "staff";
+  const role = getRole(user);
+  return role === "admin" || role === "staff";
 }
 
 export function canManageTenants(user) {
-  const roleName = user?.role?.role_name;
-  return roleName === "admin" || roleName === "staff";
+  const role = getRole(user);
+  return role === "admin" || role === "staff";
 }
 
 export function canManageRooms(user) {
-  const roleName = user?.role?.role_name;
-  return roleName === "admin" || roleName === "staff";
+  const role = getRole(user);
+  return role === "admin" || role === "staff";
 }
 
 export function canManageBilling(user) {
-  const roleName = user?.role?.role_name;
-  return roleName === "admin" || roleName === "staff";
+  const role = getRole(user);
+  return role === "admin" || role === "staff";
 }
 
 export function canManageUsers(user) {
-  const roleName = user?.role?.role_name;
-  return roleName === "admin";
+  const role = getRole(user);
+  return role === "admin";
 }
 
 export function canViewBilling(user) {
-  const roleName = user?.role?.role_name;
-  return roleName === "admin" || roleName === "staff" || roleName === "viewer";
+  const role = getRole(user);
+  return ["admin", "staff", "viewer"].includes(role);
 }
 
 export function canViewReports(user) {
-  const roleName = user?.role?.role_name;
-  return roleName === "admin" || roleName === "staff" || roleName === "viewer";
+  const role = getRole(user);
+  return ["admin", "staff", "viewer"].includes(role);
 }
 
 export async function fetchCurrentUser() {
-  try {
-    const data = await apiRequest("/api/auth/me", { method: "GET" });
-    return data?.user || null;
-  } catch (error) {
-    if (error?.status === 401) {
-      clearAuthToken();
-    }
-    throw error;
-  }
+  const data = await apiRequest("/api/auth/me", { method: "GET" });
+  if (!data) return null;
+  return data?.user || data;
 }
