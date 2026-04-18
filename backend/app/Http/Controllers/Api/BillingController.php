@@ -2,29 +2,29 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Billing\StoreBillingRequest;
 use App\Http\Requests\Billing\UpdateBillingStatusRequest;
 use App\Models\Billing;
-use App\Services\AuthorizationService;
-use App\Services\BillingService;
-use App\Services\PiiMaskingService;
-use App\Support\PaginationResponse;
+use App\Services\Identity\AuthorizationService;
+use App\Services\Operations\BillingService;
+use App\Services\Analytics\PiiMaskingService;
+use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class BillingController extends Controller
 {
-    use HandlesAuthorization;
-
     /**
+     * List billing records with comprehensive filtering and pagination.
+     * Authorized: Admin, Staff.
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function index(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewBilling($request->user())) {
-            return $this->forbidden($request, 'billing.view', 'Unauthorized: you do not have permission to view billing.');
-        }
+        AuthorizationService::ensureCanViewBilling($request->user());
 
         $validated = $request->validate(array_merge([
             'contract_id' => ['nullable', 'integer'],
@@ -34,9 +34,9 @@ class BillingController extends Controller
             'receivable_state' => ['nullable', 'string', 'in:all,current,past_due'],
             'past_due' => ['nullable', 'boolean'],
             'due_date' => ['nullable', 'date'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
-        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $pageParams = Pagination::normalizePageParams($validated);
         $filters = array_filter([
             'contract_id' => $validated['contract_id'] ?? null,
             'tenant_id' => $validated['tenant_id'] ?? null,
@@ -47,7 +47,6 @@ class BillingController extends Controller
         if (! empty($validated['receivable_state']) && $validated['receivable_state'] !== 'all') {
             $filters['receivable_state'] = $validated['receivable_state'];
         } elseif (! empty($validated['past_due'])) {
-            // Backward compatibility for older clients.
             $filters['receivable_state'] = 'past_due';
         }
 
@@ -60,23 +59,26 @@ class BillingController extends Controller
         $paginator = $query->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
 
         $paginator->through(function ($billing) use ($request) {
-            BillingService::quietAutoUpdateStatus($billing);
+            BillingService::syncBillingStatusFromAttributes($billing);
             $row = $billing->toArray();
             $row['balance'] = (float) (($row['total_amount'] ?? 0) - ($row['total_paid'] ?? 0));
 
             return PiiMaskingService::maskBillingNestedTenant($request->user(), $row);
         });
 
-        return PaginationResponse::fromPaginator($paginator);
+        return Pagination::fromPaginator($paginator);
     }
 
     /**
+     * Create a new manual billing entry.
+     * Authorized: Admin, Staff.
+     *
+     * @param StoreBillingRequest $request
+     * @return JsonResponse
      */
     public function store(StoreBillingRequest $request): JsonResponse
     {
-        if (! AuthorizationService::canManageBilling($request->user())) {
-            return $this->forbidden($request, 'billing.create', 'Unauthorized: only Admin or Staff can create billing entries.');
-        }
+        AuthorizationService::ensureCanManageBilling($request->user());
 
         $validated = $request->validated();
 
@@ -89,12 +91,16 @@ class BillingController extends Controller
     }
 
     /**
+     * Retrieve detailed billing information with related contract and payments.
+     * Authorized: Admin, Staff.
+     *
+     * @param Request $request
+     * @param Billing $billing
+     * @return JsonResponse
      */
     public function show(Request $request, Billing $billing): JsonResponse
     {
-        if (! AuthorizationService::canViewBilling($request->user())) {
-            return $this->forbidden($request, 'billing.view', 'Unauthorized: you do not have permission to view billing.');
-        }
+        AuthorizationService::ensureCanViewBilling($request->user());
 
         $loaded = BillingService::getById((int) $billing->billing_id);
         if (! $loaded) {
@@ -111,22 +117,37 @@ class BillingController extends Controller
         ]);
     }
 
-    /**
-     */
     public function updateStatus(UpdateBillingStatusRequest $request, Billing $billing): JsonResponse
     {
-        if (! AuthorizationService::canManageBilling($request->user())) {
-            return $this->forbidden($request, 'billing.update_status', 'Unauthorized: only Admin or Staff can recalculate billing status.');
-        }
+        AuthorizationService::ensureCanManageBilling($request->user());
 
         $billing->load(['lineItems', 'payments']);
-        $updated = BillingService::autoUpdateStatus($billing);
+        BillingService::syncBillingStatusFromAttributes($billing);
 
         return response()->json([
             'message' => 'Billing status recalculated successfully.',
-            'data' => tap(BillingService::getById((int) $updated->billing_id)?->toArray() ?? [], function (&$payload) {
+            'data' => tap(BillingService::getById((int) $billing->billing_id)?->toArray() ?? [], function (&$payload) {
                 $payload['balance'] = (float) (($payload['total_amount'] ?? 0) - ($payload['total_paid'] ?? 0));
             }),
         ]);
+    }
+
+    /**
+     * Initialize the first billing (1+1) for a contract.
+     *
+     * @param Request $request
+     * @param int $contractId
+     * @return JsonResponse
+     */
+    public function initialize(Request $request, int $contractId): JsonResponse
+    {
+        AuthorizationService::ensureCanManageBilling($request->user());
+
+        $billing = BillingService::initializeContractBilling($request->user(), $contractId);
+
+        return response()->json([
+            'message' => 'Initial billing setup (Advance Rent + Deposit) generated successfully.',
+            'data' => $billing,
+        ], 201);
     }
 }

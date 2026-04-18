@@ -3,11 +3,18 @@
 namespace App\Http\Requests\User;
 
 use App\Models\User;
+use App\Services\Identity\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validates data for updating an existing system user.
+ */
 class UpdateUserRequest extends FormRequest
 {
+    /**
+     * Authorized: Admin only.
+     */
     public function authorize(): bool
     {
         return true;

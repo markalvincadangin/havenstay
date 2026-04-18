@@ -1,7 +1,7 @@
 # HavenStay BHMS — Test Plan
 
-**Version:** 4.2  
-**Last Updated:** April 17, 2026  
+**Version:** 4.3  
+**Last Updated:** April 18, 2026  
 **Status:** Canonical validation registry and evidence quality standard
 
 ## 1. Purpose and Scope
@@ -16,13 +16,13 @@ The Test Plan is the **how** of validation. It maps the requirements defined in 
 
 | Artifact | Responsibility in Testing |
 | :--- | :--- |
-| `docs/SRS.md` v4.7 | Authoritative source for Functional (FR) and Non-Functional (NFR) requirements. |
-| `docs/SDD.md` v3.2 | Defines the technical design (Triggers, Views, Transactions) to be validated. |
+| `docs/SRS.md` v5.2 | Authoritative source for Functional (FR) and Non-Functional (NFR) requirements. |
+| `docs/SDD.md` v3.5 | Defines the technical design (Triggers, Views, Transactions) to be validated. |
 | `db/havenstay_schema.sql`| Canonical DDL for schema-assertive integration tests (`INT-*`). |
 
 ### 2.1 Forensic Evidence Requirements
 To satisfy course compliance, evidence for the following must be derived from a **MySQL 8.4+** environment:
-- **Triggers (CCR-008):** Verification of 24 row-level audit entries.
+- **Triggers (CCR-008):** Verification of 42 row-level audit entries.
 - **Transactions (CCR-007):** Verification of `started` and `committed/rolled_back` log pairs.
 - **Reporting (CCR-005):** Verification of 6 views for correct JOIN and aggregation logic.
 
@@ -100,7 +100,7 @@ These tests validate the integrity and auditability requirements (CCR-007, CCR-0
 | **TC-TX-004** | Tenant Move-out → Log `committed` | FR-035 |
 | **TC-TRIGGER-001**| After INSERT → New Audit Row | FR-034 |
 | **TC-TRIGGER-002**| After UPDATE → Old/New Snapshots | FR-034 |
-| **TC-TRIGGER-003**| Global coverage (24 triggers) | FR-034, CCR-008 |
+| **TC-TRIGGER-003**| Global coverage (42 triggers) | FR-034, CCR-008 |
 
 **TC-CCR-006:** Rollback prevents partial writes — covered by **TC-PAYMENT-003** (billing stays `unpaid` when payment invalid).
 
@@ -240,18 +240,18 @@ Use these for manual runs, Playwright, or TestSprite. Aligned with product route
 
 | CCR | Validation Evidence |
 | :--- | :--- |
-| **CCR-001** | Database Schema (11 Tables) in `havenstay_schema.sql` |
+| **CCR-001** | Database Schema (14 Tables) in `havenstay_schema.sql` |
 | **CCR-002** | Primary-Replica GTID topology implementation |
 | **CCR-003** | Automated CRUD verification across all 4 operational modules |
 | **CCR-004** | Date‑range and Wildcard Search implementation evidence |
 | **CCR-005** | Verification of 6 views for analytical consistency |
 | **CCR-006** | Transaction Rollback (ACID) verification via `TC-TX-003` |
 | **CCR-007** | Transaction Log pair verification (`started` → `committed`) |
-| **CCR-008** | Audit Trigger verification (24 triggers producing snapshots) |
+| **CCR-008** | Audit Trigger verification (42 triggers producing snapshots) |
 
 ---
 
-## 11. Execution Commands
+## 12. Execution Commands
 
 ```bash
 # Backend — default (SQLite)
@@ -266,15 +266,16 @@ cd frontend && npm test && npm run lint
 
 ---
 
-## 12. Revision History
+## 13. Revision History
 
 | Version | Date | Changes |
 | :--- | :--- | :--- |
 | 3.3 | 2026-04-17 | Core-doc standardization pass: aligned traceability ranges to SRS v4.1 requirement expansion and added explicit coverage-confidence notes for evidence quality governance. |
 | 4.1 | 2026-04-17 | Final audit alignment: corrected trigger count to 24; synchronized traceability mapping; verified RBAC visibility for user management. |
 | 4.2 | 2026-04-17 | Final audit-ready pass: implemented NFR verification matrix with explicit thresholds; synchronized all version pointers to SRS v4.6 and SDD v3.2 baseline. |
+| 4.3 | 2026-04-18 | Forensic Lock. Synchronized to 14 tables and 42 triggers; updated compliance mapping for Philippine Compliance entities; fixed section numbering. |
 
 ---
 
-*Aligned to: SRS.md v4.7 · SDD.md v3.2 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.2*  
-*Last Updated: April 17, 2026 (v4.2 — final audit alignment pass)*
+*Aligned to: SRS.md v5.2 · SDD.md v3.5 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.4*  
+*Last Updated: April 18, 2026 (v4.3 — final forensic lock pass)*

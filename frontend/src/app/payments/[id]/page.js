@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { apiRequest, fetcher } from "../../../lib/api";
+import { useSWRConfig } from "swr";
 import { canManageBilling, canViewBilling } from "../../../lib/auth";
 import { formatDateRange, formatDateString, formatPHP } from "../../../lib/formatters";
 import Alert from "../../_components/ui/Alert";
@@ -30,6 +31,7 @@ import StandardPage from "../../_components/ui/StandardPage";
 import ResourceIdCell from "../../_components/ui/ResourceIdCell";
 import PageHeaderActions from "../../_components/ui/PageHeaderActions";
 import { useAuth } from "../../_context/AuthContext";
+import ConfirmationDialog from "../../_components/ui/ConfirmationDialog";
 
 function paymentStatus(p) {
   return p?.voided_at ? "voided" : "posted";
@@ -70,11 +72,11 @@ export default function PaymentDetailPage() {
   const [voidReason, setVoidReason] = useState("");
   const [isVoiding, setIsVoiding] = useState(false);
 
+  const { mutate: globalMutate } = useSWRConfig();
   const loadPayment = () => refetchPayment();
 
   const handleVoid = async () => {
     if (!voidReason.trim()) {
-      alert("Please provide a reason for voiding this payment.");
       return;
     }
 
@@ -86,6 +88,7 @@ export default function PaymentDetailPage() {
         body: JSON.stringify({ void_reason: voidReason }),
       });
       await loadPayment();
+      globalMutate(key => typeof key === 'string' && key.startsWith('/api/billing'));
       setIsVoiding(false);
     } catch (error) {
       setActionError(error?.message || "Failed to void payment.");
@@ -169,46 +172,34 @@ export default function PaymentDetailPage() {
 
         {actionError && <Alert variant="error" title="Action failed">{actionError}</Alert>}
 
-        {isVoiding && (
-          <Card className="border-rose-200 bg-rose-50/50 p-6 sm:p-8">
-             <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-2">
-                   <div className="flex items-center gap-2 text-rose-700">
-                      <AlertCircle size={20} />
-                      <h3 className="font-black uppercase tracking-widest text-sm">Void Payment</h3>
-                   </div>
-                   <p className="text-sm font-medium text-rose-600/80 leading-relaxed max-w-xl">
-                      You are about to void this payment. This restores the balance on the linked billing record and keeps the audit history intact.
-                   </p>
-                </div>
-                <div className="flex items-center gap-3">
-                   <Button variant="secondary" onClick={() => setIsVoiding(false)} disabled={voidLoading} className="!h-10 rounded-xl px-6">
-                      Cancel
-                   </Button>
-                   <Button variant="danger" onClick={handleVoid} loading={voidLoading} className="!h-10 rounded-xl px-8 shadow-lg shadow-rose-900/10">
-                      Confirm Void
-                   </Button>
-                </div>
-             </div>
-             <div className="mt-6">
-                <label className="text-[10px] font-black uppercase tracking-widest text-rose-700/60 block mb-2 px-1">Void Reason</label>
-                <input 
-                  type="text"
-                  placeholder="e.g. Duplicate entry, wrong amount, incorrect billing link..."
-                  value={voidReason}
-                  onChange={(e) => setVoidReason(e.target.value)}
-                  className="w-full h-12 bg-white border border-rose-200 rounded-xl px-4 text-sm font-medium focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500/50 outline-none transition-all"
-                  autoFocus
-                />
-             </div>
-          </Card>
-        )}
+        <ConfirmationDialog
+          open={isVoiding}
+          title="Void Payment Record"
+          message="This action will reverse the collection and restore the balance on the linked billing record. This transaction will be permanently marked as voided."
+          confirmLabel="Confirm Void"
+          isDanger
+          isLoading={voidLoading}
+          onConfirm={handleVoid}
+          onCancel={() => !voidLoading && setIsVoiding(false)}
+        >
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 block px-1">Reason for reversal</label>
+            <input 
+              type="text"
+              placeholder="e.g. Duplicate entry, wrong amount…"
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              className="w-full h-11 bg-stone-50 border border-stone-200 rounded-xl px-4 text-sm font-medium focus:ring-4 focus:ring-teal-500/5 focus:border-teal-500/50 outline-none transition-all"
+              autoFocus
+            />
+          </div>
+        </ConfirmationDialog>
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1 space-y-6">
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 bg-stone-900 shadow-xl shadow-stone-900/10">
+            <Card className="!p-0 overflow-hidden bg-stone-900 rounded-2xl shadow-xl">
               <div className="bg-stone-800/50 p-6 flex items-center justify-between border-b border-stone-800">
-                <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Payment Summary</p>
+                <p className="hs-strip-title uppercase tracking-widest text-[10px] font-black text-stone-500">Payment Summary</p>
                 <StatusBadge size="sm">{status}</StatusBadge>
               </div>
               <div className="p-8 text-white space-y-6">
@@ -233,7 +224,7 @@ export default function PaymentDetailPage() {
 
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
               <div className="border-b border-stone-100 bg-stone-50/50 px-6 py-4">
-                <h3 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Record History</h3>
+                <h3 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">Record History</h3>
               </div>
               <div className="p-6 space-y-5">
                 <MetricItem label="Recorded On">
@@ -257,7 +248,7 @@ export default function PaymentDetailPage() {
                 <div className="flex size-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                   <User size={16} aria-hidden />
                 </div>
-                <h3 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Tenant Details</h3>
+                <h3 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">Tenant Details</h3>
               </div>
               <div className="grid gap-8 p-8 sm:grid-cols-2">
                 <div className="space-y-6">
@@ -284,7 +275,7 @@ export default function PaymentDetailPage() {
                 <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                   <Receipt size={16} aria-hidden />
                 </div>
-                <h3 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Linked Billing</h3>
+                <h3 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">Linked Billing</h3>
               </div>
               <div className="p-8 space-y-8">
                 <div className="grid gap-6 sm:grid-cols-2">

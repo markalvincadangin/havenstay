@@ -2,10 +2,17 @@
 
 namespace App\Http\Requests\Contract;
 
+use App\Services\Identity\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 
+/**
+ * Validates data for creating a new tenant lease/contract.
+ */
 class StoreContractRequest extends FormRequest
 {
+    /**
+     * Authorized: Admin, Staff.
+     */
     public function authorize(): bool
     {
         return true;
@@ -22,6 +29,7 @@ class StoreContractRequest extends FormRequest
             'deposit_amount' => ['nullable', 'numeric', 'min:0'],
             'monthly_rate_override' => ['nullable', 'numeric', 'min:0'],
             'monthly_rate' => ['nullable', 'numeric', 'min:0'],
+            'initialize_billing' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string'],
         ];
     }

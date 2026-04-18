@@ -128,3 +128,23 @@ export function Textarea({ className = "", hasError = false, ...props }) {
     />
   );
 }
+
+/**
+ * Checkbox — custom toggle with text label.
+ */
+export function Checkbox({ label, className = "", ...props }) {
+  return (
+    <label className={`flex cursor-pointer items-start gap-3 select-none ${className}`}>
+      <div className="relative flex items-center h-5">
+        <input
+          type="checkbox"
+          className="peer h-5 w-5 cursor-pointer rounded border-stone-300 text-teal-600 focus:ring-teal-500 focus:ring-offset-0"
+          {...props}
+        />
+      </div>
+      <span className="text-sm font-medium text-stone-700 leading-tight">
+        {label}
+      </span>
+    </label>
+  );
+}

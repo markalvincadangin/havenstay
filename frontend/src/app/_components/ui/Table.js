@@ -52,8 +52,9 @@ export function Table({
                   key={col.key}
                   scope="col"
                   className={[
-                    "px-6 py-4 text-[10px] font-bold tracking-widest text-stone-400 uppercase",
-                    col.className?.includes("text-right") ? "text-right" : "text-left",
+                    "px-6 py-2.5 text-[9px] font-black tracking-[0.15em] text-stone-400 uppercase border-b border-stone-100",
+                    col.className?.includes("text-right") ? "text-right" : 
+                    col.className?.includes("text-center") ? "text-center" : "text-left",
                     col.headerClassName,
                   ]
                     .filter(Boolean)
@@ -72,8 +73,9 @@ export function Table({
                     <button
                       type="button"
                       className={[
-                        "inline-flex max-w-full items-center gap-1.5 rounded-md py-0.5 font-inherit tracking-widest text-stone-400 transition-colors hover:text-stone-700",
-                        col.className?.includes("text-right") ? "ml-auto" : "",
+                        "max-w-full items-center gap-1.5 rounded-md py-0.5 font-inherit tracking-widest text-stone-400 transition-colors hover:text-stone-700",
+                        col.className?.includes("text-right") ? "flex w-full justify-end" : 
+                        col.className?.includes("text-center") ? "flex w-full justify-center" : "inline-flex",
                       ]
                         .filter(Boolean)
                         .join(" ")}

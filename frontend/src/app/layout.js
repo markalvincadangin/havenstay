@@ -1,6 +1,6 @@
 import { DM_Sans, DM_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import AppFrame from "./_components/AppFrame";
+import AppFrame from "./_components/layout/AppFrame";
 import { AuthProvider } from "./_context/AuthContext";
 
 const plusJakartaSans = Plus_Jakarta_Sans({

@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 
-## Design System — Master Specification — v4.7.4 (SRS/SDD–aligned)
+## Design System — Master Specification — v5.0.0 (Forensic Hardening Pass)
 
-> **What this document is:** The **visual, interaction, and component** specification for the HavenStay **frontend**. It implements the user-facing intent of **[docs/SRS.md](../../docs/SRS.md)** (especially **Section 2** Overall Description, **Section 3.1** User Interface), stays consistent with **[docs/SDD.md](../../docs/SDD.md)** (Sections **1–3**, **Design goals**, module breakdown), and should be applied together with **[docs/FRONTEND_CODING_BLUEPRINT.md](../../docs/FRONTEND_CODING_BLUEPRINT.md)** for implementation conventions. It does **not** replace the SRS or SDD for functional or backend behavior.
+> **What this document is:** The **visual, interaction, and component** specification for the HavenStay **frontend**. It implements the user-facing intent of **[docs/SRS.md](../../docs/SRS.md)** (especially **Section 2** Overall Description, **Section 3.1** User Interface), stays consistent with **[docs/SDD.md](../../docs/SDD.md)** (Sections **1–3**, **Design goals**, module breakdown), and is synchronized with the **havenstay_schema.sql v3.0** (14-table forensic architecture).
 
 ### Why “Command Center” is not the product name
 
@@ -101,8 +101,9 @@ Palette aligns with **Tailwind stone** + **teal** and with `**:root` variables**
 | **Table column headers**           | DM Sans                               | `text-[10px] font-black uppercase tracking-widest text-stone-400`                                                                                             |
 | **Compact strip labels** (filters) | DM Sans                               | Same 10px bold uppercase; optional `tracking-[0.2em]` **only** on narrow strips—do not mix a third tracking scale on the same tier                           |
 | **Breadcrumb row**                 | DM Sans                               | `text-[10px] font-bold uppercase tracking-wide` + **`[word-spacing:0.12em]`** (implemented on `Breadcrumbs` nav)—looser than `tracking-widest`             |
-| **Registry / mono IDs**            | DM Mono                               | `font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400` — prefixes: `#TENANT-{id}`, `#ROOM-{id}`, `#CONTRACT-{id}`, `#USER-{id}`, `#AUDIT-{id}`, `#TX-{id}`, `#BS-{bed_space_id}` |
+| **Registry / mono IDs**            | DM Mono                               | `font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400` — prefixes: `#TENANT-{id}`, `#ROOM-{id}`, `#CONTRACT-{id}`, `#USER-{id}`, `#AUDIT-{id}`, `#TX-{id}`, `#BS-{bed_space_id}`, `#BILL-{id}`, `#PAY-{id}` |
 | **Money & numeric columns**        | DM Mono                               | `font-mono tabular-nums` — use utility `text-tabular` where helpful                                                                                          |
+| **Forensic Labels**                | DM Sans                               | `text-[10px] font-black uppercase tracking-widest text-stone-400` — used for meter reading types, appliance categories, and audit metadata. |
 | **Search UI Pattern**              | DM Sans + Icons                       | `Input` with `icon={Search}` — automated **group-focus** teal coloration for primary search wells                                                         |
 | **Empty State copy**               | DM Sans                               | `text-sm font-bold text-stone-900` (title) + `text-xs text-stone-500` (guidance)                                                                           |
 
@@ -645,8 +646,9 @@ The `KpiCard` is the authoritative component for presenting high-level metrics. 
 
 | Version | Summary                                                                                |
 | ------- | -------------------------------------------------------------------------------------- |
+| v5.0.0  | **Forensic Backend Synchronization**: Updated all references to the canonical 14-table schema and 42-trigger suite; Integrated "Forensic Frictionless" aesthetic for meter reading and billing wizard components. |
 | v4.7.5  | Added UX quality gates based on current standards: plain-language labels, dashboard readability heuristics, and WCAG 2.2 interaction/accessibility checks; strengthened page-spec completeness guidance. |
-| v4.7.4  | **§5.5–§5.6** / **§19** / **§22** / footer: link CTAs documented as **`LinkTokens.js`** (replaces stale `primaryLinkClasses.js`); remove obsolete **`frontend/src/components/ui/`** path; **§18.2** page title table — **Transaction logs** naming. Canonical DDL comment: **CCR-001 11 tables** (aligned to `docs/SDD.md` §4.2). |
+| v4.7.4  | **§5.5–§5.6** / **§19** / **§22** / footer: link CTAs documented as **`LinkTokens.js`** (replaces stale `primaryLinkClasses.js`); remove obsolete **`frontend/src/components/ui/`** path; **§18.2** page title table — **Transaction logs** naming. Canonical DDL comment: **CCR-001 14 tables** (aligned to `havenstay_schema.sql`). |
 | v4.7.3  | **§5.8.2** / **§18.2**: separate Audit trail vs **Transaction logs** routes; **Filters** strip standard; **§26** copy — trail typography + run detail (no “forensic” UX labels); `pages/transaction_logs.md` rewritten to match app + schema. |
 | v4.7.2  | Correlation **filters** (audit `correlation`, transaction `q`); **`CorrelationIdCell`** chip + a11y copy feedback; column header tooltips. |
 | v4.7.1  | **§5.8.2** Audit & transaction tables: **Correlation** column (`correlation_id`), **`CorrelationIdCell`** primitive. |

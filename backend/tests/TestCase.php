@@ -27,10 +27,41 @@ abstract class TestCase extends BaseTestCase
     protected function tenantAttributes(array $overrides = []): array
     {
         return array_merge([
+            'first_name' => 'John',
+            'last_name' => 'Doe',
             'email' => 'test@example.com',
+            'contact_number' => '+639000000000',
             'emergency_contact_name' => 'Test Emergency Contact',
             'emergency_contact_number' => '+639000000001',
             'address' => '123 Test Street, Quezon City',
+        ], $overrides);
+    }
+
+    protected function roomAttributes(array $overrides = []): array
+    {
+        return array_merge([
+            'room_code' => 'R101',
+            'room_type' => 'shared',
+            'monthly_rate' => 5000,
+            'status' => 'active',
+        ], $overrides);
+    }
+
+    protected function bedSpaceAttributes(array $overrides = []): array
+    {
+        return array_merge([
+            'bed_label' => 'B1',
+            'status' => 'vacant',
+        ], $overrides);
+    }
+
+    protected function contractAttributes(array $overrides = []): array
+    {
+        return array_merge([
+            'move_in_date' => now()->toDateString(),
+            'monthly_rate_override' => null,
+            'deposit_amount' => 5000,
+            'status' => 'pending_payment',
         ], $overrides);
     }
 

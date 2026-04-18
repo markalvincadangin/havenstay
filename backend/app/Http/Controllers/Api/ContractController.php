@@ -2,38 +2,38 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Contract\MoveOutRequest;
 use App\Http\Requests\Contract\StoreContractRequest;
 use App\Http\Requests\Contract\UpdateContractRequest;
 use App\Models\Contract;
-use App\Services\AuthorizationService;
-use App\Services\ContractService;
-use App\Services\PiiMaskingService;
-use App\Support\PaginationResponse;
+use App\Services\Analytics\PiiMaskingService;
+use App\Services\Identity\AuthorizationService;
+use App\Services\Operations\ContractService;
+use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ContractController extends Controller
 {
-    use HandlesAuthorization;
-
     /**
+     * List all contracts with deep filtering and pagination.
+     * Authorized: Admin, Staff.
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function index(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewContracts($request->user())) {
-            return $this->forbidden($request, 'contracts.list', 'Unauthorized: you do not have permission to view contracts.');
-        }
+        AuthorizationService::ensureCanViewContracts($request->user());
 
         $validated = $request->validate(array_merge([
             'tenant_id' => ['nullable', 'integer'],
             'status' => ['nullable', 'string', 'max:32'],
             'q' => ['nullable', 'string', 'max:200'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
-        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $pageParams = Pagination::normalizePageParams($validated);
 
         $paginator = ContractService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
 
@@ -43,16 +43,12 @@ class ContractController extends Controller
             return PiiMaskingService::maskContractNestedTenant($request->user(), $row);
         });
 
-        return PaginationResponse::fromPaginator($paginator);
+        return Pagination::fromPaginator($paginator);
     }
 
-    /**
-     */
     public function store(StoreContractRequest $request): JsonResponse
     {
-        if (! AuthorizationService::canManageContracts($request->user())) {
-            return $this->forbidden($request, 'contracts.create', 'Unauthorized: only Admin or Staff can create contracts.');
-        }
+        AuthorizationService::ensureCanManageContracts($request->user());
 
         $validated = $request->validated();
 
@@ -64,16 +60,12 @@ class ContractController extends Controller
         ], 201);
     }
 
-    /**
-     */
     public function show(Request $request, Contract $contract): JsonResponse
     {
-        if (! AuthorizationService::canViewContracts($request->user())) {
-            return $this->forbidden($request, 'contracts.view', 'Unauthorized: you do not have permission to view contracts.');
-        }
+        AuthorizationService::ensureCanViewContracts($request->user());
 
         $loaded = ContractService::getById((int) $contract->contract_id);
-        if (! $loaded) {
+        if (!$loaded) {
             return response()->json(['message' => 'Contract not found.'], 404);
         }
 
@@ -85,13 +77,9 @@ class ContractController extends Controller
         ]);
     }
 
-    /**
-     */
     public function moveOut(MoveOutRequest $request, Contract $contract): JsonResponse
     {
-        if (! AuthorizationService::canManageContracts($request->user())) {
-            return $this->forbidden($request, 'contracts.move_out', 'Unauthorized: only Admin or Staff can process move-out.');
-        }
+        AuthorizationService::ensureCanManageContracts($request->user());
 
         $validated = $request->validated();
 
@@ -104,47 +92,42 @@ class ContractController extends Controller
     }
 
     /**
+     * Activate a contract (Post-payment verification)
      */
+    public function activate(Request $request, Contract $contract): JsonResponse
+    {
+        AuthorizationService::ensureCanManageContracts($request->user());
+
+        $contract = ContractService::activate($request->user(), $contract);
+
+        return response()->json([
+            'message' => 'Contract activated. Tenant bed space is now occupied.',
+            'data' => $contract,
+        ]);
+    }
+
     public function update(UpdateContractRequest $request, Contract $contract): JsonResponse
     {
-        if (! AuthorizationService::canManageContracts($request->user())) {
-            return $this->forbidden($request, 'contracts.update', 'Unauthorized: only Admin or Staff can update contracts.');
-        }
+        AuthorizationService::ensureCanManageContracts($request->user());
 
         $validated = $request->validated();
 
-        // Active contracts must be completed via the dedicated move-out workflow.
-        // This prevents bypassing bed/vacancy synchronization and weakens audit traceability.
-        if ((string) $contract->status === 'active') {
-            if (array_key_exists('status', $validated) && $validated['status'] !== 'active') {
+        if ($contract->status === Contract::STATUS_ACTIVE) {
+            if (array_key_exists('status', $validated) && $validated['status'] !== Contract::STATUS_ACTIVE) {
                 return response()->json([
                     'message' => 'Active contracts cannot be transitioned via contract update. Process move-out first.',
                 ], 422);
             }
 
-            // Even if `status` is not changed, setting `actual_move_out` is part of completing a stay.
-            if (array_key_exists('actual_move_out', $validated) && ! empty($validated['actual_move_out'])) {
+            // Even if `status` is not changed, setting `actual_move_out_date` is part of completing a stay.
+            if (array_key_exists('actual_move_out_date', $validated) && !empty($validated['actual_move_out_date'])) {
                 return response()->json([
                     'message' => 'Active contracts cannot set actual move-out date via contract update. Process move-out first.',
                 ], 422);
             }
         }
 
-        $mapped = $validated;
-        if (array_key_exists('expected_move_out', $mapped)) {
-            $mapped['expected_move_out_date'] = $mapped['expected_move_out'];
-            unset($mapped['expected_move_out']);
-        }
-        if (array_key_exists('actual_move_out', $mapped)) {
-            $mapped['actual_move_out_date'] = $mapped['actual_move_out'];
-            unset($mapped['actual_move_out']);
-        }
-        if (array_key_exists('monthly_rate', $mapped) && ! array_key_exists('monthly_rate_override', $mapped)) {
-            $mapped['monthly_rate_override'] = $mapped['monthly_rate'];
-        }
-        unset($mapped['monthly_rate']);
-
-        $contract = ContractService::update($request->user(), $contract, $mapped);
+        $contract = ContractService::update($request->user(), $contract, $validated);
 
         return response()->json([
             'message' => 'Contract updated successfully.',
@@ -157,9 +140,7 @@ class ContractController extends Controller
      */
     public function archive(Request $request, Contract $contract): JsonResponse
     {
-        if (! AuthorizationService::canManageContracts($request->user())) {
-            return $this->forbidden($request, 'contracts.archive', 'Unauthorized: only Admin or Staff can archive contracts.');
-        }
+        AuthorizationService::ensureCanManageContracts($request->user());
 
         $contract = ContractService::archive($request->user(), $contract);
 
@@ -174,9 +155,7 @@ class ContractController extends Controller
      */
     public function restore(Request $request, int $id): JsonResponse
     {
-        if (! AuthorizationService::canManageContracts($request->user())) {
-            return $this->forbidden($request, 'contracts.restore', 'Unauthorized: only Admin or Staff can restore contracts.');
-        }
+        AuthorizationService::ensureCanManageContracts($request->user());
 
         $contract = ContractService::restore($request->user(), $id);
 

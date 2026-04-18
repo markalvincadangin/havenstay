@@ -3,11 +3,18 @@
 namespace App\Http\Requests\Room;
 
 use App\Models\Room;
+use App\Services\Identity\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validates data for updating room properties and bed configurations.
+ */
 class UpdateRoomRequest extends FormRequest
 {
+    /**
+     * Authorized: Admin, Staff.
+     */
     public function authorize(): bool
     {
         return true;

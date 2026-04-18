@@ -18,9 +18,14 @@ return new class extends Migration
         if (DB::getDriverName() === 'mysql') {
             $sql = file_get_contents(database_path('sql/havenstay_schema.sql'));
             
+            // Clean up DELIMITER statements which are not supported by the PDO driver
+            $sql = preg_replace('/DELIMITER\s+\$\$/i', '', $sql);
+            $sql = preg_replace('/DELIMITER\s+;/i', '', $sql);
+            $sql = str_replace('$$', ';', $sql);
+
             try {
                 DB::statement('SET GLOBAL log_bin_trust_function_creators = 1');
-            } catch (Throwable) {
+            } catch (\Throwable) {
                 // Ignore if not permitted
             }
             
@@ -41,6 +46,8 @@ return new class extends Migration
 
     private function createTables(): void
     {
+        // ── SECTION 1: CORE ENTITIES ──
+
         Schema::create('roles', function (Blueprint $table) {
             $table->increments('role_id');
             $table->string('role_name', 50)->unique();
@@ -61,6 +68,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
             $table->foreign('role_id')->references('role_id')->on('roles');
+            $table->index(['last_name', 'first_name'], 'idx_user_name');
         });
 
         Schema::create('tenants', function (Blueprint $table) {
@@ -75,6 +83,8 @@ return new class extends Migration
             $table->string('status', 20)->default('active');
             $table->timestamps();
             $table->softDeletes();
+            $table->index(['last_name', 'first_name'], 'idx_tenant_name');
+            $table->index('status', 'idx_tenant_status');
         });
 
         Schema::create('rooms', function (Blueprint $table) {
@@ -88,6 +98,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->timestamps();
             $table->softDeletes();
+            $table->index('status', 'idx_room_status');
         });
 
         Schema::create('bed_spaces', function (Blueprint $table) {
@@ -96,8 +107,9 @@ return new class extends Migration
             $table->string('bed_label', 20);
             $table->string('status', 20)->default('vacant');
             $table->timestamps();
-            $table->unique(['room_id', 'bed_label']);
-            $table->foreign('room_id')->references('room_id')->on('rooms');
+            $table->unique(['room_id', 'bed_label'], 'uq_bed_per_room');
+            $table->foreign('room_id')->references('room_id')->on('rooms')->onDelete('restrict');
+            $table->index(['room_id', 'status'], 'idx_bed_status');
         });
 
         Schema::create('contracts', function (Blueprint $table) {
@@ -110,14 +122,20 @@ return new class extends Migration
             $table->date('actual_move_out_date')->nullable();
             $table->decimal('deposit_amount', 10, 2)->default(0.00);
             $table->decimal('monthly_rate_override', 10, 2)->nullable();
-            $table->string('status', 20)->default('active');
+            $table->string('status', 20)->default('pending_payment');
+            $table->boolean('is_cleared')->default(false);
             $table->text('notes')->nullable();
             $table->timestamps();
             $table->softDeletes();
-            $table->foreign('tenant_id')->references('tenant_id')->on('tenants');
-            $table->foreign('bed_space_id')->references('bed_space_id')->on('bed_spaces');
-            $table->foreign('created_by')->references('user_id')->on('users');
+            $table->foreign('tenant_id')->references('tenant_id')->on('tenants')->onDelete('restrict');
+            $table->foreign('bed_space_id')->references('bed_space_id')->on('bed_spaces')->onDelete('restrict');
+            $table->foreign('created_by')->references('user_id')->on('users')->onDelete('restrict');
+            $table->index(['tenant_id', 'status'], 'idx_contract_tenant');
+            $table->index(['bed_space_id', 'status'], 'idx_contract_bed');
+            $table->index('created_by', 'idx_contract_owner');
         });
+
+        // ── FINANCIAL ENTITIES (billing before room_meter_readings for FK order) ──
 
         Schema::create('billing', function (Blueprint $table) {
             $table->increments('billing_id');
@@ -127,7 +145,10 @@ return new class extends Migration
             $table->date('due_date');
             $table->string('status', 20)->default('unpaid');
             $table->timestamps();
+            $table->unique(['contract_id', 'billing_period_from', 'billing_period_to'], 'uq_billing_cycle');
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
+            $table->index(['contract_id', 'status'], 'idx_billing_status');
+            $table->index('due_date', 'idx_billing_due');
         });
 
         Schema::create('billing_line_items', function (Blueprint $table) {
@@ -138,6 +159,7 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->timestamps();
             $table->foreign('billing_id')->references('billing_id')->on('billing');
+            $table->index('billing_id', 'idx_line_billing');
         });
 
         Schema::create('payments', function (Blueprint $table) {
@@ -154,9 +176,52 @@ return new class extends Migration
             $table->string('void_reason', 255)->nullable();
             $table->timestamp('created_at')->useCurrent();
             $table->foreign('billing_id')->references('billing_id')->on('billing');
-            $table->foreign('processed_by')->references('user_id')->on('users');
-            $table->foreign('voided_by')->references('user_id')->on('users');
+            $table->foreign('processed_by')->references('user_id')->on('users')->onDelete('restrict');
+            $table->foreign('voided_by')->references('user_id')->on('users')->onDelete('restrict');
+            $table->index(['billing_id', 'payment_date'], 'idx_payment_billing_date');
+            $table->index('voided_at', 'idx_payment_void');
         });
+
+        // ── ADD-ON ENTITIES ──
+
+        Schema::create('add_on_registry', function (Blueprint $table) {
+            $table->increments('add_on_id');
+            $table->string('item_name', 100)->unique();
+            $table->decimal('default_monthly_rate', 10, 2);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+
+        Schema::create('contract_add_ons', function (Blueprint $table) {
+            $table->increments('id');
+            $table->unsignedInteger('contract_id');
+            $table->unsignedInteger('add_on_id');
+            $table->decimal('actual_rate', 10, 2);
+            $table->timestamps();
+            $table->unique(['contract_id', 'add_on_id'], 'uq_contract_addon');
+            $table->foreign('contract_id')->references('contract_id')->on('contracts')->onDelete('restrict');
+            $table->foreign('add_on_id')->references('add_on_id')->on('add_on_registry')->onDelete('restrict');
+        });
+
+        // ── UTILITY READINGS ──
+
+        Schema::create('room_meter_readings', function (Blueprint $table) {
+            $table->increments('reading_id');
+            $table->unsignedInteger('room_id');
+            $table->unsignedInteger('billing_id')->nullable();
+            $table->string('utility_type', 20);
+            $table->date('reading_date');
+            $table->decimal('reading_value', 12, 4);
+            $table->unsignedInteger('recorded_by');
+            $table->timestamps();
+            $table->foreign('room_id')->references('room_id')->on('rooms')->onDelete('restrict');
+            $table->foreign('billing_id')->references('billing_id')->on('billing')->nullOnDelete();
+            $table->foreign('recorded_by')->references('user_id')->on('users')->onDelete('restrict');
+            $table->index(['room_id', 'utility_type', 'reading_date'], 'idx_rmr_lookup');
+            $table->index('billing_id', 'idx_rmr_billing');
+        });
+
+        // ── FORENSIC INFRASTRUCTURE ──
 
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->bigIncrements('id');
@@ -169,6 +234,10 @@ return new class extends Migration
             $table->string('correlation_id', 64)->nullable();
             $table->timestamp('changed_at')->useCurrent();
             $table->foreign('changed_by')->references('user_id')->on('users')->nullOnDelete();
+            $table->index(['target_table', 'record_id'], 'idx_audit_target');
+            $table->index('changed_at', 'idx_audit_time');
+            $table->index('correlation_id', 'idx_audit_correlation');
+            $table->index('changed_by', 'idx_audit_actor');
         });
 
         Schema::create('transaction_logs', function (Blueprint $table) {
@@ -182,28 +251,146 @@ return new class extends Migration
             $table->string('correlation_id', 64)->nullable();
             $table->timestamp('created_at')->useCurrent();
             $table->foreign('initiated_by')->references('user_id')->on('users')->nullOnDelete();
+            $table->index(['status', 'created_at'], 'idx_txn_status');
+            $table->index('txn_reference', 'idx_txn_ref');
+            $table->index('correlation_id', 'idx_txn_correlation');
+            $table->index('initiated_by', 'idx_txn_actor');
         });
     }
 
+    /**
+     * SQLite-compatible reporting views.
+     * Uses || for concatenation (SQLite syntax).
+     * Column sets and WHERE filters match havenstay_schema.sql views exactly.
+     */
     private function createViews(): void
     {
-        $v1 = "CREATE VIEW vw_billing_summary AS SELECT b.billing_id, b.billing_period_from, b.billing_period_to, b.due_date, b.status AS billing_status, c.contract_id, t.tenant_id, t.last_name || ', ' || t.first_name AS tenant_name, t.email, r.room_id, r.room_code, bs.bed_space_id, bs.bed_label, COALESCE((SELECT SUM(amount) FROM billing_line_items WHERE billing_id = b.billing_id), 0.00) AS total_amount, COALESCE((SELECT SUM(amount_paid) FROM payments WHERE billing_id = b.billing_id AND voided_at IS NULL), 0.00) AS total_paid FROM billing b INNER JOIN contracts c ON b.contract_id = c.contract_id INNER JOIN tenants t ON c.tenant_id = t.tenant_id INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id INNER JOIN rooms r ON bs.room_id = r.room_id";
-        DB::statement($v1);
+        // vw_billing_summary — complete financial profile per billing cycle
+        DB::statement("CREATE VIEW vw_billing_summary AS
+            SELECT
+                b.billing_id,
+                b.billing_period_from,
+                b.billing_period_to,
+                b.due_date,
+                b.status        AS billing_status,
+                c.contract_id,
+                t.tenant_id,
+                t.last_name || ', ' || t.first_name AS tenant_name,
+                t.email,
+                r.room_id,
+                r.room_code,
+                bs.bed_space_id,
+                bs.bed_label,
+                COALESCE((SELECT SUM(bli.amount) FROM billing_line_items bli WHERE bli.billing_id = b.billing_id), 0.00) AS total_amount,
+                COALESCE((SELECT SUM(p.amount_paid) FROM payments p WHERE p.billing_id = b.billing_id AND p.voided_at IS NULL), 0.00) AS total_paid
+            FROM billing b
+            INNER JOIN contracts  c  ON b.contract_id  = c.contract_id
+            INNER JOIN tenants    t  ON c.tenant_id     = t.tenant_id
+            INNER JOIN bed_spaces bs ON c.bed_space_id  = bs.bed_space_id
+            INNER JOIN rooms      r  ON bs.room_id      = r.room_id
+            WHERE c.deleted_at IS NULL");
 
-        $v2 = "CREATE VIEW vw_active_contracts AS SELECT c.contract_id, c.move_in_date, t.tenant_id, t.last_name || ', ' || t.first_name AS tenant_name, t.contact_number, t.email, r.room_id, r.room_code, COALESCE(c.monthly_rate_override, r.monthly_rate) as monthly_rate, bs.bed_space_id, bs.bed_label, bs.status AS bed_status FROM contracts c INNER JOIN tenants t ON c.tenant_id = t.tenant_id INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id INNER JOIN rooms r ON bs.room_id = r.room_id WHERE c.status = 'active' AND c.deleted_at IS NULL";
-        DB::statement($v2);
+        // vw_active_contracts — current occupants only
+        DB::statement("CREATE VIEW vw_active_contracts AS
+            SELECT
+                c.contract_id,
+                c.move_in_date,
+                c.expected_move_out_date,
+                t.tenant_id,
+                t.last_name || ', ' || t.first_name AS tenant_name,
+                t.contact_number,
+                t.email,
+                r.room_id,
+                r.room_code,
+                COALESCE(c.monthly_rate_override, r.monthly_rate) AS monthly_rate,
+                bs.bed_space_id,
+                bs.bed_label,
+                bs.status AS bed_status,
+                c.deposit_amount,
+                c.is_cleared
+            FROM contracts  c
+            INNER JOIN tenants    t  ON c.tenant_id    = t.tenant_id
+            INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
+            INNER JOIN rooms      r  ON bs.room_id     = r.room_id
+            WHERE c.status     = 'active'
+              AND c.deleted_at IS NULL");
 
-        $v3 = "CREATE VIEW vw_room_occupancy AS SELECT r.room_id, r.room_code, r.room_type, r.monthly_rate, r.status AS room_status, r.capacity, (SELECT COUNT(*) FROM bed_spaces bs WHERE bs.room_id = r.room_id) as total_beds, (SELECT COUNT(*) FROM bed_spaces bs WHERE bs.room_id = r.room_id AND bs.status = 'occupied') as occupied_beds, (SELECT COUNT(*) FROM bed_spaces bs WHERE bs.room_id = r.room_id AND bs.status = 'vacant' AND r.status IN ('vacant', 'partially_occupied') AND r.deleted_at IS NULL) as vacant_beds FROM rooms r WHERE r.deleted_at IS NULL";
-        DB::statement($v3);
+        // vw_room_occupancy — room-level occupancy aggregation
+        DB::statement("CREATE VIEW vw_room_occupancy AS
+            SELECT
+                r.room_id,
+                r.room_code,
+                r.room_type,
+                r.monthly_rate,
+                r.status AS room_status,
+                r.capacity,
+                COUNT(bs.bed_space_id) AS total_beds,
+                SUM(CASE WHEN bs.status = 'occupied' THEN 1 ELSE 0 END) AS occupied_beds,
+                SUM(CASE WHEN bs.status = 'vacant' AND r.status IN ('vacant','partially_occupied') THEN 1 ELSE 0 END) AS vacant_beds
+            FROM rooms r
+            LEFT JOIN bed_spaces bs ON r.room_id = bs.room_id
+            WHERE r.deleted_at IS NULL
+            GROUP BY r.room_id, r.room_code, r.room_type, r.monthly_rate, r.status, r.capacity");
 
-        $v4 = "CREATE VIEW vw_occupancy_status AS SELECT bs.bed_space_id, bs.bed_label, bs.status AS bed_status, r.room_id, r.room_code, t.tenant_id, t.last_name || ', ' || t.first_name as tenant_name, c.contract_id FROM bed_spaces bs INNER JOIN rooms r ON bs.room_id = r.room_id LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status = 'active' AND c.deleted_at IS NULL LEFT JOIN tenants t ON c.tenant_id = t.tenant_id";
-        DB::statement($v4);
+        // vw_occupancy_status — per-bed occupancy with tenant context
+        DB::statement("CREATE VIEW vw_occupancy_status AS
+            SELECT
+                bs.bed_space_id,
+                bs.bed_label,
+                bs.status AS bed_status,
+                r.room_id,
+                r.room_code,
+                t.tenant_id,
+                t.last_name || ', ' || t.first_name AS tenant_name,
+                c.contract_id,
+                c.deposit_amount
+            FROM bed_spaces bs
+            INNER JOIN rooms r      ON bs.room_id      = r.room_id
+            LEFT JOIN  contracts c  ON bs.bed_space_id = c.bed_space_id
+                                   AND c.status        = 'active'
+                                   AND c.deleted_at    IS NULL
+            LEFT JOIN  tenants t    ON c.tenant_id     = t.tenant_id
+                                   AND t.deleted_at    IS NULL
+            WHERE r.deleted_at IS NULL");
 
-        $v5 = "CREATE VIEW vw_collections_summary AS SELECT p.payment_id, p.payment_date, p.amount_paid, p.payment_method, p.reference_number, t.tenant_id, t.last_name || ', ' || t.first_name AS tenant_name, b.billing_id, r.room_code FROM payments p INNER JOIN billing b ON p.billing_id = b.billing_id INNER JOIN contracts c ON b.contract_id = c.contract_id INNER JOIN tenants t ON c.tenant_id = t.tenant_id INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id INNER JOIN rooms r ON bs.room_id = r.room_id WHERE p.voided_at IS NULL";
-        DB::statement($v5);
+        // vw_collections_summary — posted non-voided payments
+        DB::statement("CREATE VIEW vw_collections_summary AS
+            SELECT
+                p.payment_id,
+                p.payment_date,
+                p.amount_paid,
+                p.payment_method,
+                p.reference_number,
+                t.tenant_id,
+                t.last_name || ', ' || t.first_name AS tenant_name,
+                b.billing_id,
+                r.room_code
+            FROM payments     p
+            INNER JOIN billing    b  ON p.billing_id   = b.billing_id
+            INNER JOIN contracts  c  ON b.contract_id  = c.contract_id
+            INNER JOIN tenants    t  ON c.tenant_id    = t.tenant_id
+            INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
+            INNER JOIN rooms      r  ON bs.room_id     = r.room_id
+            WHERE p.voided_at IS NULL");
 
-        $v6 = "CREATE VIEW vw_tenant_contract_history AS SELECT c.contract_id, c.tenant_id, t.last_name || ', ' || t.first_name AS tenant_name, t.email, c.move_in_date, c.expected_move_out_date, c.actual_move_out_date, c.status AS contract_status, r.room_code, bs.bed_label FROM contracts c INNER JOIN tenants t ON c.tenant_id = t.tenant_id INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id INNER JOIN rooms r ON bs.room_id = r.room_id";
-        DB::statement($v6);
+        // vw_tenant_contract_history — full contract history for all tenants
+        DB::statement("CREATE VIEW vw_tenant_contract_history AS
+            SELECT
+                c.contract_id,
+                c.tenant_id,
+                t.last_name || ', ' || t.first_name AS tenant_name,
+                t.email,
+                c.move_in_date,
+                c.expected_move_out_date,
+                c.actual_move_out_date,
+                c.status    AS contract_status,
+                c.is_cleared,
+                r.room_code,
+                bs.bed_label
+            FROM contracts  c
+            INNER JOIN tenants    t  ON c.tenant_id    = t.tenant_id
+            INNER JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
+            INNER JOIN rooms      r  ON bs.room_id     = r.room_id");
     }
 
     public function down(): void
@@ -215,6 +402,9 @@ return new class extends Migration
         DB::statement('DROP VIEW IF EXISTS vw_collections_summary');
         DB::statement('DROP VIEW IF EXISTS vw_tenant_contract_history');
 
+        Schema::dropIfExists('room_meter_readings');
+        Schema::dropIfExists('contract_add_ons');
+        Schema::dropIfExists('add_on_registry');
         Schema::dropIfExists('transaction_logs');
         Schema::dropIfExists('audit_logs');
         Schema::dropIfExists('payments');

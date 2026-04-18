@@ -11,7 +11,7 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Services\BillingService;
+use App\Services\Operations\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -245,7 +245,7 @@ class BillingPaymentManagementTest extends TestCase
             'payment_method' => 'cash',
         ]);
         $paidBilling->refresh();
-        BillingService::autoUpdateStatus($paidBilling);
+        BillingService::syncBillingStatus($paidBilling);
 
         $partialPastDueBilling = $this->createBillingRecord(5000.00);
         $partialPastDueBilling->update([
@@ -260,7 +260,7 @@ class BillingPaymentManagementTest extends TestCase
             'payment_method' => 'cash',
         ]);
         $partialPastDueBilling->refresh();
-        BillingService::autoUpdateStatus($partialPastDueBilling);
+        BillingService::syncBillingStatus($partialPastDueBilling);
 
         $response = $this->actingAs($this->viewerUser)
             ->getJson('/api/billing?status=paid&past_due=1');
@@ -275,7 +275,7 @@ class BillingPaymentManagementTest extends TestCase
         $unpaidCurrent->update([
             'due_date' => now()->addDays(7)->toDateString(),
         ]);
-        BillingService::autoUpdateStatus($unpaidCurrent->refresh());
+        BillingService::syncBillingStatus($unpaidCurrent->refresh());
 
         $partialCurrent = $this->createBillingRecord(4000.00);
         $partialCurrent->update([
@@ -288,13 +288,13 @@ class BillingPaymentManagementTest extends TestCase
             'payment_date' => now()->toDateString(),
             'payment_method' => 'cash',
         ]);
-        BillingService::autoUpdateStatus($partialCurrent->refresh());
+        BillingService::syncBillingStatus($partialCurrent->refresh());
 
         $overdueUnpaid = $this->createBillingRecord(3500.00);
         $overdueUnpaid->update([
             'due_date' => now()->subDays(8)->toDateString(),
         ]);
-        BillingService::autoUpdateStatus($overdueUnpaid->refresh());
+        BillingService::syncBillingStatus($overdueUnpaid->refresh());
 
         $overduePartial = $this->createBillingRecord(4500.00);
         $overduePartial->update([
@@ -307,7 +307,7 @@ class BillingPaymentManagementTest extends TestCase
             'payment_date' => now()->subDays(2)->toDateString(),
             'payment_method' => 'cash',
         ]);
-        BillingService::autoUpdateStatus($overduePartial->refresh());
+        BillingService::syncBillingStatus($overduePartial->refresh());
 
         $this->assertDatabaseHas('billing', [
             'billing_id' => $unpaidCurrent->billing_id,
@@ -338,7 +338,7 @@ class BillingPaymentManagementTest extends TestCase
             'status' => 'unpaid',
         ]);
 
-        BillingService::autoUpdateStatus($zeroBilling->refresh());
+        BillingService::syncBillingStatus($zeroBilling->refresh());
 
         $this->assertDatabaseHas('billing', [
             'billing_id' => $zeroBilling->billing_id,

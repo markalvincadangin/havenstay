@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 import { apiRequest, fetcher } from "../../../../lib/api";
 import { canManageTenants } from "../../../../lib/auth";
 import { applyServerFieldErrors } from "../../../../lib/forms";
-import { useUnsavedChangesWarning } from "../../../../lib/useUnsavedChangesWarning";
+import { useUnsavedChangesWarning } from "../../../../hooks/useUnsavedChangesWarning";
 import Alert from "../../../_components/ui/Alert";
 import Button from "../../../_components/ui/Button";
 import { Field, Input, Select, Textarea } from "../../../_components/ui/Fields";
@@ -23,6 +23,7 @@ import ResourceIdCell from "../../../_components/ui/ResourceIdCell";
 import { useAuth } from "../../../_context/AuthContext";
 import PageHeaderActions from "../../../_components/ui/PageHeaderActions";
 import { normalizePaginatedList } from "../../../../lib/pagination";
+import RecordStateAlert from "../../../_components/ui/RecordStateAlert";
 
 const PH_MOBILE_REGEX = /^(09\d{9}|(\+639)\d{9})$/;
 
@@ -52,7 +53,7 @@ export default function EditTenantPage() {
       status: "active",
     },
   });
-  
+
   useUnsavedChangesWarning(isDirty && !isSubmitting);
 
   const { data: tenantData, error: tenantError } = useSWR(
@@ -113,7 +114,7 @@ export default function EditTenantPage() {
 
       router.push(`/tenants/${tenantId}`);
     } catch (error) {
-       applyServerFieldErrors(error, setError, { setApiError });
+      applyServerFieldErrors(error, setError, { setApiError });
     }
   };
 
@@ -126,7 +127,7 @@ export default function EditTenantPage() {
       subtitle={
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-stone-500">
-            Changes apply to {fullName} and are used on contracts and billing.
+            Enter accurate information for tenant records to ensure billing and contract accuracy.
           </span>
           <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
           <ResourceIdCell id={tenantId} prefix="TENANT" />
@@ -159,39 +160,41 @@ export default function EditTenantPage() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <FormSection 
-            title="Administrative Oversight" 
+          <FormSection
+            title="Administrative Oversight"
             icon={RefreshCw}
             rightElement={<ResourceIdCell id={tenantId} prefix="TENANT" />}
           >
-            <Field
-              label="Record Status"
-              error={errors.status?.message}
-              helpText={
-                hasActiveContract
-                  ? "Status is locked while an active lease exists. Process move-out from the contract ledger first."
-                  : "Update status only after lease lifecycle actions are complete."
-              }
-            >
-              <Select
-                disabled={readOnly || hasActiveContract}
-                className={`!h-11 border-stone-200 font-bold transition-all ${
-                  hasActiveContract 
-                    ? "bg-stone-50 text-stone-400 cursor-not-allowed border-dashed opacity-80 ring-0 shadow-none hover:bg-stone-50" 
-                    : "bg-stone-50/50 text-stone-900 focus:border-teal-500/50"
-                }`}
-                {...register("status", { required: "Status is required." })}
+            {hasActiveContract ? (
+              <RecordStateAlert
+                show
+                variant="info"
+                title="Lifecycle locked"
               >
-                <option value="active">{TENANT_STATUS_LABELS.active}</option>
-                {tenant?.status === "moved_out" && (
-                  <option value="moved_out">{TENANT_STATUS_LABELS.moved_out}</option>
-                )}
-                <option value="archived">{TENANT_STATUS_LABELS.archived}</option>
-              </Select>
-            </Field>
+                This tenant's status cannot be changed while an active lease exists. Process move-out from the contract ledger first.
+              </RecordStateAlert>
+            ) : (
+              <Field
+                label="Record Status"
+                error={errors.status?.message}
+                helpText="Update status only after lease lifecycle actions are complete."
+              >
+                <Select
+                  disabled={readOnly}
+                  className="!h-11 border-stone-200 bg-stone-50/50 text-stone-900 font-bold focus:border-teal-500/50"
+                  {...register("status", { required: "Status is required." })}
+                >
+                  <option value="active">{TENANT_STATUS_LABELS.active}</option>
+                  {tenant?.status === "moved_out" && (
+                    <option value="moved_out">{TENANT_STATUS_LABELS.moved_out}</option>
+                  )}
+                  <option value="archived">{TENANT_STATUS_LABELS.archived}</option>
+                </Select>
+              </Field>
+            )}
           </FormSection>
 
-          <FormSection title="Basic Information" icon={User}>
+          <FormSection title="Identity Details" icon={User}>
             <div className="grid gap-6 sm:grid-cols-2">
               <Field label="First Name" required error={errors.first_name?.message}>
                 <Input
@@ -210,15 +213,15 @@ export default function EditTenantPage() {
             </div>
           </FormSection>
 
-          <FormSection title="Contact Details" icon={Phone}>
+          <FormSection title="Contact Information" icon={Phone}>
             <div className="space-y-6">
               <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Phone Number" required error={errors.contact_number?.message}>
+                <Field label="Mobile Number" required error={errors.contact_number?.message}>
                   <div className="relative">
                     <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" />
                     <Input
                       disabled={readOnly}
-                      className="!h-11 border-stone-200 pl-10 font-mono"
+                      className="!h-11 border-stone-200 pl-10 font-mono tabular-nums"
                       {...register("contact_number", {
                         required: "Required",
                         pattern: { value: PH_MOBILE_REGEX, message: "Invalid format" }
@@ -226,7 +229,7 @@ export default function EditTenantPage() {
                     />
                   </div>
                 </Field>
-                <Field label="Email Address" required error={errors.email?.message}>
+                <Field label="Email" required error={errors.email?.message}>
                   <div className="relative">
                     <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" />
                     <Input
@@ -238,7 +241,7 @@ export default function EditTenantPage() {
                   </div>
                 </Field>
               </div>
-              <Field label="Permanent address" required error={errors.address?.message}>
+              <Field label="Permanent Address" required error={errors.address?.message}>
                 <div className="relative">
                   <MapPin size={14} className="absolute left-3 top-3 text-stone-300" />
                   <Textarea
@@ -254,17 +257,17 @@ export default function EditTenantPage() {
 
           <FormSection title="Emergency Contact" icon={ShieldAlert}>
             <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Contact name" required error={errors.emergency_contact_name?.message}>
+              <Field label="Contact Person" required error={errors.emergency_contact_name?.message}>
                 <Input
                   disabled={readOnly}
                   className="!h-11 border-stone-200 focus:border-teal-500/50"
-                  {...register("emergency_contact_name", { required: "Emergency contact name is required." })}
+                  {...register("emergency_contact_name", { required: "Emergency contact person is required." })}
                 />
               </Field>
-              <Field label="Contact phone" required error={errors.emergency_contact_number?.message}>
+              <Field label="Contact Number" required error={errors.emergency_contact_number?.message}>
                 <Input
                   disabled={readOnly}
-                  className="!h-11 border-stone-200 font-mono focus:border-teal-500/50"
+                  className="!h-11 border-stone-200 font-mono tabular-nums focus:border-teal-500/50"
                   {...register("emergency_contact_number", {
                     required: "Emergency phone is required.",
                     pattern: { value: PH_MOBILE_REGEX, message: "Invalid format" },

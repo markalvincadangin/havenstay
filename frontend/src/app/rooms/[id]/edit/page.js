@@ -10,7 +10,7 @@ import { apiRequest, fetcher } from "../../../../lib/api";
 import { canManageRooms } from "../../../../lib/auth";
 import { applyServerFieldErrors } from "../../../../lib/forms";
 import { parseMoneyInput } from "../../../../lib/money";
-import { useUnsavedChangesWarning } from "../../../../lib/useUnsavedChangesWarning";
+import { useUnsavedChangesWarning } from "../../../../hooks/useUnsavedChangesWarning";
 import Alert from "../../../_components/ui/Alert";
 import Breadcrumbs from "../../../_components/ui/Breadcrumbs";
 import Button from "../../../_components/ui/Button";
@@ -194,30 +194,13 @@ export default function EditRoomPage() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <FormSection 
-            title="Operational Status" 
-            icon={RefreshCw}
-            rightElement={<ResourceIdCell id={roomId} prefix="ROOM" />}
-          >
-             <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Room Status" required error={errors.status?.message} helpText="Current operational status.">
-                  <Select className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("status")}>
-                    {Object.entries(ROOM_STATUS_OPTION_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <div />
-             </div>
-          </FormSection>
 
-          <FormSection title="Basic Information" icon={Box}>
+
+          <FormSection title="Identity Details" icon={Box}>
             <div className="space-y-8">
               <div className="grid gap-6 sm:grid-cols-2">
                 <Field 
-                  label="Room Number" 
+                  label="Unit Number" 
                   required 
                   error={errors.physical_number?.message}
                   helpText="The number displayed on the unit door (e.g. 101)."
@@ -230,7 +213,7 @@ export default function EditRoomPage() {
                   />
                 </Field>
 
-                <Field label="Room Code" required error={errors.room_code?.message} helpText="System identifier for internal tracking.">
+                <Field label="Unit Code" required error={errors.room_code?.message} helpText="System identifier for internal tracking.">
                   <Input
                     readOnly
                     placeholder="UNIT-101"
@@ -241,7 +224,7 @@ export default function EditRoomPage() {
               </div>
 
               <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Monthly Rent (PHP)" required error={errors.monthly_rate?.message}>
+                <Field label="Rental Rate (PHP)" required error={errors.monthly_rate?.message}>
                   <Input
                     type="number"
                     step="1"
@@ -252,7 +235,7 @@ export default function EditRoomPage() {
                   />
                 </Field>
 
-                <Field label="Room Category" required error={errors.room_type?.message}>
+                <Field label="Unit Category" required error={errors.room_type?.message}>
                   <Select className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("room_type")}>
                     {Object.entries(ROOM_TYPE_OPTION_LABELS).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -267,7 +250,7 @@ export default function EditRoomPage() {
 
           {roomType === "shared" && (
             <FormSection 
-              title="Room Layout" 
+              title="Bed Inventory" 
               icon={ShieldCheck}
               rightElement={
                 <div className="flex items-center gap-3">
@@ -344,12 +327,12 @@ export default function EditRoomPage() {
             </FormSection>
           )}
 
-          <FormSection title="Important Notes" icon={Box}>
+          <FormSection title="Registry Details" icon={Box}>
             <div className="space-y-6">
-              <Field label="Included Amenities" helpText="Visible on public or tenant-facing profiles.">
+              <Field label="Amenities" helpText="Visible on public or tenant-facing profiles.">
                 <Textarea rows={3} placeholder="e.g. Wi-Fi, AC, Cabinet…" className="border-stone-200 focus:border-teal-500/50" disabled={readOnly} {...register("amenities")} />
               </Field>
-              <Field label="Management Notes" helpText="Internal staff context only (not visible to tenants).">
+              <Field label="Administrative Notes" helpText="Internal staff context only (not visible to tenants).">
                 <Textarea rows={3} placeholder="Staff notes…" className="border-stone-200 focus:border-teal-500/50" disabled={readOnly} {...register("description")} />
               </Field>
             </div>

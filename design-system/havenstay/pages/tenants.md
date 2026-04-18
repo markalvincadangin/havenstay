@@ -1,12 +1,12 @@
-# Tenant Directory Design Specification — v4.3 (Master-Aligned)
+# Tenant Directory Design Specification — v5.0 (Forensic-Hardened)
 
 > **PROJECT:** HavenStay Boarding House Management System (BHMS)
-> **Last Updated:** 2026-04-12
+> **Last Updated:** 2026-04-18
 > **Page Type:** Directory / List View
 > **Routes:** `/tenants`, `/tenants/[id]`, `/tenants/new`, `/tenants/[id]/edit`
 
 > [!IMPORTANT]
-> This specification follows the **Directory** pattern defined in **[../MASTER.md](../MASTER.md)** (Section 18.2). It mandates 100% usage of reusable components for Headers, Tables, and Forms to ensure architectural consistency with the Dashboard.
+> This specification follows the **Registry** pattern defined in **[../MASTER.md](../MASTER.md)** (Section 18.2). It mandates the use of forensic mono-prefixes for all IDs and strict adherence to the **Forensic Label** aesthetic for metadata.
 
 ## Form Contract Reference
 
@@ -52,7 +52,7 @@ The Tenant Directory is the central page for resident records. It supports **ten
 ### 3.2 Registry Table
 - **Component**: `<Table caption="List of active and historical resident records" />`.
 - **Columns**: 
-    1. **Resident**: `Avatar` + Name (Bold) + `#TENANT-{id}` (Mono).
+    1. **Resident**: `Avatar` + Name (Bold) + `#TENANT-{id}` (**Forensic Label** mono).
     2. **Contact**: Phone + Email (Stacked, Tabular Mono).
     3. **Room**: Room Code or "Unassigned".
     4. **Status**: Standard `StatusBadge`.

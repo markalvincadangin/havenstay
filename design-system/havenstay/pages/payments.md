@@ -1,5 +1,6 @@
-# Payments Module Design Specification
+# Payments Design Specification — v5.0 (Forensic-Hardened)
 
+> **Last Updated:** 2026-04-18
 > **PROJECT:** HavenStay BHMS
 > **Authoritative Sources:** `MASTER.md`, `havenstay_schema.sql`
 > **Routes:** `/payments` (list), `/payments/[id]` (detail), `/payments/new` (register). **List PageHeader title** follows **MASTER.md §21**: **Payments** (not “Payment Registry”).
@@ -49,7 +50,7 @@ Aligning with **MASTER.md Section 8**, we eliminate technical jargon:
 
 | UI Label | Schema Field | Note |
 | :--- | :--- | :--- |
-| Payment ID | `payment_id` | Format: `PAY-000000` |
+| Payment ID | `payment_id` | Format: `#PAY-{id}` (Mono) |
 | Amount Paid | `amount_paid` | DM Mono, tabular-nums |
 | Collection Date | `payment_date` | |
 | Recorded By | `processed_by` | Linked to `users.username` |
@@ -141,7 +142,7 @@ Aligning with **MASTER.md Section 8**, we eliminate technical jargon:
 - [x] Use `PageHeader` with title **Payments** (MASTER §21) and **Register Payment** CTA when user can post.
 - [x] Primary submit: **Record Payment** (footer on `/payments/new`).
 - [x] Field label **Payment Method** (not legacy “System Gateway”).
-- [x] List/detail: IDs use `PAY-000000` style in DM Mono where shown.
+- [x] List/detail: IDs use `#PAY-{id}` style in DM Mono where shown.
 - [x] Table action column: `ArrowUpRight` (size 16).
 - [x] Register form: outer wrapper `mx-auto w-full max-w-4xl` includes **PageHeader + form** (MASTER §12 — no full-width header above narrow cards).
 - [x] Side summary: **Current Balance** / **New Balance** (see §4.2); teal/stone panel pattern aligned with registry cards.

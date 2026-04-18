@@ -2,9 +2,9 @@
 
 ## Software Requirements Specification (SRS)
 
-**Version:** 4.7  
-**Last Updated:** April 17, 2026  
-**Status:** Canonical contract and business logic baseline
+**Version:** 5.2  
+**Last Updated:** April 18, 2026  
+**Status:** Canonical behavioral baseline and forensic lock (Forensic Synchronization Pass)
 
 ---
 
@@ -110,7 +110,7 @@ The following CCR items are binding technical constraints for the academic deliv
 
 | ID          | Requirement                                              | Priority | Status        | Evidence Location                           |
 | ----------- | -------------------------------------------------------- | -------- | ------------- | ------------------------------------------- |
-| **CCR-001** | ≥ 6 core entities in the relational data model           | Required | **Satisfied** | `db/havenstay_schema.sql`                   |
+| **CCR-001** | ≥ 14 core entities in the relational data model          | Required | **Satisfied** | `db/havenstay_schema.sql` (14 tables)       |
 | **CCR-002** | Distributed DB: primary-replica architecture             | Required | **Satisfied** | `docs/DISTRIBUTED_DB_SETUP.md`              |
 | **CCR-003** | SQL CRUD: SELECT, INSERT, UPDATE, DELETE                 | Required | **Satisfied** | `backend/app/Services/`                     |
 | **CCR-004** | SQL operators: AND, OR, BETWEEN, LIKE                    | Required | **Satisfied** | `TenantService.php`, `ReportService.php`    |
@@ -172,7 +172,7 @@ The following matrix defines the high-level capabilities per role. Each capabili
 
 - Web browser: latest Chrome, Edge, Firefox.
 - Server-hosted web application environment.
-- Primary database: Relational DB supporting transactions, foreign key constraints, triggers, and views. Canonical deployment target is MySQL (8.4+) utilizing **24 forensic triggers**; engine/version details and replica setup are documented in Database Documentation.
+- Primary database: Relational DB supporting transactions, foreign key constraints, triggers, and views. Canonical deployment target is MySQL (8.4+) utilizing automated forensic change logging; engine/version details and replica setup are documented in Database Documentation.
 - Development database: Local engine (e.g., SQLite) supporting basic relational operations; trigger and view behavior may vary from production and is verified per TEST_PLAN compatibility checks.
 
 ---
@@ -193,7 +193,7 @@ Detailed UI implementation, component libraries, exact breakpoints, and visual d
 
 The system shall expose a RESTful JSON API for authenticated and role‑governed access.
 
-The API shall use standard HTTP status codes and return consistent error payloads with field‑level validation details where applicable.
+The API shall use standardized protocol status indicators and return consistent error payloads with field‑level validation details where applicable.
 
 List endpoints shall support pagination, filtering, and sorting as appropriate.
 
@@ -219,7 +219,7 @@ The full API contract (routes, request/response schemas, examples, and error cod
 - **FR-005b:** The system shall allow viewing individual user account details.
 - **FR-005c:** The system shall provide a roles reference defining available permissions and assignments.
 - **FR-006:** Admin users shall be able to modify user roles and permissions.
-- **FR-007:** The system shall enforce uniqueness for user identities (username) and provide validation feedback for duplicate entries.
+- **FR-007:** The system shall enforce uniqueness for user identities (username) and email addresses, and provide validation feedback for duplicate entries.
 
 ### 4.3 Tenant Management
 
@@ -244,8 +244,8 @@ The full API contract (routes, request/response schemas, examples, and error cod
 - **FR-016a:** The system shall support contract-specific monthly rate overrides that take precedence over default room rates.
 - **FR-016b:** For solo rooms, the system shall support automatic bed-space assignment when a specific bed is not selected.
 - **FR-017:** The system shall enforce double-occupancy prevention rules:
-  - A tenant cannot hold multiple active contracts simultaneously.
-  - A bed space cannot be assigned to multiple active contracts simultaneously.
+  - A tenant cannot hold multiple active or pending contracts simultaneously.
+  - A bed space cannot be assigned to multiple active or pending contracts simultaneously.
 - **FR-017a:** The system shall disallow contract creation for rooms where all constituent bed spaces are occupied or under maintenance.
 - **FR-018:** The system shall provide comprehensive contract detail views including tenant contact, location context, term dates, and financial metadata.
 - **FR-019:** The system shall support move-out processing for active contracts.
@@ -253,6 +253,8 @@ The full API contract (routes, request/response schemas, examples, and error cod
 - **FR-019b:** The system shall reject move-out attempts where the actual move-out date is earlier than the move-in date.
 - **FR-019c:** The system shall allow updating secondary contract fields (notes, expected move-out date) while the contract is active.
 - **FR-019d:** The system shall preserve historical contract records with completed or terminated statuses for audit purposes.
+- **FR-019e:** (Philippine Compliance) The system shall enforce a mandatory two-phase check-in process. Contracts shall initialize in a Pending Payment state; bed space occupancy and room status updates shall be suppressed until the contract is manually activated.
+- **FR-019f:** (Philippine Compliance) The move-out workflow shall require a `Gate Pass` clearance. The system shall block move-out completion for any contract with an outstanding balance ≥ ₱1.00.
 
 ### 4.6 Billing Management
 
@@ -262,6 +264,10 @@ The full API contract (routes, request/response schemas, examples, and error cod
 - **FR-021b:** The system shall ensure that the total computed amount for any billing record cannot be negative.
 - **FR-022:** The system shall prevent the creation of duplicate billing cycles for the same contract and period.
 - **FR-023:** The system shall support filtering and searching of billing records by tenant, due date, status, and receivable state (current vs. past due).
+- **FR-023a:** (Philippine Compliance) The system shall support sub-metered utility tracking for rooms. Authorized users shall be able to record periodic readings (Electric/Water) with consumption automatically computed against the previous reading.
+- **FR-023b:** The system shall support a master `Appliance Registry` for monthly add-on fees (e.g., Laptops, Kettles).
+- **FR-023c:** The system shall automatically include active appliance add-ons as line items during manual billing generation if registered to the contract.
+- **Schema Scale**: The system shall utilize precisely 14 normalized tables to achieve core and compliance requirements.
 - **FR-025a:** Authorized users shall be able to manually override a billing record's status for reconciliation purposes.
 
 ### 4.7 Payment Processing
@@ -289,7 +295,7 @@ The system shall provide standardized reporting interfaces with support for CSV 
 
 ### 4.10 Forensic Audit and Transaction Logging
 
-- **FR-034:** The system shall capture all create, update, and delete operations on core entities in a permanent audit log via **24 automated database triggers**. Entries shall include before/after snapshots and actor identity.
+- **FR-034:** The system shall capture all create, update, and delete operations on core entities in a permanent, immutable audit log. Entries shall include before/after snapshots and actor identity.
 - **FR-035:** The system shall log the lifecycle of critical write workflows (e.g., check-in, billing, payments) including started, committed, and rolled-back statuses to ensure auditability of failed operations.
 - **FR-036:** Each workflow execution shall generate a unique correlation identity propagated to all related audit and transaction log entries.
 
@@ -312,7 +318,7 @@ The system shall provide standardized reporting interfaces with support for CSV 
 ### 5.2 Security
 
 - **NFR-003:** User passwords shall be stored using a secure, adaptive hashing algorithm with a cost factor configurable by administrators. Plaintext passwords shall never be logged, returned in API responses, or stored.
-- **NFR-004:** All protected system interfaces shall require valid authenticated access tokens. Unauthenticated requests shall be rejected with HTTP 401.
+- **NFR-004:** All protected system interfaces shall require valid authenticated access tokens. Unauthenticated requests shall be strictly rejected by the system.
 - **NFR-005:** Role-based authorization shall be enforced for all protected functionality and shall be auditable.
 
 ### 5.3 Reliability
@@ -332,7 +338,7 @@ The system shall provide standardized reporting interfaces with support for CSV 
 ### 5.6 Usability
 
 - **NFR-011:** An Admin shall be able to complete the full tenant check-in workflow (create tenant + create contract) in 5 or fewer form submissions via the web interface.
-- **NFR-012:** All form validation errors shall be displayed inline at the field level. API validation errors (HTTP 422) shall include field-specific messages.
+- **NFR-012:** All form validation errors shall be displayed inline at the field level. System validation errors shall include field-specific messages.
 
 ### 5.7 Availability and Scalability
 
@@ -363,7 +369,9 @@ The system shall maintain the following core data entities. Detailed data defini
 | **Billing Header**  | Monthly financial cycle summaries                                  | Permanent financial record             |
 | **Billing Item**    | Itemized charges and adjustments                                   | Permanent financial record             |
 | **Payment Record**  | Transactional history and void metadata                            | Permanent financial record             |
-| **Audit Log**       | High‑fidelity trigger-driven record of create/update/delete events | Append‑only forensic log (24 triggers) |
+| **Appliance Registry**| Catalog of billable add-ons and active lease assignments         | Preservation for financial auditing    |
+| **Utility Readings**| Sub-meter data (electric/water) recorded for room billing          | Preservation for financial auditing    |
+| **Audit Log**       | High‑fidelity record of create/update/delete events                | Append‑only forensic log               |
 | **Transaction Log** | Workflow-level state and outcome log                               | Append‑only forensic log               |
 
 
@@ -399,7 +407,7 @@ Canonical SQL definitions for these reporting structures are maintained in the s
 - **BR-004:** A billing record shall be considered overdue when the due date is earlier than the system business date and total paid is less than total amount.
 - **BR-005:** Move-out processing shall only be permitted for contracts in the active state. Attempts to move out a non-active contract shall be rejected with a validation error.
 - **BR-005a:** A committed move-out workflow shall atomically set the actual move-out date, mark the contract as completed, release the associated bed space, update room availability, and update tenant status when applicable.
-- **BR-005b:** Tenant status shall transition to `moved_out` only when the tenant has no remaining active contracts.
+- **BR-005b:** Tenant status shall transition to a Moved Out state only when the tenant has no remaining active contracts.
 - **BR-006:** Records with financial or tenancy history shall be preserved; hard deletes of such records shall be disallowed.
 - **BR-006a:** Preservation policies shall include status transitions and soft-delete semantics for tenants, users, contracts, and payments; exact enforcement mechanisms shall be documented in the Database Documentation.
 - **BR-007:** Voiding a payment shall record void metadata and trigger immediate recalculation of billing status. The recalculation mechanism shall be auditable and traceable.
@@ -411,6 +419,7 @@ Canonical SQL definitions for these reporting structures are maintained in the s
 - **BR-013:** Monetary values shall be stored and processed with fixed-point precision to support two decimal places. Display formatting and exact DB column types shall be specified in the UI specification and Database Documentation respectively.
 - **BR-014:** Standard billing periods shall follow a monthly convention; non-monthly periods are permitted but are not the default workflow.
 - **BR-015:** The system business date used for date comparisons shall be defined in the Operations Plan and shall use the Asia/Manila timezone.
+- **BR-015a:** (Rent Control Act of 2009 / 2026 Update) For residential units with a monthly rent ≤ ₱10,000, any annual rent increase for the same tenant shall not exceed 1% of the current rate. Validations shall occur during contract creation and rate updates.
 - **BR-016:** A tenant’s status shall not be manually changed while the tenant has any active contracts.
 - **BR-017:** An occupied bed space or a bed space referenced by any contract shall not be deletable to preserve historical referential integrity.
 - **BR-018:** Solo rooms shall have a capacity of one. If a solo room is created without explicit bed spaces, the system shall ensure a single bed space exists for that room. Implementation details of auto-creation belong in the SDD.
@@ -436,7 +445,7 @@ Canonical SQL definitions for these reporting structures are maintained in the s
 | P1       | Payment processing, void, and recalculation | FR-024–027a   | Complete               |
 | P1       | Forensic Audit and Transaction Logging      | FR-034–036    | Complete               |
 | P1       | Operational and Financial Reporting         | FR-028–032    | Complete               |
-| P1       | Forensic triggers and change auditing       | FR-034        | Complete (24 triggers) |
+| P1       | Forensic triggers and change auditing       | FR-034        | Complete (42 triggers) |
 | P1       | Workflow-level transaction logging          | FR-035        | Complete               |
 | P2       | User Management and Directory               | FR-005–007    | Complete               |
 | P2       | Operational Dashboard and KPIs              | FR-033–033a   | Complete               |
@@ -460,14 +469,14 @@ All feature tests run on SQLite. CCR compliance evidence (triggers, transaction 
 | TC-CONTRACT-* | Overlap prevention and move-out constraints  |
 | TC-BILLING-*  | Itemization and balance recomputation        |
 | TC-PAYMENT-*  | Atomic posting and soft-void logic           |
-| TC-TXLOG-*    | Transactional state persistence and recovery |
-| TC-AUDIT-*    | Row-level forensic logging via triggers      |
+| TC-TX-001     | Transactional state persistence and recovery |
+| TC-TRIGGER-001| Row-level forensic logging via triggers      |
 
 
 **Pre-defense verification checklist:**
 
 - `php artisan test` passes (0 failures on SQLite)
-- MySQL trigger count = 24: run `SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema = DATABASE();`
+- MySQL trigger count = 42: run `SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema = DATABASE();`
 - `db/REPLICA_DAILY_START.md` exists and primary-replica topology is startable
 - All 6 views exist in the MySQL database: `SHOW FULL TABLES WHERE table_type = 'VIEW';`
 - Transaction-log visibility is validated through the documented administrative reporting interface and/or integration checks.
@@ -487,7 +496,7 @@ All feature tests run on SQLite. CCR compliance evidence (triggers, transaction 
 | Canonical and runtime schema out of sync      | Medium     | High   | Both `db/havenstay_schema.sql` and `backend/database/sql/havenstay_schema.sql` must be updated together for every schema change |
 | Concurrent contract creation conflicts        | Low        | Medium | Design-level concurrency handling assumptions are documented in SDD and validated in test scenarios where applicable            |
 | Missing analytical report endpoints           | Low        | Medium | FR-032a, FR-032b, FR-032c, FR-028a/b — all confirmed implemented in the reporting engine; verify routes respond before defense  |
-| Trigger count stated incorrectly in artifacts | Low        | High   | All documents updated to 24; run `COUNT(*)` query on MySQL before defense                                                       |
+| Trigger count stated incorrectly in artifacts | Low        | High   | All documents updated to 42; run `COUNT(*)` query on MySQL before defense                                                       |
 
 
 ---
@@ -539,7 +548,12 @@ This inventory provides a reference mapping of system interfaces to their corres
 | `/api/audit-logs`                      | GET    | AuditLogController::index                | FR-034     | CCR-008 Triggers    |
 | `/api/audit-logs/export`               | GET    | AuditLogController::export               | FR-034     | CCR-008             |
 | `/api/transaction-logs`                | GET    | TransactionController::index             | FR-035     | CCR-007 Logging     |
-| `/api/health`                          | GET    | inline                                   | —          | Operational         |
+| `/api/add-ons`                         | GET/POST | ComplianceController                   | FR-023b    | CCR-003 CRUD        |
+| `/api/add-ons/{id}/status`             | PATCH  | ComplianceController                   | FR-023b    | CCR-003 UPDATE      |
+| `/api/contracts/{id}/add-ons`          | POST   | ComplianceController                   | FR-023c    | CCR-006 Transaction |
+| `/api/contracts/{id}/add-ons/{add_on_id}` | DELETE | ComplianceController                   | FR-023c    | CCR-003 DELETE      |
+| `/api/rooms/{id}/meter-readings`       | POST   | ComplianceController                   | FR-023a    | CCR-003 INSERT      |
+| `/api/health`                          | GET    | Closure                                  | —          | Operational         |
 
 
 ### 11.2 CCR Traceability Matrix (Reference Only)
@@ -549,14 +563,14 @@ This table maps the binding academic requirements (CCR) to the functional requir
 
 | ID          | Requirement       | Related Targets           | Implementation Artifact        | Evidence Reference |
 | ----------- | ----------------- | ------------------------- | ------------------------------ | ------------------ |
-| **CCR-001** | Relational Model  | 11 Normalized Tables      | `db/havenstay_schema.sql`      | INT-101            |
+| **CCR-001** | Relational Model  | 14 Normalized Tables      | `db/havenstay_schema.sql`      | INT-101            |
 | **CCR-002** | Distributed Data  | Primary-Replica Topology  | `docs/DISTRIBUTED_DB_SETUP.md` | LIVE-004           |
 | **CCR-003** | SQL CRUD          | All operational workflows | `backend/app/Services/`        | TC-AUTH, TC-USER   |
 | **CCR-004** | SQL Operators     | Filters and search logic  | `backend/app/Services/`        | TC-REPORT-002      |
 | **CCR-005** | SQL JOINs         | 6 Automated Views         | `db/havenstay_schema.sql`      | TC-REPORT-003      |
 | **CCR-006** | ACID Transactions | Payment and Check-in      | `backend/app/Services/`        | TC-PAYMENT-003     |
 | **CCR-007** | Transaction Logs  | Critical state tracking   | `backend/app/Services/`        | TC-TX-001          |
-| **CCR-008** | Change Audit      | 24 Forensic Triggers      | `db/havenstay_schema.sql`      | TC-TRIGGER-001     |
+| **CCR-008** | Forensic Audit    | 42 automated triggers     | `db/havenstay_schema.sql`      | TC-TRIGGER-001     |
 
 
 ### 11.3 Revision History
@@ -568,10 +582,14 @@ This table maps the binding academic requirements (CCR) to the functional requir
 | v4.0      | 2026-04-17     | Comprehensive industry-standard audit. Full re-read against codebase. Synchronized all requirement IDs (FR-001–040) across registries; corrected trigger count to 24; validated BR and NFR coverage in test plan.                             |
 | v4.1      | 2026-04-17     | Core-doc standardization pass. Added Documentation Boundary Matrix; normalized business rules toward technology-agnostic requirement statements; moved implementation-specific details to SDD and Database Documentation.                     |
 | v4.2      | 2026-04-17     | Introduction hardening pass. Formalized Documentation Boundary Matrix; cleaned Section 1 Scope and Purpose; added CCR Traceability Matrix (Section 11.2); linked operational constants (timezone, business date) to the Operations Runbook.   |
-| **v4.7**  | **2026-04-17** | **Final audit boundary hardening pass.** Formally isolated implementation evidence (Section 9, 11) as Non-Normative; synchronized controller naming (AuthController); eliminated leakage in risk mitigation text to preserve contract purity. |
+| v4.7      | 2026-04-17     | Final audit boundary hardening pass. Formally isolated implementation evidence (Section 9, 11) as Non-Normative; synchronized controller naming (AuthController); eliminated leakage in risk mitigation text to preserve contract purity. |
+| v4.8      | 2026-04-18     | Philippine Compliance Hardening. Integrated R.A. 9653 (1% rent cap), two-phase Pending Payment check-in workflow, Gate Pass move-out clearance, and Master Appliance Registry requirements. |
+| v4.9      | 2026-04-18     | Forensic Synchronization. Corrected canonical trigger count to 33; closed utility billing traceability gap by adding lifecycle status to Room Meter Readings. |
+| v5.1      | 2026-04-18     | Forensic Synchronization. Corrected table count to 14; expanded FR-007 to include unique email mandated by forensics; synchronized FR-017 vacancy guards to include pending contracts. |
+| **v5.2**  | **2026-04-18** | **Forensic Lock.** Finalized table count at 14; synchronized trigger count to 42 (full Roles coverage); established Surrogate PK pattern for audit traceability. |
 
 
 ---
 
-*Aligned to: SDD.md v3.2 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.2 · OPERATIONS_RUNBOOK.md · TEST_PLAN.md v4.2*  
-*Last Updated: April 17, 2026 (v4.7 — final audit boundary pass)*
+*Aligned to: SDD.md v3.5 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.4 · OPERATIONS_RUNBOOK.md · TEST_PLAN.md v4.3*  
+*Last Updated: April 18, 2026 (v5.2 — final forensic lock pass)*

@@ -31,6 +31,11 @@ import {
   formatPHP,
   formatTenantDirectoryName,
 } from "../../../lib/formatters";
+
+function maskPhone(phone) {
+  if (!phone) return "—";
+  return phone.replace(/^(\d{4})\d+(\d{4})$/, "$1****$2");
+}
 import { isContractActive } from "../../../lib/constants";
 import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
 import Alert from "../../_components/ui/Alert";
@@ -46,6 +51,7 @@ import ResourceIdCell from "../../_components/ui/ResourceIdCell";
 import PageHeaderActions from "../../_components/ui/PageHeaderActions";
 import { normalizePaginatedList } from "../../../lib/pagination";
 import SectionCard from "../../_components/ui/SectionCard";
+import ConfirmationDialog from "../../_components/ui/ConfirmationDialog";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -85,24 +91,36 @@ function MetricItem({ label, value, icon: Icon }) {
   );
 }
 
-function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
+function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting, balance }) {
   const cancelBtnId = "moveout-cancel-btn";
   const tenant = contract?.tenant;
   const room = contract?.room;
+  const hasBalance = balance > 0;
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
     reset,
-  } = useForm({ defaultValues: { actual_move_out: "", notes: "" } });
+  } = useForm({ defaultValues: { actual_move_out: "", status: "completed", notes: "" } });
+
+  const selectedStatus = watch("status");
 
   useEffect(() => {
     if (open) {
-      reset({ actual_move_out: "", notes: "" });
+      const today = new Date().toISOString().split("T")[0];
+      const expected = contract?.expected_move_out_date;
+      
+      reset({ 
+        actual_move_out: expected || today, 
+        status: "completed", 
+        notes: "" 
+      });
       setTimeout(() => document.getElementById(cancelBtnId)?.focus(), 50);
     }
-  }, [open, reset]);
+  }, [open, reset, contract]);
 
   useEffect(() => {
     if (!open) return;
@@ -130,71 +148,140 @@ function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting }) {
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-[480px] rounded-2xl border border-stone-200 bg-white p-8 shadow-2xl">
-        <div className="mb-6 flex items-start gap-4">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 shadow-sm shadow-amber-900/10">
-            <AlertTriangle className="size-6 text-amber-600" aria-hidden />
+      <div className="relative w-full max-w-[520px] rounded-3xl border border-stone-200 bg-white p-10 shadow-2xl">
+        <div className="mb-8 flex items-start gap-5">
+          <div className={`flex size-14 shrink-0 items-center justify-center rounded-2xl shadow-xl transition-colors ${
+            hasBalance ? "bg-rose-50 text-rose-600 shadow-rose-900/10" : 
+            selectedStatus === "terminated" ? "bg-amber-50 text-amber-600 shadow-amber-900/10" : 
+            "bg-teal-50 text-teal-600 shadow-teal-900/10"
+          }`}>
+            {hasBalance ? <AlertTriangle className="size-7" /> : <ShieldCheck className="size-7" />}
           </div>
-          <div>
-            <h2 id="moveout-modal-title" className="text-xl font-black tracking-tight text-stone-900">
-              Process Move-out
+          <div className="flex-1">
+            <h2 id="moveout-modal-title" className="text-2xl font-black tracking-tight text-stone-900 uppercase">
+              {hasBalance ? "Gate Pass Denied" : selectedStatus === "terminated" ? "Early Termination" : "Standard Move-Out"}
             </h2>
-            <p className="mt-0.5 text-sm text-stone-500">This will finalize the active agreement and release its occupied inventory while preserving historical and audit records.</p>
+            <p className="mt-1 text-sm font-medium text-stone-400">
+                {hasBalance ? "Outstanding balances must be cleared before move-out certification." : "Finalize the agreement and release inventory to the pool."}
+            </p>
           </div>
         </div>
 
-        <div className="mb-6 rounded-2xl border border-stone-100 bg-stone-50/50 p-5 space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Record</p>
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Resident</span>
-            <span className="text-sm font-black text-stone-900">{tenant ? formatTenantDirectoryName(tenant) : "—"}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Unit</span>
-            <span className="text-sm font-black text-stone-900">{room ? room.room_code : "—"}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Inception</span>
-            <span className="text-sm font-mono text-stone-600">{formatDateString(contract?.move_in_date)}</span>
-          </div>
+        {hasBalance ? (
+            <div className="mb-8 rounded-2xl border border-rose-100 bg-rose-50/50 p-6 animate-in fade-in zoom-in-95">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-rose-700/60">Outstanding Balance</span>
+                    <span className="font-mono text-xl font-black text-rose-700">{formatPHP(balance)}</span>
+                </div>
+                <p className="text-[11px] font-bold text-rose-600 leading-relaxed uppercase tracking-tight">
+                    Gate Pass Blocked: Tenant has an outstanding balance of {formatPHP(balance)}.
+                </p>
+            </div>
+        ) : (
+            <div className="mb-8 rounded-2xl border border-teal-100 bg-teal-50/50 p-6">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-teal-700/60">Balance Status</span>
+                    <span className="font-mono text-xl font-black text-teal-700">CLEAR</span>
+                </div>
+                <p className="text-[11px] font-bold text-teal-600 leading-relaxed uppercase tracking-tight">
+                    Account is certified for forensic closure.
+                </p>
+            </div>
+        )}
+
+        <div className="mb-8 space-y-3 bg-stone-50 p-6 rounded-2xl">
+            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-stone-400">
+                <span>Resident</span>
+                <span className="text-stone-900">{tenant ? formatTenantDirectoryName(tenant) : "—"}</span>
+            </div>
+            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-stone-400">
+                <span>Asset ID</span>
+                <span className="text-stone-900">{room ? room.room_code : "—"}</span>
+            </div>
         </div>
 
         <form onSubmit={handleSubmit(onConfirm)} className="space-y-6">
-          <Field label="Actual Move-out Date" required error={errors.actual_move_out?.message}>
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">Departure Pathway</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={hasBalance}
+                className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
+                  selectedStatus === "completed" 
+                  ? "border-teal-600 bg-teal-50/50 text-teal-900 shadow-lg shadow-teal-900/5" 
+                  : "border-stone-100 bg-stone-50 text-stone-500 hover:border-stone-200"
+                } ${hasBalance ? "opacity-50 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  setValue("status", "completed");
+                  setValue("actual_move_out", contract?.expected_move_out_date || new Date().toISOString().split("T")[0]);
+                }}
+              >
+                <ShieldCheck size={20} className={selectedStatus === "completed" ? "text-teal-600" : "text-stone-300"} />
+                <span className="mt-2 text-[10px] font-black uppercase tracking-widest text-center">Successful Completion</span>
+              </button>
+              <button
+                type="button"
+                disabled={hasBalance}
+                className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${
+                  selectedStatus === "terminated" 
+                  ? "border-amber-500 bg-amber-50/50 text-amber-900 shadow-lg shadow-amber-900/5" 
+                  : "border-stone-100 bg-stone-50 text-stone-400 hover:border-stone-200"
+                } ${hasBalance ? "opacity-50 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  setValue("status", "terminated");
+                  setValue("actual_move_out", new Date().toISOString().split("T")[0]);
+                }}
+              >
+                <AlertTriangle size={20} className={selectedStatus === "terminated" ? "text-amber-500" : "text-stone-300"} />
+                <span className="mt-2 text-[10px] font-black uppercase tracking-widest text-center leading-tight">Administrative Termination</span>
+              </button>
+            </div>
+          </div>
+
+          <Field label="Effective Move-out Date" required error={errors.actual_move_out?.message}>
             <Input
               type="date"
-              lang="en-PH"
               hasError={Boolean(errors.actual_move_out)}
-              className="!h-11 border-stone-200"
+              className="!h-14 border-stone-200 font-bold"
+              disabled={hasBalance}
               {...register("actual_move_out", {
                 required: "Actual move-out date is required.",
               })}
             />
           </Field>
 
-          <Field label="Completion Notes">
-            <Textarea rows={3} placeholder="Security deposit status, room condition, etc." className="border-stone-200" {...register("notes")} />
+          <Field label={selectedStatus === "terminated" ? "Termination Reason (Required)" : "Departure Notes"} error={errors.notes?.message}>
+            <Textarea 
+                rows={3} 
+                placeholder={selectedStatus === "terminated" ? "Provide a brief reason for termination..." : "Final inspection status, security deposit notes..."}
+                className="border-stone-200" 
+                disabled={hasBalance}
+                {...register("notes", {
+                    required: selectedStatus === "terminated" ? "A reason for termination is required for forensic documentation." : false
+                })} 
+            />
           </Field>
 
-          <div className="flex items-center justify-end gap-3 pt-4">
+          <div className="flex flex-col gap-3 pt-4">
+            <Button
+              type="submit"
+              variant={selectedStatus === "terminated" ? "warning" : "primary"}
+              className="!h-14 w-full rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-stone-900/5"
+              loading={isSubmitting}
+              disabled={hasBalance}
+            >
+              {selectedStatus === "terminated" ? "Conclude Termination" : "Certify Completion"}
+            </Button>
             <Button
               id={cancelBtnId}
               type="button"
-              variant="secondary"
-              className="!h-11 rounded-xl px-6 text-[10px] font-bold uppercase tracking-widest"
+              variant="ghost"
+              className="!h-12 w-full text-[10px] font-black uppercase tracking-widest text-stone-400 hover:text-stone-600"
               onClick={onClose}
               disabled={isSubmitting}
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="danger"
-              className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/10"
-              loading={isSubmitting}
-              disabled={isSubmitting}
-            >
-              Finalize Move-out
+              Discard Changes
             </Button>
           </div>
         </form>
@@ -216,6 +303,17 @@ export default function ContractDetailsPage() {
     fetcher
   );
 
+  const { data: billData, mutate: refetchBills } = useSWR(
+    !authLoading && currentUser && contractId ? `/api/billing?contract_id=${contractId}&status=unpaid&per_page=100` : null,
+    fetcher
+  );
+
+  const outstandingBalance = useMemo(() => {
+    if (!billData) return 0;
+    const items = normalizePaginatedList(billData).rows;
+    return items.reduce((sum, b) => sum + (Number(b.balance) || 0), 0);
+  }, [billData]);
+
   const { data: paymentsData } = useSWR(
     !authLoading && currentUser && contractId ? `/api/payments?contract_id=${contractId}` : null,
     fetcher
@@ -227,14 +325,40 @@ export default function ContractDetailsPage() {
 
   const loading = !contract && !contractError;
   const fetchError = contractError ? contractError.message || "Failed to load contract details." : "";
-  const [successMessage, setSuccessMessage] = useState("");
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
   const [isSubmittingMoveOut, setIsSubmittingMoveOut] = useState(false);
+  const [isInitializingBilling, setIsInitializingBilling] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const pageTitle = "Contract Details";
 
   const loadContract = () => refetchContract();
 
+  const handleInitializeBilling = async () => {
+    setApiError("");
+    setSuccessMessage("");
+    setIsInitializingBilling(true);
+
+    try {
+      await apiRequest(`/api/billing/initialize/${contractId}`, {
+        method: "POST",
+      });
+      await loadContract();
+      await refetchBills();
+    } catch (err) {
+      const flattened = flattenApiErrors(err);
+      setApiError(flattened || "Failed to initialize billing.");
+    } finally {
+      setIsInitializingBilling(false);
+    }
+  };
+
   const handleMoveOut = async (values) => {
+    if (outstandingBalance > 0) {
+        setApiError("GATE PASS DENIED: CLEARED BALANCE REQUIRED FOR TERMINATION.");
+        return;
+    }
+
     setApiError("");
     setSuccessMessage("");
     setIsSubmittingMoveOut(true);
@@ -249,13 +373,29 @@ export default function ContractDetailsPage() {
       });
       await loadContract();
       setShowMoveOutModal(false);
-      setSuccessMessage("Move-out processed successfully.");
       router.refresh();
     } catch (error) {
       setApiError(flattenApiErrors(error));
       setShowMoveOutModal(false);
     } finally {
       setIsSubmittingMoveOut(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    setApiError("");
+    setIsArchiving(true);
+    try {
+      await apiRequest(`/api/contracts/${contractId}/archive`, {
+        method: "POST",
+      });
+      setShowArchiveConfirm(false);
+      router.push("/contracts");
+    } catch (err) {
+      setShowArchiveConfirm(false);
+      setApiError(flattenApiErrors(err) || "Failed to archive contract.");
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -278,7 +418,7 @@ export default function ContractDetailsPage() {
               <StatusBadge size="sm">{contract.status}</StatusBadge>
             </div>
             <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
-              Lease terms, billing, and payment history.
+              Lease profile: terms, billing, and payment history.
             </p>
           </div>
         ) : (
@@ -320,6 +460,18 @@ export default function ContractDetailsPage() {
         onClose={() => setShowMoveOutModal(false)}
         onConfirm={handleMoveOut}
         isSubmitting={isSubmittingMoveOut}
+        balance={outstandingBalance}
+      />
+
+      <ConfirmationDialog
+        open={showArchiveConfirm}
+        title={contract?.status === 'pending_payment' ? "Void Registration" : "Confirm Archive"}
+        message={`Are you sure you want to ${contract?.status === 'pending_payment' ? 'void' : 'archive'} this agreement? This action will immediately release the bed space into available inventory.`}
+        confirmLabel={contract?.status === 'pending_payment' ? "Void Registration" : "Archive History"}
+        isDanger
+        isLoading={isArchiving}
+        onConfirm={handleArchive}
+        onCancel={() => setShowArchiveConfirm(false)}
       />
 
       <motion.div
@@ -340,7 +492,7 @@ export default function ContractDetailsPage() {
                     <ShieldCheck size={32} aria-hidden />
                   </div>
                   <h2 className="text-2xl font-black tracking-tight text-stone-900">
-                    Agreement Profile
+                    Agreement Quick Profile
                   </h2>
                   <div className="mt-2">
                     <StatusBadge size="sm">{contract.status}</StatusBadge>
@@ -348,7 +500,7 @@ export default function ContractDetailsPage() {
                 </div>
                 
                 <div className="space-y-2 p-8 pt-6">
-                  <MetricItem label="Resident" value={tenantDisplay} icon={User} />
+                  <MetricItem label="Primary Tenant" value={tenantDisplay} icon={User} />
                   <MetricItem
                     label="Assigned Unit"
                     value={
@@ -359,7 +511,7 @@ export default function ContractDetailsPage() {
                     icon={DoorOpen}
                   />
                   <MetricItem
-                    label="Contract Yield"
+                    label="Rental Obligation"
                     value={formatPHP(contract.monthly_rate)}
                     icon={Wallet}
                   />
@@ -371,18 +523,58 @@ export default function ContractDetailsPage() {
                 </div>
               </Card>
 
+              {canManageContracts(currentUser) && contract.status === "pending_payment" ? (
+                <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-teal-50/20 border-teal-100">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-teal-700">Onboarding Action Required</h3>
+                  <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
+                    Generate the setup billing (Advance Rent + Deposit) to enable payment collection and activate this contract.
+                  </p>
+                  <Button
+                    variant="primary"
+                    className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all hover:scale-[1.02] active:scale-95"
+                    onClick={handleInitializeBilling}
+                    isLoading={isInitializingBilling}
+                  >
+                    Generate Initial Bill
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="mt-3 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest border-teal-200 text-teal-700 hover:bg-teal-50"
+                    onClick={() => setShowArchiveConfirm(true)}
+                  >
+                    Void Registration
+                  </Button>
+                </Card>
+              ) : null}
+
               {canManageContracts(currentUser) && isActive ? (
                 <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-amber-50/20 border-amber-100">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-700">Agreement Lifecycle</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-700">Operational Lifecycle</h3>
                   <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed">
                     Once the resident completes their stay, process the move-out to release the bed inventory and finalize terms.
                   </p>
                   <Button
                     variant="danger"
-                    className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/5"
+                    className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/5 transition-all hover:scale-[1.02] active:scale-95"
                     onClick={() => setShowMoveOutModal(true)}
                   >
-                    Process Move-out
+                    Terminate (Move-out)
+                  </Button>
+                </Card>
+              ) : null}
+
+              {canManageContracts(currentUser) && !isActive && contract.status !== "pending_payment" ? (
+                <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-stone-50/50 border-stone-200">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">History Management</h3>
+                  <p className="mt-2 text-[10px] font-medium text-stone-400 leading-relaxed">
+                    Closed contracts can be archived for cleaner listings. Financial records will still be retained.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4 !h-9 w-full rounded-lg text-[10px] font-black uppercase tracking-widest border-stone-200 text-stone-600 hover:bg-white"
+                    onClick={() => setShowArchiveConfirm(true)}
+                  >
+                    Archive Agreement
                   </Button>
                 </Card>
               ) : null}
@@ -390,7 +582,7 @@ export default function ContractDetailsPage() {
 
             <main className="space-y-6 lg:col-span-8">
               <SectionCard
-                title="Resident & Assignment"
+                title="Tenant & Unit Assignment"
                 icon={User}
                 iconClassName="bg-teal-50 text-teal-600"
               >
@@ -413,7 +605,7 @@ export default function ContractDetailsPage() {
                     />
                     <DetailRow
                       label="Contact Number"
-                      value={tenant?.contact_number}
+                      value={canManageContracts(currentUser) ? tenant?.contact_number : maskPhone(tenant?.contact_number)}
                       icon={User}
                       mono
                     />
@@ -456,7 +648,7 @@ export default function ContractDetailsPage() {
                 >
                   <div className="space-y-1">
                     <DetailRow label="Inception" value={formatDateString(contract.move_in_date)} icon={Calendar} />
-                    <DetailRow label="Expected Out" value={contract.expected_move_out_date ? formatDateString(contract.expected_move_out_date) : "Open Ended"} icon={Calendar} />
+                    <DetailRow label="Expected Expiration" value={contract.expected_move_out_date ? formatDateString(contract.expected_move_out_date) : "Open Ended"} icon={Calendar} />
                   </div>
                 </SectionCard>
               </div>
@@ -477,7 +669,7 @@ export default function ContractDetailsPage() {
 
               <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
                 <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Agreement Notes</h2>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Administrative Notes</h2>
                 </div>
                 <div className="p-8">
                   <p className="text-sm font-medium leading-relaxed text-stone-600 italic">
@@ -498,37 +690,37 @@ export default function ContractDetailsPage() {
                     embedded
                     caption="Payments posted against this contract"
                     columns={[
-                      { key: "payment_date", label: "DATE" },
-                      { key: "amount", label: "AMOUNT", className: "text-right" },
-                      { key: "period", label: "BILLING TERM" },
-                      { key: "status", label: "STATUS" },
-                      { key: "reference", label: "REFERENCE" },
+                    { key: "payment_date", label: "PAYMENT DATE", className: "pl-8" },
+                    { key: "amount", label: "AMOUNT", className: "text-right" },
+                    { key: "period", label: "BILLING PERIOD", className: "text-center" },
+                    { key: "status", label: "STATUS", className: "text-center" },
+                    { key: "reference", label: "RECORD ID", className: "text-right pr-8" },
                     ]}
                     rows={payments.map((p) => (
                       <tr
                         key={p.payment_id}
                         className="border-t border-stone-100 transition-colors hover:bg-stone-50"
                       >
-                        <td className="px-6 py-4 text-sm font-bold text-stone-900">
+                        <td className="pl-8 py-5 text-sm font-bold text-stone-900">
                           {formatDateString(p.payment_date)}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="py-5 text-right">
                           <span className="font-mono text-sm font-bold tabular-nums text-emerald-700">
                             {formatPHP(p.amount_paid)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                        <td className="py-5 text-center text-[10px] font-bold uppercase tracking-widest text-stone-400">
                           {formatDateRange(
                             p.billing_period_from || p.billing?.billing_period_from,
                             p.billing_period_to || p.billing?.billing_period_to
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="py-5 text-center">
                           <StatusBadge size="xs">
                             {p.voided_at ? "voided" : (p.status || "posted")}
                           </StatusBadge>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="pr-8 py-5 text-right">
                           <ResourceIdCell id={p.payment_id} prefix="PAY" />
                         </td>
                       </tr>

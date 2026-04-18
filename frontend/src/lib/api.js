@@ -80,7 +80,19 @@ export async function apiRequest(path, options = {}) {
 
   const contentType = response.headers.get("content-type") || "";
   const isJson = contentType.includes("application/json");
-  const body = isJson ? await response.json() : null;
+  
+  let body = null;
+  if (isJson) {
+    const text = await response.text();
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch (e) {
+        console.error("Malformed JSON response:", text);
+        body = null;
+      }
+    }
+  }
 
   if (!response.ok) {
     if (response.status === 401) {

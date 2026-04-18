@@ -18,11 +18,15 @@
 - `docs/`: Product and engineering documentation
 
 ## Core Constraints (Non-Negotiable)
-1. **CCR Compliance:** Never remove or simplify away triggers (24 total), views (6 total), or transaction logs.
+1. **CCR Compliance:** Never remove or simplify away triggers (33 total), views (6 total), or transaction logs.
 2. **Database Integrity:**
    - Contracts link to `bed_space_id`, NEVER direct `room_id`.
    - `billing` table has NO amount columns; totals are computed from `billing_line_items` and `payments`.
    - `rooms.status` must never be set to 'occupied' (invalid ENUM).
+4. **Philippine Regulatory Compliance (R.A. 9653):**
+   - **Rent Increase Cap:** Block annual increases > 1% for units ≤ ₱10,000 in `ContractService`.
+   - **Two-Phase Check-in:** Initialize contracts as `pending_payment`; ignore vacancy updates until manual `activation`.
+   - **Gate Pass:** Mandatory clearance check during move-out; block if `balance > 0`.
 3. **Logic Placement:** Business logic MUST live in Service classes, NOT Controllers or Models.
 4. **Authorization:** Use `AuthorizationService` exclusively. NEVER use Laravel Gates/Policies.
 5. **Multi-Tenant Safety:** Call `AuditService::setAuditUserContext($actor->id)` before every transaction-based write to trigger-covered tables on MySQL.

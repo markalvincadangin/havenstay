@@ -2,16 +2,24 @@
 
 namespace App\Http\Middleware;
 
-use App\Services\AuditService;
+use App\Services\Analytics\AuditService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Forensic context middleware. Propagates the authenticated user ID
+ * to the database session for trigger-based auditing.
+ */
 class SetAuditContext
 {
     /**
      * Set the database-level audit user context (@current_user_id).
      * This ensures that database triggers capture the correct actor ID.
+     *
+     * @param Request $request
+     * @param Closure $next
+     * @return Response
      */
     public function handle(Request $request, Closure $next): Response
     {

@@ -33,6 +33,7 @@ export const ROOM_STATUS_LABELS = {
   partially_occupied: "Partially Occupied",
   fully_occupied: "Fully Occupied",
   maintenance: "Maintenance",
+  archived: "Archived",
 };
 
 /** Valid `rooms.status` keys (schema ENUM order). */
@@ -77,9 +78,11 @@ export const ROOM_TYPE_LABELS = {
 
 // 6. Contract Lifecycle Statuses
 export const CONTRACT_STATUS_LABELS = {
+  pending_payment: "Pending Payment",
   active: "Active",
   completed: "Completed",
   terminated: "Terminated",
+  voided: "Voided",
 };
 
 // 7. Billing Ledger Statuses
@@ -107,18 +110,16 @@ export const BILLING_ITEM_TYPE_LABELS = {
 
 // 9. Audit & System Actions
 export const AUDIT_ACTION_LABELS = {
-  INSERT: "Row Created",
-  UPDATE: "Row Updated",
-  DELETE: "Row Deleted",
-  create: "Record Created",
-  update: "Record Updated",
-  delete: "Record Removed",
-  login: "User Login",
-  logout: "User Logout",
-  access_denied: "Security Alert",
-  status_change: "Status Transition",
-  archive: "Record Archived",
-  restore: "Record Restored",
+  insert: "Insert",
+  update: "Update",
+  delete: "Delete",
+  create: "Create",
+  login: "Login",
+  logout: "Logout",
+  access_denied: "Access Denied",
+  status_change: "Status Change",
+  archive: "Archive",
+  restore: "Restore",
 };
 
 /** `audit_logs.target_table` display names (filters + table). */
@@ -130,7 +131,6 @@ export const AUDIT_ENTITY_LABELS = {
   payments: "Payments",
   users: "Users",
   bed_spaces: "Bed Spaces",
-  /** Matches `audit_logs.target_table` from billing_line_items triggers (havenstay_schema.sql). */
   billing_line_items: "Line Items",
 };
 

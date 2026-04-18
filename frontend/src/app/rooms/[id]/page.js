@@ -14,13 +14,16 @@ import {
   Columns2,
   UserCheck,
   ShieldCheck,
+  Activity,
 } from "lucide-react";
 
 import { apiRequest, fetcher } from "../../../lib/api";
 import { canManageRooms } from "../../../lib/auth";
 import { formatDateString, formatPHP, formatTenantDirectoryName } from "../../../lib/formatters";
 import Alert from "../../_components/ui/Alert";
+import RecordStateAlert from "../../_components/ui/RecordStateAlert";
 import Button from "../../_components/ui/Button";
+import LifecycleActions from "../../_components/ui/LifecycleActions";
 import { Card } from "../../_components/ui/Card";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import { StatusBadge } from "../../_components/ui/StatusBadge";
@@ -33,59 +36,11 @@ import { useAuth } from "../../_context/AuthContext";
 import PageHeaderActions from "../../_components/ui/PageHeaderActions";
 import SectionCard from "../../_components/ui/SectionCard";
 import { SkeletonDetailPage } from "../../_components/ui/Skeleton";
+import ConfirmationDialog from "../../_components/ui/ConfirmationDialog";
+import MetricItem from "../../_components/ui/MetricItem";
 
-function MetricItem({ label, value, icon: Icon }) {
-  return (
-    <div className="flex items-center gap-4 border-b border-stone-100 py-4 last:border-0 hover:bg-stone-50/30 transition-colors">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-stone-50 text-stone-400 border border-white/60 shadow-sm">
-        <Icon size={18} strokeWidth={2.5} aria-hidden />
-      </div>
-      <div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">{label}</p>
-        <p className="text-sm font-black tabular-nums text-stone-900">{value}</p>
-      </div>
-    </div>
-  );
-}
 
-function ArchiveRoomModal({ open, roomCode, isSubmitting, onClose, onConfirm }) {
-  if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="archive-room-title">
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-        aria-label="Close archive room confirmation"
-        disabled={isSubmitting}
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-[460px] rounded-2xl border border-stone-200 bg-white p-8 shadow-2xl">
-        <div className="mb-6 flex items-start gap-4">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-rose-50 shadow-sm shadow-rose-900/10">
-            <AlertTriangle className="size-6 text-rose-600" aria-hidden />
-          </div>
-          <div>
-            <h2 id="archive-room-title" className="text-xl font-black tracking-tight text-stone-900">Archive Room</h2>
-            <p className="mt-1 text-sm text-stone-500">This will remove the room from active operations while preserving historical and audit records.</p>
-          </div>
-        </div>
-        <div className="mb-6 rounded-2xl border border-stone-100 bg-stone-50/50 p-5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Record</p>
-          <p className="mt-1 text-sm font-black text-stone-900">{roomCode || "—"}</p>
-        </div>
-        <div className="flex items-center justify-end gap-3">
-          <Button type="button" variant="secondary" className="!h-11 rounded-xl px-6 text-[10px] font-bold uppercase tracking-widest" disabled={isSubmitting} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="danger" className="!h-11 rounded-xl px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/10" loading={isSubmitting} disabled={isSubmitting} onClick={onConfirm}>
-            Archive
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function RoomDetailsPage() {
   const params = useParams();
@@ -99,9 +54,10 @@ export default function RoomDetailsPage() {
   );
 
   const loading = !room && !roomError;
+  const { mutate: mutateRoom } = useSWR(currentUser && roomId ? `/api/rooms/${roomId}` : null, fetcher);
   const [actionError, setActionError] = useState("");
   const [showArchiveModal, setShowArchiveModal] = useState(false);
-  const [isArchiving, setIsArchiving] = useState(false);
+  const [busyAction, setBusyAction] = useState("");
 
   const title = room ? `Room ${room.room_code}` : "Room";
   const bedSpaces = room?.bed_spaces ?? [];
@@ -113,16 +69,16 @@ export default function RoomDetailsPage() {
     : hasOccupiedBeds
       ? "Room cannot be archived while one or more bed spaces are occupied."
       : "";
-  const canArchiveRoom = canManageRooms(currentUser) && !archiveBlockReason;
+  const canArchiveRoom = canManageRooms(currentUser) && !archiveBlockReason && room?.status !== 'archived';
   const unitOfflineBedHint =
-    room && (roomStatusLower === "maintenance" || roomStatusLower === "unavailable")
+    room && roomStatusLower === "maintenance"
       ? ROOM_UNIT_OFFLINE_BED_HINT[roomStatusLower]
       : null;
 
   const handleArchiveRoom = async () => {
     if (!roomId) return;
     setActionError("");
-    setIsArchiving(true);
+    setBusyAction("archive");
     try {
       await apiRequest(`/api/rooms/${roomId}/archive`, { method: "POST" });
       setShowArchiveModal(false);
@@ -131,7 +87,20 @@ export default function RoomDetailsPage() {
       setActionError(err?.message || "Failed to archive room.");
       setShowArchiveModal(false);
     } finally {
-      setIsArchiving(false);
+      setBusyAction("");
+    }
+  };
+
+  const runLifecycleAction = async (action, path) => {
+    setActionError("");
+    setBusyAction(action);
+    try {
+      await apiRequest(path, { method: "POST" });
+      await mutateRoom();
+    } catch (error) {
+      setActionError(error?.message || `Failed to ${action} room.`);
+    } finally {
+      setBusyAction("");
     }
   };
 
@@ -142,7 +111,7 @@ export default function RoomDetailsPage() {
         room ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-stone-500">
-              Room profile — beds, status, and assignments.
+              Unit profile: beds, status, and assignments.
             </span>
             <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
             <ResourceIdCell id={room.room_id} prefix="ROOM" />
@@ -177,26 +146,28 @@ export default function RoomDetailsPage() {
                 <Edit2 size={16} aria-hidden />
                 Update Details
               </Link>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setShowArchiveModal(true)}
-                disabled={isArchiving || !canArchiveRoom}
-                className="!h-11 rounded-xl border border-rose-200 px-6 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50"
-              >
-                Archive
-              </Button>
+              <LifecycleActions
+                canManage={canManageRooms(currentUser)}
+                status={room?.status}
+                hasActiveContract={hasActiveContracts || hasOccupiedBeds}
+                busyAction={busyAction}
+                onArchive={() => setShowArchiveModal(true)}
+                onRestore={() => runLifecycleAction("restore", `/api/rooms/${roomId}/restore`)}
+              />
             </div>
           )}
         </PageHeaderActions>
       }
     >
-      <ArchiveRoomModal
+      <ConfirmationDialog
         open={showArchiveModal}
-        roomCode={room?.room_code}
-        isSubmitting={isArchiving}
-        onClose={() => !isArchiving && setShowArchiveModal(false)}
+        title="Archive Inventory Unit"
+        message={`Are you sure you want to archive Room ${room?.room_code}? This will remove the unit from active booking availability while keeping its history.`}
+        confirmLabel="Archive Room"
+        isDanger
+        isLoading={busyAction === "archive"}
         onConfirm={handleArchiveRoom}
+        onCancel={() => busyAction !== "archive" && setShowArchiveModal(false)}
       />
 
       <div className="space-y-6">
@@ -217,6 +188,10 @@ export default function RoomDetailsPage() {
           </Alert>
         ) : null}
 
+        <RecordStateAlert show={room?.status === 'archived'} variant="warning" title="Forensic History">
+          This room is currently archived and decommissioned from active inventory. It will not appear in occupancy reports or booking availability until restored.
+        </RecordStateAlert>
+
         <div className="grid gap-8 lg:grid-cols-12">
           <aside className="space-y-6 lg:col-span-4">
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
@@ -231,18 +206,18 @@ export default function RoomDetailsPage() {
               </div>
               <div className="flex justify-center border-b border-stone-100 bg-stone-50/30 px-4 py-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                  At a Glance
+                  Quick Profile
                 </span>
               </div>
               <div className="space-y-2 p-8">
-                <MetricItem label="Monthly Rent" value={formatPHP(room?.monthly_rate)} icon={Receipt} />
+                <MetricItem label="Rental Rate" value={formatPHP(room?.monthly_rate)} icon={Receipt} />
                 <MetricItem
-                  label="Bed Capacity"
+                  label="Unit Capacity"
                   value={`${room?.capacity ?? "—"} ${Number(room?.capacity) === 1 ? "Bed" : "Beds"}`}
                   icon={UserCheck}
                 />
                 <MetricItem
-                  label="Room Category"
+                  label="Unit Category"
                   value={
                     room?.room_type
                       ? (room.room_type === 'solo' ? 'Solo Room' : 'Shared Room')
@@ -263,11 +238,31 @@ export default function RoomDetailsPage() {
                 {room?.amenities || "No amenities on file for this room."}
               </p>
             </SectionCard>
+
+            <SectionCard
+              title="Utility Monitoring"
+              icon={Activity}
+              iconClassName="bg-teal-50 text-teal-600"
+              titleSize="xs"
+            >
+              <div className="space-y-4">
+                <p className="text-xs font-medium text-stone-500 leading-relaxed">
+                  Sub-meter tracking for electric and water consumption is active for this unit.
+                </p>
+                <Link
+                  href={`/rooms/${roomId}/meters`}
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-stone-50 border border-stone-100 text-[10px] font-black uppercase tracking-widest text-teal-600 hover:bg-white hover:border-teal-200 transition-all shadow-sm"
+                >
+                  <Activity size={14} />
+                  Manage Readings
+                </Link>
+              </div>
+            </SectionCard>
           </aside>
 
           <div className="space-y-6 lg:col-span-8">
             <SectionCard
-              title="Room Layout"
+              title="Bed Inventory"
               icon={ShieldCheck}
               iconClassName="bg-teal-50 text-teal-600"
               rightElement={(
@@ -281,22 +276,22 @@ export default function RoomDetailsPage() {
                 <Table
                   embedded
                   columns={[
-                    { key: "registry_id", label: "BED SPACE ID" },
-                    { key: "bed_label", label: "BED LABEL" },
-                    { key: "status", label: "STATUS" },
-                    { key: "tenant", label: "TENANT" },
-                    { key: "move_in", label: "MOVE-IN" },
+                    { key: "registry_id", label: "RECORD ID", className: "pl-8" },
+                    { key: "bed_label", label: "BED LABEL", className: "text-center" },
+                    { key: "status", label: "STATUS", className: "text-center" },
+                    { key: "tenant", label: "TENANT NAME" },
+                    { key: "move_in", label: "MOVE-IN DATE", className: "text-right pr-8" },
                   ]}
                   rows={bedSpaces.map((bed) => (
                     <tr key={bed.bed_space_id} className="transition-colors hover:bg-stone-50">
-                      <td className="px-6 py-4">
+                      <td className="pl-8 py-5">
                         <ResourceIdCell id={bed.bed_space_id} prefix="BS" />
                       </td>
-                      <td className="px-6 py-4 text-sm font-bold text-stone-900 font-mono tracking-tight">{bed.bed_label}</td>
-                      <td className="px-6 py-4">
+                      <td className="py-5 text-center text-sm font-bold text-stone-900 font-mono tracking-tight">{bed.bed_label}</td>
+                      <td className="py-5 text-center">
                         <StatusBadge size="xs">{bed.status}</StatusBadge>
                       </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-stone-800 leading-tight">
+                      <td className="py-5 text-sm font-semibold text-stone-800 leading-tight">
                         {bed.active_contract?.tenant ? (
                           <Link
                             href={`/tenants/${bed.active_contract.tenant.tenant_id}`}
@@ -308,7 +303,7 @@ export default function RoomDetailsPage() {
                           "—"
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm text-stone-600 leading-tight">
+                      <td className="pr-8 py-5 text-right text-sm text-stone-600 leading-tight">
                         {bed.active_contract?.move_in_date
                           ? formatDateString(bed.active_contract.move_in_date)
                           : "—"}
@@ -322,7 +317,7 @@ export default function RoomDetailsPage() {
             </SectionCard>
 
             <SectionCard
-              title="Management Notes"
+              title="Administrative Notes"
               icon={Settings}
               iconClassName="bg-stone-100 text-stone-600"
               titleSize="xs"

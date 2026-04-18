@@ -135,7 +135,7 @@ export default function PaymentsListPage() {
   return (
     <StandardPage
       title="Payments"
-      subtitle="Chronological ledger of payments, reference codes, and contract links."
+      subtitle="CHRONOLOGICAL COLLECTIONS LEDGER AND AUDIT TRAIL"
       breadcrumbs={<Breadcrumbs items={[{ label: "Payments" }]} />}
       loading={loading}
       error={paymentsError}
@@ -171,7 +171,7 @@ export default function PaymentsListPage() {
         <FilterPanelCard icon={Search}>
             <div className="grid items-end gap-6 lg:grid-cols-12">
               <div className="lg:col-span-5">
-                <Field label="Search payments">
+                <Field label="Search Registry">
                   <Input
                     icon={Search}
                     value={tenantQuery}
@@ -182,7 +182,7 @@ export default function PaymentsListPage() {
                 </Field>
               </div>
               <div className="lg:col-span-3">
-                <Field label="Status">
+                <Field label="Collection Status">
                   <Select
                     value={statusFilter}
                     onChange={(e) => updateFilter("status", e.target.value)}
@@ -245,17 +245,22 @@ export default function PaymentsListPage() {
           }}
         >
           <Card className="!p-0 overflow-hidden border-stone-200 rounded-2xl shadow-sm">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Collection Directory</h2>
+              <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+                {listMeta?.total ?? sortedFiltered.length} records matching
+              </div>
+            </div>
             <Table
               embedded
-              caption={`Payments ledger — ${listMeta?.total ?? sortedFiltered.length} matching`}
               columns={[
-                { key: "payment_id", label: "PAYMENT ID", sortable: true, sortKey: "payment_id", className: "w-28" },
-                { key: "date", label: "PAYMENT DATE", sortable: true, sortKey: "date" },
-                { key: "tenant", label: "RESIDENT", sortable: true, sortKey: "tenant" },
+                { key: "payment_id", label: "RECORD ID", sortable: true, sortKey: "payment_id", className: "pl-8 w-32" },
+                { key: "date", label: "COLLECTION DATE", sortable: true, sortKey: "date", className: "text-center" },
+                { key: "tenant", label: "TENANT NAME", sortable: true, sortKey: "tenant" },
                 { key: "amount", label: "AMOUNT PAID", sortable: true, sortKey: "amount", className: "text-right" },
-                { key: "method", label: "PAYMENT METHOD", sortable: true, sortKey: "method" },
-                { key: "status", label: "STATUS", sortable: true, sortKey: "status" },
-                { key: "actions", label: "", className: "text-right w-16" },
+                { key: "method", label: "PAYMENT METHOD", sortable: true, sortKey: "method", className: "text-center" },
+                { key: "status", label: "STATUS", sortable: true, sortKey: "status", className: "text-center" },
+                { key: "actions", label: "", className: "text-right w-16 px-8" },
               ]}
               sortColumn={sortColumn}
               sortDirection={sortDirection}
@@ -274,32 +279,32 @@ export default function PaymentsListPage() {
                     className={interactiveTableRowClass}
                     onClick={() => router.push(`/payments/${payment.payment_id}`)}
                   >
-                    <td className="px-6 py-4">
+                    <td className="pl-8 py-5">
                       <ResourceIdCell id={payment.payment_id} prefix="PAY" />
                     </td>
-                    <td className="px-6 py-4 text-sm font-bold tabular-nums text-stone-600">
+                    <td className="py-5 text-center text-sm font-bold tabular-nums text-stone-600">
                       {formatDateString(payment.payment_date)}
                     </td>
-                    <td className="px-6 py-4 text-sm font-black text-stone-900 group-hover:text-teal-700 transition-colors leading-tight">
+                    <td className="py-5 text-sm font-black text-stone-900 group-hover:text-teal-700 transition-colors leading-tight">
                       {tenantName}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="py-5 text-right">
                       <span className={`font-mono font-black tabular-nums ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`}>
                         {formatPHP(payment.amount_paid)}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                    <td className="py-5 text-center">
+                      <div className="flex items-center justify-center gap-2">
                         <Wallet size={12} className="text-stone-300" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
                           {METHOD_LABELS[methodKey] || payment?.payment_method || "Other"}
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="py-5 text-center">
                       <StatusBadge size="sm">{rowStatus}</StatusBadge>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-8 py-5 text-right">
                       <RowOpenIndicator compact />
                     </td>
                   </tr>

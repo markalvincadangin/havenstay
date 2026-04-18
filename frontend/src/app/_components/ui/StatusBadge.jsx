@@ -59,16 +59,21 @@ export function StatusBadge({ children }) {
     inactive: "badge-neutral",
     archived: "badge-neutral",
 
-    // Room statuses (rooms.status — schema: available | unavailable | maintenance; never "occupied" on rooms)
+    // Room statuses (rooms.status — schema: vacant | partially_occupied | fully_occupied | maintenance)
+    vacant: "badge-success",
+    partially_occupied: "badge-warning",
+    fully_occupied: "badge-neutral",
+    maintenance: "badge-danger",
+    
+    // Legacy/Fallback Room Statuses
     available: "badge-success",
-    maintenance: "badge-warning",
     unavailable: "badge-warning",
 
     // Bed space statuses (bed_spaces.status — vacant | occupied | maintenance)
-    vacant: "badge-success",
     occupied: "badge-info",
 
     // Contract statuses
+    pending_payment: "badge-info",
     ended: "badge-neutral",
     voided_contract: "badge-neutral",
     terminated: "badge-danger",
@@ -103,13 +108,13 @@ export function StatusBadge({ children }) {
   // Badge variant styles per MASTER.md Section 6.4
   const variantStyles = {
     "badge-success": {
-      background: "#ECFDF5",
+      background: "#D1FAE5",
       color: "#065F46",
       borderColor: "#A7F3D0",
     },
     "badge-info": {
-      background: "#F0FDFA",
-      color: "#134E4A",
+      background: "#CCFBF1",
+      color: "#115E59",
       borderColor: "#99F6E4",
     },
     "badge-warning": {
@@ -143,6 +148,7 @@ export function StatusBadge({ children }) {
     ...ROOM_TYPE_LABELS,
     ...AUDIT_ACTION_LABELS,
     ...TX_LOG_STATUS_LABELS,
+    voided: "Voided",
     voided_contract: "Voided",
     settled: "Paid",
     past_due: "Overdue",

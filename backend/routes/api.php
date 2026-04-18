@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
+use App\Http\Controllers\Api\ComplianceController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReportController;
@@ -75,6 +76,7 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('contracts')->group(fu
     Route::post('{contract}/archive', [ContractController::class, 'archive']);
     Route::post('{id}/restore', [ContractController::class, 'restore']);
     Route::post('{contract}/move-out', [ContractController::class, 'moveOut']);
+    Route::post('{contract}/activate', [ContractController::class, 'activate']);
 });
 
 // FR-020..FR-023, FR-027: Billing endpoints (Admin/Staff create/update, all roles view)
@@ -83,6 +85,7 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('billing')->group(func
     Route::post('/', [BillingController::class, 'store']);
     Route::get('{billing}', [BillingController::class, 'show']);
     Route::patch('{billing}/status', [BillingController::class, 'updateStatus']);
+    Route::post('initialize/{contractId}', [BillingController::class, 'initialize']);
 });
 
 // FR-024..FR-027: Payment endpoints (Admin/Staff create, all roles view history)
@@ -112,6 +115,28 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('reports')->group(func
     Route::get('collections-performance/export', [ReportController::class, 'collectionsPerformanceExport']);
     Route::get('tenant-ledger/export', [ReportController::class, 'tenantLedgerExport']);
     Route::get('tenant-history/export', [ReportController::class, 'tenantHistoryExport']);
+    Route::get('meter-coverage', [ReportController::class, 'meterCoverage']);
+});
+
+// FR-023: Philippine Compliance (Utility Sub-metering and Appliance Registry)
+Route::middleware(['auth:sanctum', 'auth.check'])->group(function (): void {
+    Route::get('appliances', [ComplianceController::class, 'index']);
+    Route::get('appliances/stats', [ComplianceController::class, 'registryStats']);
+    Route::get('add-ons', [ComplianceController::class, 'listAddOns']);
+    Route::post('add-ons', [ComplianceController::class, 'storeAddOn']);
+    Route::get('add-ons/{addOn}', [ComplianceController::class, 'show']);
+    Route::put('add-ons/{addOn}', [ComplianceController::class, 'updateAddOn']);
+    Route::patch('add-ons/{addOn}/status', [ComplianceController::class, 'updateAddOn']);
+
+    Route::prefix('contracts/{contract}/add-ons')->group(function (): void {
+        Route::post('/', [ComplianceController::class, 'attachAddOn']);
+        Route::delete('{addOnId}', [ComplianceController::class, 'destroyContractAddOn']);
+    });
+
+    Route::prefix('rooms/{room}/meters')->group(function (): void {
+        Route::get('/', [ComplianceController::class, 'listRoomMeters']);
+        Route::post('/', [ComplianceController::class, 'storeMeterReading']);
+    });
 });
 
 // FR-033, FR-034: Audit log inspection endpoints (Admin only)

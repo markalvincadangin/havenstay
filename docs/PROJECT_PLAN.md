@@ -22,7 +22,7 @@ This Project Plan defines the execution strategy for designing, developing, and 
 
 ### Phase 2: Database & Architecture
 - Implement authoritative MySQL schema.
-- Develop 24 audit triggers (8 tables × 3 operations) for [**CCR-008**](SRS.md#16-academic-and-course-compliance-requirements) compliance.
+- Develop 42 audit triggers (14 tables × 3 operations) for [**CCR-008**](SRS.md#16-academic-and-course-compliance-requirements) compliance.
 - Establish Primary-Replica topology.
 
 ---
@@ -45,6 +45,7 @@ This Project Plan defines the execution strategy for designing, developing, and 
 | v1.0 | 2026-03-27 | Initial project plan created. |
 | v1.4 | 2026-04-09 | Professional overhaul: ToC refinement and link integrity. |
 | v1.5 | 2026-04-11 | WBS CCR-008 trigger count aligned to 24; cross-references verified with SRS/SDD/API_REFERENCE. |
+| v1.6 | 2026-04-18 | Finalized 42-trigger / 14-table forensic lock for production release. |
 
 ---
 

@@ -237,6 +237,80 @@ Update account profile and role assignment for existing user (Admin-only).
 
 ---
 
+## 2.10 `/compliance/registry` (Appliance Master List)
+
+### Purpose
+Manage the master catalog of allowable additional items (FR-023b).
+
+### Fields (`add_on_registry` table)
+| UI label | Schema key | Required | Notes |
+| :--- | :--- | :---: | :--- |
+| Item Name | `item_name` | Yes | Unique title. |
+| Default Monthly Rate | `default_monthly_rate` | Yes | Base rate in PHP. |
+| Status | `is_active` | Yes | Boolean toggle. |
+
+### Behavior
+- Form usually in modal or inline registry card.
+- Prevent deletion if item is ever linked to a contract (use archiving instead).
+
+---
+
+## 2.11 `/contracts/[id]/add-ons` (Association)
+
+### Purpose
+Attach specialized appliances to a specific lease with negotiated rates (FR-023c).
+
+### Fields (`contract_add_ons` table)
+| UI label | Schema key | Required | Notes |
+| :--- | :--- | :---: | :--- |
+| Appliance | `add_on_id` | Yes | Selected from registry. |
+| Monthly Charge | `actual_rate` | Yes | Defaults to registry rate; editable. |
+
+### Behavior
+- Must show "Impact Preview": `Current Total -> New Total`.
+- Once saved, the `actual_rate` is static for that contract even if the master registry changes.
+
+---
+
+## 2.12 `/rooms/[id]/meters` (Utility Reading)
+
+### Purpose
+Record periodic sub-meter values for electricity or water (FR-023a).
+
+### Fields (`room_meter_readings` table)
+| UI label | Schema key | Required | Notes |
+| :--- | :--- | :---: | :--- |
+| Utility Type | `utility_type` | Yes | `electric` or `water`. |
+| Reading Date | `reading_date` | Yes | Defaults to today; no future dates. |
+| Meter Value | `reading_value` | Yes | Precision Decimal(12,4). |
+
+### Forensic Rules
+- UI must highlight the "Previous Reading": [Value] on [Date].
+- Validation: Value must be ≥ Previous Reading (Non-Regressive Rule).
+- High Consumption Alert: Show warning if delta > historical avg.
+
+---
+
+## 2.13 `/billing/wizard` (Itemized Generation)
+
+### Purpose
+The authoritative workflow for generating monthly ledger entries with compliance association.
+
+### Logic & Association
+This is a composite form that pulls from multiple sources:
+1. **Base Rent**: Injected from contract profile.
+2. **Appliances**: Multiselect list of active add-ons for the period.
+3. **Utilities**: Selection of unbilled meter readings (`reading_ids` array).
+
+### Payload Data
+| Component | Payload Logic |
+| :--- | :--- |
+| **Header** | Standard `billing` header (period & due date). |
+| **Meter Readings** | `reading_ids` array (associations). |
+| **Line Items** | Manual overrides or calculated deltas. |
+
+---
+
 ## 3) Form Consistency QA Checklist
 
 - [ ] Route has one clear page purpose and form title.
@@ -309,6 +383,11 @@ Rule: the `errors` object key should match the payload key sent for that field.
 | `/users/[id]/edit` | System Role | `role_id` | `role_id` |
 | `/users/[id]/edit` | New Password | `password` | `password` |
 | `/users/[id]/edit` | Account Active | `is_active` | `is_active` |
+| `/compliance/registry` | Item Name | `item_name` | `item_name` |
+| `/compliance/registry` | Default Rate | `default_monthly_rate` | `default_monthly_rate` |
+| `/rooms/[id]/meters` | Utility Type | `utility_type` | `utility_type` |
+| `/rooms/[id]/meters` | Meter Value | `reading_value` | `reading_value` |
+| `/billing/wizard` | Readings | `reading_ids` | `reading_ids` |
 
 ### Binding Notes
 - For nested arrays like billing line items, backend validation keys are index-based (for example `line_items.0.amount`), so frontend field mapping should support wildcard-to-index resolution.

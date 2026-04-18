@@ -52,7 +52,7 @@ export default function BillingDetailsPage() {
 
   const loading = !billing && !billingError;
 
-  const title = billing ? `Billing #${billingId}` : "Billing Detail";
+  const title = billing ? `Billing Record #${billingId}` : "Billing Detail";
 
   const tenant = billing?.contract?.tenant;
   const tenantName = tenant ? `${tenant.last_name || ""}, ${tenant.first_name || ""}`.trim() : null;
@@ -73,7 +73,7 @@ export default function BillingDetailsPage() {
         billing ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-stone-500">
-              Line items, payments, and status for this billing cycle.
+              Cycle summary, posted payments, and financial status tracking.
             </span>
             <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
             <ResourceIdCell id={billing.billing_id} prefix="BILL" />
@@ -109,11 +109,11 @@ export default function BillingDetailsPage() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
                   <Receipt size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Billing Summary</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Cycle Details</h2>
               </div>
               <div className="p-8">
                 <div className="grid gap-8 sm:grid-cols-2">
-                  <MetricItem label="Tenant" icon={User}>
+                  <MetricItem label="Primary Tenant" icon={User}>
                     {tenant?.tenant_id ? (
                       <Link href={`/tenants/${tenant.tenant_id}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
                         {tenantName || "—"}
@@ -122,7 +122,7 @@ export default function BillingDetailsPage() {
                       tenantName || "—"
                     )}
                   </MetricItem>
-                  <MetricItem label="Room / Bed Space" icon={Building2}>
+                  <MetricItem label="Assigned Unit" icon={Building2}>
                     {roomId ? (
                       <Link href={`/rooms/${roomId}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
                         Room {roomCode}{bedSpace?.bed_label ? ` / ${bedSpace.bed_label}` : ""}
@@ -153,7 +153,7 @@ export default function BillingDetailsPage() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-50 text-stone-600">
                   <FileText size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Charges & Fees</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Itemized Charges</h2>
               </div>
               <div className="p-0">
                 <Table
@@ -192,30 +192,39 @@ export default function BillingDetailsPage() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
                   <History size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Payment History</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Collection History</h2>
               </div>
               <div className="p-0">
                 <Table
                   embedded
                   caption={`Payment history for billing #${billingId}`}
                   columns={[
-                    { key: "date", label: "PAYMENT DATE" },
+                    { key: "date", label: "PAYMENT DATE", className: "pl-8" },
                     { key: "amount", label: "AMOUNT PAID", className: "text-right" },
-                    { key: "ref", label: "REFERENCE" },
-                    { key: "status", label: "STATUS" },
-                    { key: "actions", label: "" },
+                    { key: "ref", label: "REFERENCE", className: "text-center" },
+                    { key: "status", label: "STATUS", className: "text-center" },
+                    { key: "actions", label: "", className: "pr-8" },
                   ]}
                   rows={payments.map((payment) => (
                     <tr key={payment.payment_id} className="border-t border-stone-100 group transition-colors hover:bg-stone-50">
-                      <td className="px-8 py-4 text-xs font-bold text-stone-900">{formatDateString(payment.payment_date)}</td>
-                      <td className="px-8 py-4 text-right font-mono text-sm font-black tabular-nums text-emerald-700">
+                      <td className="pl-8 py-5 text-xs font-bold text-stone-900">
+                        <div className="flex items-center gap-2">
+                          {formatDateString(payment.payment_date)}
+                          {payment.correlation_id && (
+                            <span className="font-mono text-[8px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-1.5 py-0.5" title={`Linked to Audit #TX-${payment.correlation_id.slice(0,8).toUpperCase()}`}>
+                              #TX-{payment.correlation_id.slice(0,5).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-5 text-right font-mono text-sm font-black tabular-nums text-emerald-700">
                         {formatPHP(payment.amount_paid)}
                       </td>
-                      <td className="px-8 py-4">
+                      <td className="py-5 text-center">
                         <ResourceIdCell id={payment.payment_id} prefix="PAY" />
                       </td>
-                      <td className="px-8 py-4"><StatusBadge size="xs">{payment.status || "posted"}</StatusBadge></td>
-                      <td className="px-8 py-4 text-right">
+                      <td className="py-5 text-center"><StatusBadge size="xs">{payment.status || "posted"}</StatusBadge></td>
+                      <td className="pr-8 py-5 text-right">
                         <Link href={`/payments/${payment.payment_id}`} className="text-[10px] font-black uppercase tracking-widest text-teal-700 hover:text-teal-900">
                           Details
                         </Link>
@@ -233,22 +242,22 @@ export default function BillingDetailsPage() {
             <div className="rounded-2xl border border-stone-200 bg-stone-900 p-8 shadow-xl">
                <div className="flex items-center gap-2 mb-6">
                   <CreditCard size={16} className="text-teal-400" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Billing totals</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Summary Matrix</span>
                </div>
                
                <div className="space-y-4">
                   <div className="flex justify-between items-baseline border-b border-stone-800 pb-4">
-                     <span className="text-stone-500 tracking-widest uppercase font-black text-[10px]">Total Amount</span>
+                     <span className="text-stone-500 tracking-widest uppercase font-black text-[10px]">Total Obligation</span>
                      <span className="font-mono text-sm font-bold text-stone-300">{formatPHP(totalAmount)}</span>
                   </div>
                   <div className="flex justify-between items-baseline border-b border-stone-800 pb-4">
-                     <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Amount Paid</span>
+                     <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Total Collections</span>
                      <span className="font-mono text-sm font-bold text-emerald-400">{formatPHP(totalPaid)}</span>
                   </div>
                   <div className="pt-2">
-                     <span className="text-[10px] font-black uppercase tracking-widest text-teal-500 block mb-1">Balance</span>
+                     <span className="text-[10px] font-black uppercase tracking-widest text-teal-500 block mb-1">Remaining Balance</span>
                      <div className="flex items-baseline justify-between">
-                        <span className={`${balance > 0 ? "text-teal-400" : "text-emerald-400"} font-mono text-3xl font-black tabular-nums`}>
+                        <span className={`${balance > 0 ? "text-rose-400" : "text-emerald-400"} font-mono text-3xl font-black tabular-nums`}>
                           {formatPHP(Math.max(balance, 0))}
                         </span>
                         {balance < 0 && (

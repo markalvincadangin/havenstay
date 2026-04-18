@@ -2,10 +2,17 @@
 
 namespace App\Http\Requests\Room;
 
+use App\Services\Identity\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 
+/**
+ * Validates data for creating a new room and its initial bed space configuration.
+ */
 class StoreRoomRequest extends FormRequest
 {
+    /**
+     * Authorized: Admin, Staff.
+     */
     public function authorize(): bool
     {
         return true;

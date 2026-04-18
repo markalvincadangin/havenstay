@@ -27,6 +27,7 @@ import {
 } from "../../../lib/pagination";
 import ResourceView from "../../_components/ui/ResourceView";
 import TablePagination from "../../_components/ui/TablePagination";
+import ResourceIdCell from "../../_components/ui/ResourceIdCell";
 
 export default function TenantLedgerReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
@@ -182,14 +183,14 @@ export default function TenantLedgerReportPage() {
 
         <div className="p-8">
             <div className="max-w-md">
-                <Field label="Choose a tenant to view history">
+                <Field label="Search Tenant">
                     <Select
                     className="!h-11 border-stone-200"
                     value={selectedTenantId}
                     onChange={(e) => handleTenantChange(e.target.value)}
                     disabled={fetchingLedger}
                     >
-                    <option value="">Select a tenant...</option>
+                    <option value="">Select a tenant name...</option>
                     {tenants.map(t => (
                         <option key={t.tenant_id} value={t.tenant_id}>
                         {t.last_name}, {t.first_name} ({t.status})
@@ -221,25 +222,43 @@ export default function TenantLedgerReportPage() {
                 caption={`Financial statement for ${report.tenant?.name}`}
                 ariaLabel="Tenant financial ledger"
                 columns={[
-                  { key: "date", label: "Date" },
-                  { key: "desc", label: "Description" },
-                  { key: "debit", label: "Debit", className: "text-right" },
-                  { key: "credit", label: "Credit", className: "text-right" },
-                  { key: "balance", label: "Balance", className: "text-right" },
+                  { key: "date", label: "ENTRY DATE", className: "text-center w-24" },
+                  { key: "ref", label: "RECORD ID", className: "w-28 text-center" },
+                  { key: "desc", label: "ACTIVITY DESCRIPTION" },
+                  { key: "debit", label: "CHARGES", className: "text-right" },
+                  { key: "credit", label: "PAYMENTS", className: "text-right" },
+                  { key: "balance", label: "RUNNING BALANCE", className: "text-right" },
                 ]}
                 rows={entries.map((entry, idx) => (
                   <tr key={`${entry.link_type}-${entry.link_id}-${idx}`} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
-                    <td className="px-6 py-4 text-[10px] font-medium text-stone-400 uppercase font-mono">{formatDateString(entry.date)}</td>
+                    <td className="px-6 py-4 text-[10px] text-center font-medium text-stone-400 uppercase font-mono">{formatDateString(entry.date)}</td>
+                    <td className="px-6 py-4 text-center">
+                      {entry.link_type === 'billing' ? (
+                        <ResourceIdCell id={entry.link_id} prefix="BILL" />
+                      ) : entry.link_type === 'payment' ? (
+                        <ResourceIdCell id={entry.link_id} prefix="PAY" />
+                      ) : (
+                        <span className="text-stone-300">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-xs font-bold text-stone-700">{entry.description}</td>
                     <td className="px-6 py-4 text-right">
                         {entry.type === 'debit' ? (
-                            <span className="font-mono text-xs tabular-nums text-rose-800 font-black">{formatPHP(entry.amount)}</span>
-                        ) : "—"}
+                            Number(entry.amount) === 0 ? (
+                                <span className="font-mono text-xs tabular-nums text-stone-300 opacity-40">{formatPHP(0)}</span>
+                            ) : (
+                                <span className="font-mono text-xs tabular-nums text-rose-800 font-black">{formatPHP(entry.amount)}</span>
+                            )
+                        ) : <span className="text-stone-300">—</span>}
                     </td>
                     <td className="px-6 py-4 text-right">
                         {entry.type === 'credit' ? (
-                            <span className="font-mono text-xs tabular-nums text-teal-700 font-bold">{formatPHP(entry.amount)}</span>
-                        ) : "—"}
+                            Number(entry.amount) === 0 ? (
+                                <span className="font-mono text-xs tabular-nums text-stone-300 opacity-40">{formatPHP(0)}</span>
+                            ) : (
+                                <span className="font-mono text-xs tabular-nums text-teal-700 font-bold">{formatPHP(entry.amount)}</span>
+                            )
+                        ) : <span className="text-stone-300">—</span>}
                     </td>
                     <td className="px-6 py-4 text-right">
                         <span className={[

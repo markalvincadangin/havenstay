@@ -4,7 +4,7 @@ import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { SkeletonListPage } from "./Skeleton";
-import { AppMain } from "./AppShell";
+import { AppMain } from "../layout/AppShell";
 import PageHeader from "./PageHeader";
 import Alert from "./Alert";
 

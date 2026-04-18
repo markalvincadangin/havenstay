@@ -225,22 +225,31 @@ export default function ActiveContractsReportPage() {
             columns={[
               { key: "tenant", label: "Tenant" },
               { key: "room", label: "Room" },
-              { key: "bed", label: "Bed label" },
-              { key: "move_in", label: "Move-in" },
+              { key: "bed", label: "Bed label", className: "text-center" },
+              { key: "move_in", label: "Move-in", className: "text-center" },
               { key: "rate", label: "Monthly rate", className: "text-right" },
-              { key: "bed_st", label: "Bed status" },
+              { key: "deposit", label: "Deposit", className: "text-right" },
+              { key: "clearance", label: "Gate Pass", className: "text-center" },
+              { key: "bed_st", label: "Bed status", className: "text-center" },
               { key: "contract", label: "Contract ID", className: "text-right" },
             ]}
             rows={rows.map((row) => (
               <tr key={row.contract_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
                 <td className="px-6 py-4 text-xs font-bold text-stone-900">{row.tenant_name}</td>
-                <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500">
-                  {row.room_code}
-                </td>
-                <td className="px-6 py-4 text-xs text-stone-700">{row.bed_label}</td>
-                <td className="px-6 py-4 text-[10px] font-medium text-stone-500">{formatDateString(row.move_in_date)}</td>
-                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-900">{formatPHP(row.monthly_rate)}</td>
                 <td className="px-6 py-4">
+                  <div className="font-mono text-[10px] font-black uppercase tracking-tighter text-stone-900 leading-tight">{row.room_code}</div>
+                  <ResourceIdCell id={row.room_id} prefix="ROOM" />
+                </td>
+                <td className="px-6 py-4 text-center text-xs font-bold text-stone-700">{row.bed_label}</td>
+                <td className="px-6 py-4 text-center text-[10px] font-medium text-stone-500">{formatDateString(row.move_in_date)}</td>
+                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-900">{formatPHP(row.monthly_rate)}</td>
+                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-500">{formatPHP(row.deposit_amount)}</td>
+                <td className="px-6 py-4 text-center">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${row.is_cleared ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {row.is_cleared ? 'Cleared' : 'Pending'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-center">
                   <StatusBadge>{row.bed_status}</StatusBadge>
                 </td>
                 <td className="px-6 py-4 text-right">

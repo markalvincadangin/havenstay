@@ -28,67 +28,10 @@ import TablePagination from "../_components/ui/TablePagination";
 import StandardPage from "../_components/ui/StandardPage";
 import PageHeaderActions from "../_components/ui/PageHeaderActions";
 import { usePaginatedFilters } from "../../hooks/usePaginatedFilters";
+import OccupancyBar from "../_components/ui/OccupancyBar";
 
 
-function OccupancyBar({ bedSpaces, capacity, roomStatus }) {
-  const shouldReduceMotion = useReducedMotion();
-  const bedList = Array.isArray(bedSpaces) ? bedSpaces : [];
-  const occupied = bedList.filter((b) => b.status === "occupied").length;
-  const vacant = bedList.filter((b) => b.status === "vacant").length;
-  /** Prefer room capacity; fall back to bed row count so full/unavailable units still show a full bar if API desyncs. */
-  const total = Math.max(Number(capacity) || 0, bedList.length);
-  const pct = total > 0 ? Math.round((occupied / total) * 100) : 0;
 
-  const rs = String(roomStatus ?? "").toLowerCase();
-  const unitOffline = rs === "maintenance";
-  const offlineHint =
-    rs === "maintenance" ? ROOM_UNIT_OFFLINE_BED_HINT[rs] : null;
-
-  return (
-    <div className="mt-2">
-      <div className="mb-1.5 flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-[10px] font-bold tracking-widest text-stone-400 uppercase">
-            BED OCCUPANCY
-          </p>
-          {unitOffline ? (
-            <p className="text-[9px] font-medium leading-snug text-amber-800">
-              {offlineHint}
-            </p>
-          ) : (
-            vacant > 0 && (
-              <p className="text-[9px] font-medium text-teal-600">
-                {vacant} {vacant === 1 ? "bed" : "beds"} available
-              </p>
-            )
-          )}
-        </div>
-        <p className="text-[10px] font-bold tabular-nums text-stone-900">
-          {occupied}/{total}
-        </p>
-      </div>
-      <div
-        className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100"
-        role="progressbar"
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={
-          unitOffline
-            ? `Occupancy ${occupied} of ${total}. Unit not bookable.`
-            : `Occupancy ${occupied} of ${total}`
-        }
-      >
-        <motion.div
-          className="h-full rounded-full bg-teal-500"
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.6, ease: "easeOut" }}
-        />
-      </div>
-    </div>
-  );
-}
 
 export default function RoomsPage() {
   const { user: currentUser } = useAuth();
@@ -109,7 +52,7 @@ export default function RoomsPage() {
   const typeFilter = filters.type;
   const query = filters.query;
 
-  const { data: statsData } = useSWR(
+  const { data: statsData, isValidating: statsValidating } = useSWR(
     currentUser ? "/api/rooms/stats" : null,
     fetcher,
     { revalidateOnFocus: false, shouldRetryOnError: false }
@@ -139,7 +82,7 @@ export default function RoomsPage() {
   const loading = !roomsData && !roomsError;
 
   const pageTitle = "Room Inventory";
-  const pageSubtitle = "Review room capacity limits and current rate configurations.";
+  const pageSubtitle = "ROOM CAPACITY LIMITS AND RATE CONFIGURATIONS";
 
   const ROOM_DISPLAY_MAP = {
     solo: "Solo Unit",
@@ -192,89 +135,88 @@ export default function RoomsPage() {
         </div>
 
         <FilterPanelCard icon={DoorOpen}>
-            {!canManageRooms(currentUser) && (
-              <div className="mb-6">
-                <Alert variant="info" title="Read-only access">
-                  Your role can review rooms and beds; only Admin or Staff can register or edit rooms.
-                </Alert>
-              </div>
-            )}
+          {!canManageRooms(currentUser) && (
+            <div className="mb-6">
+              <Alert variant="info" title="Read-only access">
+                Your role can review rooms and beds; only Admin or Staff can register or edit rooms.
+              </Alert>
+            </div>
+          )}
 
-            <div className="grid items-end gap-6 md:grid-cols-12">
-              <div className="md:col-span-6 lg:col-span-6">
-                <Field label="Room Filter">
-                  <Input
-                    icon={Search}
-                    placeholder="Search by code or number…"
-                    className="!h-12 border-stone-200 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
-                    value={query}
-                    onChange={(e) => {
-                      updateFilter("query", e.target.value);
-                    }}
-                  />
-                </Field>
-              </div>
-
-              <div className="md:col-span-3 lg:col-span-3">
-                <Field label="Status">
-                  <Select
-                    value={statusFilter}
-                    onChange={(e) => {
-                      updateFilter("status", e.target.value);
-                    }}
-                    className="!h-12 border-stone-200 focus:border-teal-500/50 font-bold"
-                  >
-                    <option value="all">All Statuses</option>
-                    {Object.entries(ROOM_STATUS_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                    <option value="archived">Archived</option>
-                  </Select>
-                </Field>
-              </div>
-
-              <div className="md:col-span-3 lg:col-span-3">
-                <Field label="Room category">
-                  <Select
-                    value={typeFilter}
-                    onChange={(e) => {
-                      updateFilter("type", e.target.value);
-                    }}
-                    className="!h-12 border-stone-200 focus:border-teal-500/50 font-bold"
-                  >
-                    <option value="all">All Categories</option>
-                    {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
+          <div className="grid items-end gap-6 md:grid-cols-12">
+            <div className="md:col-span-6 lg:col-span-6">
+              <Field label="Search Directory">
+                <Input
+                  icon={Search}
+                  placeholder="Search by code, tenant, or amenities…"
+                  className="!h-12 border-stone-200 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
+                  value={query}
+                  onChange={(e) => {
+                    updateFilter("query", e.target.value);
+                  }}
+                />
+              </Field>
             </div>
 
-            <FilterChips
-              className="mt-6"
-              items={[
-                {
-                  key: "query",
-                  label: "Search",
-                  value: query,
-                  onClear: () => updateFilter("query", ""),
-                },
-                {
-                  key: "status",
-                  label: "Status",
-                  value: statusFilter !== "all" ? statusFilter : "",
-                  onClear: () => updateFilter("status", "all"),
-                },
-                {
-                  key: "type",
-                  label: "Category",
-                  value: typeFilter !== "all" ? typeFilter : "",
-                  onClear: () => updateFilter("type", "all"),
-                },
-              ]}
-              onClearAll={resetFilters}
-            />
+            <div className="md:col-span-3 lg:col-span-3">
+              <Field label="Unit Status">
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    updateFilter("status", e.target.value);
+                  }}
+                  className="!h-12 border-stone-200 focus:border-teal-500/50 font-bold"
+                >
+                  <option value="all">All Statuses</option>
+                  {Object.entries(ROOM_STATUS_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+
+            <div className="md:col-span-3 lg:col-span-3">
+              <Field label="Accommodation Type">
+                <Select
+                  value={typeFilter}
+                  onChange={(e) => {
+                    updateFilter("type", e.target.value);
+                  }}
+                  className="!h-12 border-stone-200 focus:border-teal-500/50 font-bold"
+                >
+                  <option value="all">All Types</option>
+                  {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          </div>
+
+          <FilterChips
+            className="mt-6"
+            items={[
+              {
+                key: "query",
+                label: "Search",
+                value: query,
+                onClear: () => updateFilter("query", ""),
+              },
+              {
+                key: "status",
+                label: "Status",
+                value: statusFilter !== "all" ? statusFilter : "",
+                onClear: () => updateFilter("status", "all"),
+              },
+              {
+                key: "type",
+                label: "Room Type",
+                value: typeFilter !== "all" ? typeFilter : "",
+                onClear: () => updateFilter("type", "all"),
+              },
+            ]}
+            onClearAll={resetFilters}
+          />
         </FilterPanelCard>
 
         <ResourceView
@@ -297,35 +239,37 @@ export default function RoomsPage() {
                   href={`/rooms/${room.room_id}`}
                   className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
                 >
-                  <Card className="h-full !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm transition-[box-shadow,border-color] duration-200 group-hover:border-teal-200 group-hover:shadow-md">
+                  <Card className="h-full !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm transition-[box-shadow,border-color] duration-200 group-hover:border-teal-200 group-hover:shadow-lg">
                     <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-teal-600 shadow-sm transition-[background-color,border-color] group-hover:border-teal-100 group-hover:bg-teal-50">
                           <DoorOpen size={18} aria-hidden />
                         </div>
                         <div>
-                          <p className="font-mono text-lg font-black uppercase leading-none tracking-tight text-stone-900">
+                          <p className="font-mono text-lg font-black uppercase leading-none tracking-tighter text-stone-900 group-hover:text-teal-700 transition-colors">
                             {room.room_code}
                           </p>
-                          <p className="mt-1 text-[10px] font-bold tracking-widest text-stone-400">
+                          <p className="mt-1 text-[10px] font-black tracking-[0.2em] text-stone-400 uppercase">
                             {ROOM_DISPLAY_MAP[room.room_type] || "Unit"}
                           </p>
                         </div>
                       </div>
-                      <StatusBadge size="xs">{room.status}</StatusBadge>
+                      <StatusBadge size="xs" variant="pastel">{room.status}</StatusBadge>
                     </div>
 
                     <div className="space-y-4 p-6">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <p className="mb-1 text-[10px] font-bold tracking-widest text-stone-400 uppercase">CAPACITY</p>
+                          <p className="mb-1 text-[10px] font-black tracking-[0.2em] text-stone-300 uppercase leading-none">CAPACITY</p>
                           <p className="text-sm font-bold text-stone-900">
-                            {capacity} {capacity === 1 ? "Bed" : "Beds"}
+                            {capacity} {capacity === 1 ? "bed" : "beds"}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="mb-1 text-[10px] font-bold tracking-widest text-stone-400 uppercase text-right">MONTHLY RENT</p>
-                          <p className="font-mono text-sm font-bold tabular-nums text-stone-900">{formatPHP(room.monthly_rate)}</p>
+                          <p className="mb-1 text-[10px] font-black tracking-[0.2em] text-stone-300 uppercase text-right leading-none">MONTHLY RENT</p>
+                          <p className="font-mono text-sm font-black tabular-nums text-stone-900">
+                            {formatPHP(room.monthly_rate)}<span className="ml-1 text-[10px] font-medium text-stone-500 font-sans tracking-tight opacity-60">/ bed</span>
+                          </p>
                         </div>
                       </div>
 
@@ -336,11 +280,11 @@ export default function RoomsPage() {
                       />
                     </div>
 
-                    <div className="mx-6 flex items-center justify-between border-t border-stone-50 py-3">
-                        <span className="text-[10px] font-bold tracking-widest text-stone-400 transition-colors group-hover:text-teal-700 uppercase">
-                        VIEW PROFILE
+                    <div className="mx-6 flex items-center justify-between border-t border-stone-100/50 py-3.5">
+                      <span className="text-[10px] font-black tracking-[0.2em] text-stone-400 transition-colors group-hover:text-teal-600 uppercase">
+                        View Unit Details
                       </span>
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-400 transition-[border-color,background-color,color] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-100 bg-white text-stone-300 transition-[border-color,background-color,color] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600">
                         <ArrowUpRight size={14} aria-hidden />
                       </div>
                     </div>

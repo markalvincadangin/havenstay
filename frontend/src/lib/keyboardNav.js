@@ -12,9 +12,9 @@ const G_KEY_TO_HREF = {
   b: "/billing",
   p: "/payments",
   o: "/reports",
-  l: "/audit-logs",
-  u: "/users",
-  w: "/transaction-logs",
+  l: "/admin/audit-logs",
+  u: "/admin/users",
+  w: "/admin/transaction-logs",
 };
 
 const allNav = [...OPERATIONS_NAV_ITEMS, ...ADMIN_NAV_ITEMS];

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { AppMain } from "./AppShell";
+import { AppMain } from "../layout/AppShell";
 import { Card } from "./Card";
 
 /** Base skeleton primitive (box) */

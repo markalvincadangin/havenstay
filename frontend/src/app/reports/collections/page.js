@@ -256,38 +256,55 @@ export default function CollectionsPerformanceReportPage() {
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
           title: "No collection records found",
-          message: "Broaden your search or check your method filters to see more results."
+          message: "Adjust filters or clear date fields to check for records in inventory."
         }}
       >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Collections Performance Ledger</h2>
+            <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+              {totalRecords} records matching
+            </div>
+          </div>
           <Table
               embedded={true}
-              caption="Collections performance records"
-              ariaLabel="Collection performance records"
               columns={[
-              { key: "id", label: "Payment ID" },
-              { key: "date", label: "Payment date" },
-              { key: "amount", label: "Amount paid", className: "text-right" },
-              { key: "method", label: "Payment method" },
-              { key: "reference", label: "Reference number" },
-              { key: "tenant", label: "Tenant" },
-              { key: "room", label: "Room" },
-              { key: "bill", label: "Billing ID" },
+              { key: "id", label: "Payment ID", className: "pl-8 w-32" },
+              { key: "date", label: "Payment Date", className: "text-center" },
+              { key: "amount", label: "Amount Paid", className: "text-right" },
+              { key: "method", label: "Method", className: "text-center" },
+              { key: "reference", label: "Reference", className: "text-center" },
+              { key: "tenant", label: "Resident" },
+              { key: "room", label: "Room", className: "text-center" },
+              { key: "bill", label: "Billing ID", className: "text-center pr-8" },
               ]}
               rows={rows.map((row) => (
               <tr key={row.payment_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
-                  <td className="px-6 py-4 font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
+                  <td className="pl-8 py-5">
                     <ResourceIdCell id={row.payment_id} prefix="PAY" />
                   </td>
-                  <td className="px-6 py-4 text-xs font-medium text-stone-600">{formatDateString(row.payment_date)}</td>
-                  <td className="px-6 py-4 text-right font-mono text-xs tabular-nums font-bold text-teal-700">{formatPHP(row.amount_paid)}</td>
-                  <td className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-stone-500">
-                  {METHOD_LABELS[String(row.payment_method || "").toLowerCase()] || row.payment_method}
+                  <td className="py-5 text-center text-xs font-bold text-stone-600">
+                    {formatDateString(row.payment_date)}
                   </td>
-                  <td className="px-6 py-4 font-mono text-[10px] text-stone-400 uppercase">{row.reference_number || "—"}</td>
-                  <td className="px-6 py-4 text-xs font-bold text-stone-900">{row.tenant_name}</td>
-                  <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500">{row.room_code}</td>
-                  <td className="px-6 py-4">
+                  <td className="py-5 text-right font-mono text-xs tabular-nums font-black text-teal-700">
+                    {formatPHP(row.amount_paid)}
+                  </td>
+                  <td className="py-5 text-center">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+                      {METHOD_LABELS[String(row.payment_method || "").toLowerCase()] || row.payment_method}
+                    </span>
+                  </td>
+                  <td className="py-5 text-center font-mono text-[10px] text-stone-400 uppercase tracking-tighter">
+                    {row.reference_number || "—"}
+                  </td>
+                  <td className="py-5 text-xs font-bold text-stone-900 leading-tight">
+                    {row.tenant_name}
+                  </td>
+                  <td className="py-5 text-center">
+                    <div className="font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500 leading-tight">{row.room_code}</div>
+                    <ResourceIdCell id={row.room_id} prefix="ROOM" />
+                  </td>
+                  <td className="pr-8 py-5 text-center">
                     <Link
                       href={`/billing/${row.billing_id}`}
                       className="font-mono text-[10px] font-bold uppercase tracking-tighter text-teal-600 hover:text-teal-900"
@@ -298,7 +315,7 @@ export default function CollectionsPerformanceReportPage() {
               </tr>
               ))}
               emptyTitle="No collection records found"
-              emptyDescription="Broaden your search or check your method filters to see more results."
+              emptyDescription="Adjust filters or clear date fields to check for records in inventory."
           />
           <TablePagination
             meta={tableMeta}

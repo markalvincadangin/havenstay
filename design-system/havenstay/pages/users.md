@@ -1,7 +1,7 @@
-# User Directory Design Specification — v4.3 (Master-Aligned)
+# User Directory Design Specification — v5.0 (Forensic-Hardened)
 
 > **PROJECT:** HavenStay Boarding House Management System (BHMS)
-> **Last Updated:** 2026-04-12
+> **Last Updated:** 2026-04-18
 > **Page Type:** Administration / Access Control
 > **Routes:** `/users`, `/users/new`, `/users/[id]/edit`
 

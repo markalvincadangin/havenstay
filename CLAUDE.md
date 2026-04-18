@@ -51,7 +51,7 @@ architectural constraints. They must not be removed or worked around.
 | CCR-005 | Multi-table JOINs                  | 6 reporting views (`vw_*`)                 |
 | CCR-006 | Explicit transactions              | `DB::transaction()` in write services      |
 | CCR-007 | Application-level transaction logs | `transaction_logs` table + `TransactionService` |
-| CCR-008 | DB triggers for change logging     | 24 triggers in schema, fires into `audit_logs` |
+| CCR-008 | DB triggers for change logging     | 33 triggers in schema, fires into `audit_logs` |
 
 ---
 
@@ -166,6 +166,8 @@ replication reads from this file for initialization.
 | TX log ref        | `txn_reference`        | Human-readable business code (UID) |
 | TX log actor      | `initiated_by`         | FK to `users.user_id`, nullable    |
 | Correlation link  | `correlation_id`       | UUID shared across TX + audit rows |
+| Contract Status   | `status`               | ENUM including `pending_payment`   |
+| Gate Pass         | `is_cleared`           | TINYINT(1) (Move-out clearance)    |
 
 ---
 

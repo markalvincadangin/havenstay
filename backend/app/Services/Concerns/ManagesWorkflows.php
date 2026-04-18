@@ -2,8 +2,8 @@
 
 namespace App\Services\Concerns;
 
-use App\Services\AuditService;
-use App\Services\TransactionService;
+use App\Services\Analytics\AuditService;
+use App\Services\Analytics\TransactionService;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 

@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { canViewReports } from "../../../lib/auth";
 import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { flattenApiErrors } from "../../../lib/errors";
-import { formatReportTimestamp } from "../../../lib/formatters";
+import { formatReportTimestamp, formatPHP } from "../../../lib/formatters";
 import { exportReportCsv } from "../../../lib/reports";
 import Alert from "../../_components/ui/Alert";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
@@ -269,21 +269,26 @@ export default function OccupancyStatusReportPage() {
             ariaLabel="Bed-level occupancy records"
             columns={[
               { key: "room", label: "Room" },
-              { key: "bed", label: "Bed label" },
-              { key: "status", label: "Bed status" },
+              { key: "bed", label: "Bed label", className: "text-center" },
+              { key: "status", label: "Bed status", className: "text-center" },
               { key: "tenant", label: "Tenant" },
+              { key: "deposit", label: "Deposit", className: "text-right" },
               { key: "contract", label: "Contract ID", className: "text-right" },
             ]}
             rows={rows.map((row) => (
               <tr key={row.bed_space_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
-                <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-900">
-                  {row.room_code}
-                </td>
-                <td className="px-6 py-4 text-xs font-bold text-stone-800">{row.bed_label}</td>
                 <td className="px-6 py-4">
+                  <div className="font-mono text-[10px] font-black uppercase tracking-tighter text-stone-900 leading-tight">{row.room_code}</div>
+                  <ResourceIdCell id={row.room_id} prefix="ROOM" />
+                </td>
+                <td className="px-6 py-4 text-center text-xs font-bold text-stone-800">{row.bed_label}</td>
+                <td className="px-6 py-4 text-center">
                   <StatusBadge>{row.bed_status}</StatusBadge>
                 </td>
-                <td className="px-6 py-4 text-xs text-stone-700">{row.tenant_name || "—"}</td>
+                <td className="px-6 py-4 text-xs font-bold text-stone-700">{row.tenant_name || "—"}</td>
+                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-500">
+                  {row.deposit_amount ? formatPHP(row.deposit_amount) : "—"}
+                </td>
                 <td className="px-6 py-4 text-right">
                   {row.contract_id ? (
                     <Link

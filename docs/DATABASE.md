@@ -1,7 +1,7 @@
 # HavenStay Database Documentation
 
-**Version:** 2.2  
-**Last Updated:** April 17, 2026  
+**Version:** 2.5  
+**Last Updated:** April 18, 2026  
 **Status:** Canonical schema specification and forensic data design
 
 ## 1. Document Boundary
@@ -12,7 +12,7 @@ This document is the authoritative specification for the HavenStay data layer. I
 ## 2. Distributed Architecture (CCR-002)
 
 The system utilizes a **Primary-Replica** topology to ensure data durability and optimize reporting performance:
-- **Primary Node (`db-primary`):** Processes all Data Manipulation Language (DML) operations (INSERT, UPDATE, DELETE). This node is the authoritative host for all 24 forensic triggers.
+- **Primary Node (`db-primary`):** Processes all Data Manipulation Language (DML) operations (INSERT, UPDATE, DELETE). This node is the authoritative host for all 42 forensic triggers.
 - **Replica Node (`db-replica`):** A read‑only instance synchronized via GTID‑based asynchronous replication. It handles all reporting queries and dashboard aggregations (`vw_*` views).
 - **Service Routing:** Laravel's database configuration automatically splits "read" and "write" connections based on the operational context.
 
@@ -30,7 +30,7 @@ The system maintains a strict **Canonical Schema** to ensure environment parity:
 
 ## 4. Entity Architecture
 
-The database consists of **11 Normalized Tables** utilizing the InnoDB engine for full ACID compliance.
+The database consists of **14 Normalized Tables** (12 operational + 2 forensic) utilizing the InnoDB engine for full ACID compliance.
 
 ### 4.1 Master and Operational Tables
 | Table | Application Purpose | Integrity Pattern |
@@ -44,6 +44,9 @@ The database consists of **11 Normalized Tables** utilizing the InnoDB engine fo
 | `billing` | Monthly Cycle Headers | Immutable |
 | `billing_line_items`| Itemized Ledger Charges | Immutable |
 | `payments` | Financial Transaction Records | Soft Void |
+| `add_on_registry` | Master catalog of billable appliances | Reference |
+| `contract_add_ons` | Active appliance assignments | Referential Lock |
+| `room_meter_readings` | Sub-meter utility consumption | Append-Only |
 | `audit_logs` | Trigger‑driven DML History | Append-Only |
 | `transaction_logs` | Workflow State Tracking | Append-Only |
 
@@ -75,7 +78,7 @@ The `transaction_logs` table records the outcomes of high‑level business workf
 | **`failed`** | Validation Error | Workflow halted before entering a database transaction. |
 
 ### 5.2 Row-Level Audit Triggers (CCR-008)
-The MySQL primary node hosts **24 dedicated AFTER triggers** (INSERT, UPDATE, DELETE across 8 tables).
+The MySQL primary node hosts **42 dedicated AFTER triggers** (INSERT, UPDATE, DELETE across core entities).
 - **Automation:** Triggers automatically capture full JSON snapshots of the `OLD` and `NEW` attributes.
 - **Correlation:** Every record is tagged with an `@current_user_id` and a `correlation_id` to link row changes to the initiating workflow.
 
@@ -100,8 +103,11 @@ To maintain reporting consistency and ensure that complex JOINS do not leak into
 erDiagram
     tenant ||--o{ contract : maintains
     room ||--o{ bed_space : contains
+    room ||--o{ room_meter_readings : tracks
     bed_space ||--o{ contract : anchors
     contract ||--o{ billing : generates
+    contract ||--o{ contract_add_ons : assigns
+    add_on_registry ||--o{ contract_add_ons : catalogs
     billing ||--o{ billing_line_item : details
     billing ||--o{ payment : tracks
     user ||--o{ audit_logs : triggers
@@ -110,5 +116,5 @@ erDiagram
 
 ---
 
-*Aligned to: SRS.md v4.7 · SDD.md v3.2 · API_REFERENCE.md v2.2 · db/havenstay_schema.sql (canonical)*  
-*Last Updated: April 17, 2026 (v2.2 — final audit alignment pass)*
+*Aligned to: SRS.md v5.2 · SDD.md v3.5 · API_REFERENCE.md v2.4 · db/havenstay_schema.sql (canonical)*  
+*Last Updated: April 18, 2026 (v2.5 — 14-table forensic lock)*

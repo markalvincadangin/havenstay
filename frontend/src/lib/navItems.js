@@ -13,7 +13,9 @@ export const OPERATIONS_NAV_ITEMS = [
 ];
 
 export const ADMIN_NAV_ITEMS = [
-  { href: "/users", label: "Users" },
-  { href: "/audit-logs", label: "Audit Logs" },
-  { href: "/transaction-logs", label: "Transaction Logs" },
+  { href: "/admin/users", label: "User Accounts" },
+  { href: "/admin/items", label: "Assets & Items" },
+  { href: "/admin/meters", label: "Meter Hub" },
+  { href: "/admin/audit-logs", label: "Audit Trail" },
+  { href: "/admin/transaction-logs", label: "Transaction Logs" },
 ];

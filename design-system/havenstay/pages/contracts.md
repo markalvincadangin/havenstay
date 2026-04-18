@@ -1,7 +1,7 @@
-# Contracts Design Specification — v4.3 (Master-Aligned)
+# Contracts Design Specification — v5.0 (Forensic-Hardened)
 
 > **PROJECT:** HavenStay Boarding House Management System (BHMS)
-> **Last Updated:** 2026-04-12
+> **Last Updated:** 2026-04-18
 > **Page Type:** List / Detail / Form Pages
 > **Routes:** `/contracts`, `/contracts/[id]`, `/contracts/new`, `/contracts/[id]/edit`
 
@@ -12,7 +12,7 @@
 
 - Shared form theme and validation behavior: `FORM_PAGES.md` §1
 - Contract form routes and allowed fields: `FORM_PAGES.md` §2.4 and §2.5
-- Source of truth: `docs/SRS.md` (FR-016 to FR-019d, BR-005), `docs/API_REFERENCE.md`, `backend/database/sql/havenstay_schema.sql`
+- Source of truth: `docs/SRS.md` (FR-016 to FR-019f, BR-005), `docs/API_REFERENCE.md`, `backend/database/sql/havenstay_schema.sql`
 
 ---
 
@@ -108,7 +108,7 @@ All data mappings must strictly follow `db/havenstay_schema.sql` enums and field
 | Assignment | `bed_space_id` | Resolved room_code + bed_label. |
 | Monthly Rate | `monthly_rate` | Currency formatting; Tabular Mono. |
 | Deposit | `deposit_amount` | Currency formatting; Tabular Mono. |
-| Status | `status` | ENUM: `active`, `completed`, `terminated`. |
+| Status | `status` | ENUM: `pending_payment`, `active`, `completed`, `terminated`. |
 
 ---
 
@@ -117,6 +117,7 @@ All data mappings must strictly follow `db/havenstay_schema.sql` enums and field
 - **Entry**: `pageVariants` (opacity + 8px y-translation).
 - **Row Hover**: `hover:bg-stone-50` with `cursor-pointer`.
 - **Move-out Process**: Triggers a confirmation modal with `AlertTriangle` icon and destructive action button.
+    - **Gate Pass Constraint**: The confirmation modal must be disabled/blocked with a warning state if the associated tenant has an outstanding balance > ₱0.00.
 - **Navigation**: Full-row click target; use `e.stopPropagation()` on links and action buttons.
 
 ---

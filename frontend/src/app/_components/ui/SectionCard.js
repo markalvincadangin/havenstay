@@ -15,12 +15,12 @@ export default function SectionCard({
   const titleClasses =
     titleClassName ||
     (titleSize === "xs"
-      ? "hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]"
-      : "hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm");
+      ? "hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]"
+      : "hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]");
 
   return (
     <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
-      <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+      <div className="flex items-center justify-between border-b border-stone-100 bg-white px-8 py-5">
         <div className="flex items-center gap-2.5">
           {Icon ? (
             <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${iconClassName}`}>

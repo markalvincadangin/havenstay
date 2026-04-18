@@ -47,6 +47,7 @@ export default function OutstandingBalancesReportPage() {
   const [appliedFilters, setAppliedFilters] = useState({ tenant_id: "", due_from: "", due_to: "" });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(() => readStoredPerPage());
+  const [sortConfig, setSortConfig] = useState({ key: "daysOverdue", dir: "desc" });
 
   const { data: tenantsData } = useSWR(
     !authLoading && currentUser && canViewReports(currentUser) ? "/api/tenants?per_page=100" : null,
@@ -141,7 +142,7 @@ export default function OutstandingBalancesReportPage() {
       title="Outstanding Balances"
       subtitle={timestampLabel}
       loading={authLoading || loading}
-      skeleton={<Spinner label="Auditing balances..." />}
+      skeleton={<SkeletonListPage rows={10} />}
       breadcrumbs={
         <Breadcrumbs
           items={[
@@ -161,152 +162,152 @@ export default function OutstandingBalancesReportPage() {
     >
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard 
-           label="Total Outstanding" 
-           value={formatPHP(report.summary?.total_outstanding)}
-           icon={AlertCircle}
-           isSyncing={isValidating}
+        <KpiCard
+          label="Total Outstanding"
+          value={formatPHP(report.summary?.total_outstanding)}
+          icon={AlertCircle}
+          isSyncing={isValidating}
         />
-        <KpiCard 
-           label="Past-Due Balance" 
-           value={formatPHP(pastDueAmount)}
-           isDanger={pastDueAmount > 0}
-           icon={AlertTriangle}
-           sub="Immediate action required"
-           isSyncing={isValidating}
+        <KpiCard
+          label="Past-Due Balance"
+          value={formatPHP(pastDueAmount)}
+          isDanger={pastDueAmount > 0}
+          icon={AlertTriangle}
+          sub="Immediate action required"
+          isSyncing={isValidating}
         />
-        <KpiCard 
-           label="Past-Due Accounts" 
-           value={pastDueCount}
-           isDanger={pastDueCount > 0}
-           icon={Users}
-           isSyncing={isValidating}
+        <KpiCard
+          label="Past-Due Accounts"
+          value={pastDueCount}
+          isDanger={pastDueCount > 0}
+          icon={Users}
+          isSyncing={isValidating}
         />
-        <KpiCard 
-           label="Oldest Past Due" 
-           value={oldestPastDueDays > 0 ? `${oldestPastDueDays} days` : "—"}
-           isDanger={oldestPastDueDays > 30}
-           icon={Clock}
-           isSyncing={isValidating}
+        <KpiCard
+          label="Oldest Past Due"
+          value={oldestPastDueDays > 0 ? `${oldestPastDueDays} days` : "—"}
+          isDanger={oldestPastDueDays > 30}
+          icon={Clock}
+          isSyncing={isValidating}
         />
       </div>
 
       <ReportFilterCard onRefresh={() => loadReport()}>
-            <form
-            className="grid gap-6 sm:grid-cols-4"
-            onSubmit={onApplyFilters}
+        <form
+          className="grid gap-6 sm:grid-cols-4"
+          onSubmit={onApplyFilters}
+        >
+          <Field label="Tenant" icon={Users}>
+            <Select
+              className="!h-11 border-stone-200"
+              value={filters.tenant_id}
+              disabled={apiUnavailable}
+              onChange={(event) =>
+                setFilters((prev) => ({ ...prev, tenant_id: event.target.value }))
+              }
             >
-            <Field label="Tenant" icon={Users}>
-                <Select
-                className="!h-11 border-stone-200"
-                value={filters.tenant_id}
-                disabled={apiUnavailable}
-                onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, tenant_id: event.target.value }))
-                }
-                >
-                <option value="">All Tenants</option>
-                {tenants.map((t) => (
-                    <option key={t.tenant_id} value={String(t.tenant_id)}>
-                    {t.last_name}, {t.first_name} ({t.tenant_id})
-                    </option>
-                ))}
-                </Select>
-            </Field>
-            <Field label="Due From" icon={Calendar}>
-                <Input
-                type="date"
-                value={filters.due_from}
-                disabled={apiUnavailable}
-                onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, due_from: event.target.value }))
-                }
-                className="!h-11"
-                />
-            </Field>
-            <Field label="Due To" icon={Calendar}>
-                <Input
-                type="date"
-                value={filters.due_to}
-                disabled={apiUnavailable}
-                onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, due_to: event.target.value }))
-                }
-                className="!h-11"
-                />
-            </Field>
-            <div className="flex items-end">
-                <Button
-                type="submit"
-                variant="secondary"
-                disabled={apiUnavailable}
-                className="w-full !h-11 shadow-sm"
-                >
-                Apply filters
-                </Button>
-            </div>
-            </form>
-            <div className="mt-6">
-                <FilterChips
-                items={[
-                    {
-                    key: "tenant_id",
-                    label: "Tenant",
-                    value: appliedFilters.tenant_id
-                        ? selectedTenantLabel
-                        ? `${selectedTenantLabel.last_name}, ${selectedTenantLabel.first_name}`
-                        : `#${appliedFilters.tenant_id}`
-                        : "",
-                    onClear: () => {
-                      setFilters((prev) => ({ ...prev, tenant_id: "" }));
-                      setAppliedFilters((prev) => ({ ...prev, tenant_id: "" }));
-                      setPage(1);
-                    },
-                    },
-                    {
-                    key: "due_from",
-                    label: "From",
-                    value: appliedFilters.due_from,
-                    onClear: () => {
-                      setFilters((prev) => ({ ...prev, due_from: "" }));
-                      setAppliedFilters((prev) => ({ ...prev, due_from: "" }));
-                      setPage(1);
-                    },
-                    },
-                    {
-                    key: "due_to",
-                    label: "To",
-                    value: appliedFilters.due_to,
-                    onClear: () => {
-                      setFilters((prev) => ({ ...prev, due_to: "" }));
-                      setAppliedFilters((prev) => ({ ...prev, due_to: "" }));
-                      setPage(1);
-                    },
-                    },
-                ]}
-                onClearAll={() => {
-                  const cleared = { tenant_id: "", due_from: "", due_to: "" };
-                  setFilters(cleared);
-                  setAppliedFilters(cleared);
+              <option value="">All Tenants</option>
+              {tenants.map((t) => (
+                <option key={t.tenant_id} value={String(t.tenant_id)}>
+                  {t.last_name}, {t.first_name} ({t.tenant_id})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Due From" icon={Calendar}>
+            <Input
+              type="date"
+              value={filters.due_from}
+              disabled={apiUnavailable}
+              onChange={(event) =>
+                setFilters((prev) => ({ ...prev, due_from: event.target.value }))
+              }
+              className="!h-11"
+            />
+          </Field>
+          <Field label="Due To" icon={Calendar}>
+            <Input
+              type="date"
+              value={filters.due_to}
+              disabled={apiUnavailable}
+              onChange={(event) =>
+                setFilters((prev) => ({ ...prev, due_to: event.target.value }))
+              }
+              className="!h-11"
+            />
+          </Field>
+          <div className="flex items-end">
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={apiUnavailable}
+              className="w-full !h-11 shadow-sm"
+            >
+              Apply filters
+            </Button>
+          </div>
+        </form>
+        <div className="mt-6">
+          <FilterChips
+            items={[
+              {
+                key: "tenant_id",
+                label: "Tenant",
+                value: appliedFilters.tenant_id
+                  ? selectedTenantLabel
+                    ? `${selectedTenantLabel.last_name}, ${selectedTenantLabel.first_name}`
+                    : `#${appliedFilters.tenant_id}`
+                  : "",
+                onClear: () => {
+                  setFilters((prev) => ({ ...prev, tenant_id: "" }));
+                  setAppliedFilters((prev) => ({ ...prev, tenant_id: "" }));
                   setPage(1);
-                }}
-                />
-            </div>
+                },
+              },
+              {
+                key: "due_from",
+                label: "From",
+                value: appliedFilters.due_from,
+                onClear: () => {
+                  setFilters((prev) => ({ ...prev, due_from: "" }));
+                  setAppliedFilters((prev) => ({ ...prev, due_from: "" }));
+                  setPage(1);
+                },
+              },
+              {
+                key: "due_to",
+                label: "To",
+                value: appliedFilters.due_to,
+                onClear: () => {
+                  setFilters((prev) => ({ ...prev, due_to: "" }));
+                  setAppliedFilters((prev) => ({ ...prev, due_to: "" }));
+                  setPage(1);
+                },
+              },
+            ]}
+            onClearAll={() => {
+              const cleared = { tenant_id: "", due_from: "", due_to: "" };
+              setFilters(cleared);
+              setAppliedFilters(cleared);
+              setPage(1);
+            }}
+          />
+        </div>
 
-            {apiUnavailable ? (
-            <Alert
-                variant="info"
-                className="mt-6"
-                title="Report unavailable"
-            >
-                The outstanding balances endpoint did not respond. Check API configuration and try again.
-            </Alert>
-            ) : null}
-            {apiError ? (
-            <Alert variant="error" className="mt-6" title="Error">
-                {apiError}
-            </Alert>
-            ) : null}
+        {apiUnavailable ? (
+          <Alert
+            variant="info"
+            className="mt-6"
+            title="Report unavailable"
+          >
+            The outstanding balances endpoint did not respond. Check API configuration and try again.
+          </Alert>
+        ) : null}
+        {apiError ? (
+          <Alert variant="error" className="mt-6" title="Error">
+            {apiError}
+          </Alert>
+        ) : null}
       </ReportFilterCard>
 
       <ResourceView
@@ -318,90 +319,123 @@ export default function OutstandingBalancesReportPage() {
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
           title: "No outstanding balances found",
-          message: "Adjust your filters or clear date fields to view all records."
+          message: "Adjust your filters or clear date fields to check for records in inventory."
         }}
       >
-      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
-        <Table
+        <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
+          <Table
             embedded={true}
             caption="Outstanding Balances"
             ariaLabel="Outstanding balance records"
             columns={[
-            { key: "billing_id", label: "Billing ID", className: "w-32" },
-            { key: "tenant", label: "Tenant" },
-            { key: "room", label: "Room" },
-            { key: "period", label: "Billing period" },
-            { key: "dueDate", label: "Due" },
-            { key: "daysOverdue", label: "Aging (days)" },
-            { key: "balance", label: "Balance", className: "text-right" },
-            { key: "status", label: "Status" },
-            { key: "actions", label: "", className: "text-right w-16" },
+              { key: "billing_id", label: "RECORD ID", className: "w-32", sortable: true },
+              { key: "tenant", label: "TENANT NAME", sortable: true },
+              { key: "room", label: "ROOM", className: "text-center", sortable: true },
+              { key: "period", label: "BILLING PERIOD", className: "text-center" },
+              { key: "dueDate", label: "DUE DATE", className: "text-center", sortable: true },
+              { key: "daysOverdue", label: "AGING", className: "text-center", sortable: true },
+              { key: "balance", label: "OUTSTANDING", className: "text-right", sortable: true },
+              { key: "status", label: "STATUS", className: "text-center", sortable: true },
+              { key: "actions", label: "", className: "text-right w-16" },
             ]}
-            rows={rows.map((row) => {
-                const daysOverdue = daysPastDue(row.due_date);
-                const isPastDue = isPastDueReceivable(row);
-                return (
-                    <tr key={row.billing_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
-                        <td className="px-6 py-4 font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
-                          <ResourceIdCell id={row.billing_id} prefix="BILL" />
-                        </td>
-                        <td className="px-6 py-4 text-xs font-bold text-stone-900">{row.tenant_name}</td>
-                        <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500">{row.room_code}</td>
-                        <td className="px-6 py-4 text-[10px] font-medium text-stone-400">
-                            {row.billing_period_from && row.billing_period_to
-                            ? `${formatDateString(row.billing_period_from)} – ${formatDateString(row.billing_period_to)}`
-                            : "—"}
-                        </td>
-                        <td className="px-6 py-4 text-xs font-medium text-stone-600">{formatDateString(row.due_date)}</td>
-                        <td className="px-6 py-4">
-                            {isPastDue ? (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">
-                                {daysOverdue} {daysOverdue === 1 ? "day" : "days"} late
-                            </span>
-                            ) : (
-                            <span className="text-[10px] font-bold text-stone-300 uppercase tracking-widest">On Track</span>
-                            )}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                            {row.outstanding_balance < 0 ? (
-                            <span className="font-mono text-xs tabular-nums font-bold text-emerald-700">
-                                {formatPHP(Math.abs(row.outstanding_balance))} CR
-                            </span>
-                            ) : (
-                            <span className={[
-                                "font-mono text-xs tabular-nums font-black",
-                                row.outstanding_balance > 0 ? "text-rose-800" : "text-stone-400"
-                            ].join(" ")}>
-                                {formatPHP(row.outstanding_balance)}
-                            </span>
-                            )}
-                        </td>
-                        <td className="px-6 py-4"><StatusBadge>{row.status}</StatusBadge></td>
-                        <td className="px-6 py-4 text-right">
-                            {row.billing_id ? (
-                            <Link
-                                href={`/billing/${row.billing_id}`}
-                                className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-900 px-3 py-1.5 rounded-lg border border-teal-100 hover:bg-teal-50 transition-colors"
-                            >
-                                View Billing
-                            </Link>
-                            ) : null}
-                        </td>
-                    </tr>
-                );
+            onSortChange={(key) => {
+                setSortConfig(prev => ({
+                    key,
+                    dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc"
+                }));
+            }}
+            sortColumn={sortConfig.key}
+            sortDirection={sortConfig.dir}
+            rows={[...rows].sort((a, b) => {
+                let valA, valB;
+                if (sortConfig.key === "daysOverdue") {
+                    valA = daysPastDue(a.due_date);
+                    valB = daysPastDue(b.due_date);
+                } else if (sortConfig.key === "balance") {
+                    valA = a.outstanding_balance;
+                    valB = b.outstanding_balance;
+                } else if (sortConfig.key === "billing_id") {
+                    valA = a.billing_id;
+                    valB = b.billing_id;
+                } else if (sortConfig.key === "dueDate") {
+                    valA = new Date(a.due_date).getTime();
+                    valB = new Date(b.due_date).getTime();
+                } else {
+                    valA = String(a[sortConfig.key] || "").toLowerCase();
+                    valB = String(b[sortConfig.key] || "").toLowerCase();
+                }
+
+                if (valA < valB) return sortConfig.dir === "asc" ? -1 : 1;
+                if (valA > valB) return sortConfig.dir === "asc" ? 1 : -1;
+                return 0;
+            }).map((row) => {
+              const daysOverdue = daysPastDue(row.due_date);
+              const isPastDue = isPastDueReceivable(row);
+              return (
+                <tr key={row.billing_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
+                  <td className="px-6 py-3 font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
+                    <ResourceIdCell id={row.billing_id} prefix="BILL" />
+                  </td>
+                  <td className="px-6 py-3 text-xs font-bold text-stone-900">{row.tenant_name}</td>
+                  <td className="px-6 py-3 text-center">
+                    <div className="font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500 leading-tight">{row.room_code}</div>
+                    <ResourceIdCell id={row.room_id} prefix="ROOM" />
+                  </td>
+                  <td className="px-6 py-3 text-center text-[10px] font-medium text-stone-400">
+                    {row.billing_period_from && row.billing_period_to
+                      ? `${formatDateString(row.billing_period_from)} – ${formatDateString(row.billing_period_to)}`
+                      : "—"}
+                  </td>
+                  <td className="px-6 py-3 text-center text-xs font-medium text-stone-600">{formatDateString(row.due_date)}</td>
+                  <td className="px-6 py-3 text-center">
+                    {isPastDue ? (
+                      <span className="text-[10px] font-black uppercase tracking-widest text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">
+                        {daysOverdue} {daysOverdue === 1 ? "day" : "days"} late
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-stone-300 uppercase tracking-widest">On Track</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 text-right">
+                    {row.outstanding_balance < 0 ? (
+                      <span className="font-mono text-xs tabular-nums font-bold text-emerald-700">
+                        {formatPHP(Math.abs(row.outstanding_balance))} CR
+                      </span>
+                    ) : (
+                      <span className={[
+                        "font-mono text-xs tabular-nums font-black",
+                        row.outstanding_balance > 0 ? "text-rose-800" : "text-stone-400"
+                      ].join(" ")}>
+                        {formatPHP(row.outstanding_balance)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 text-center"><StatusBadge>{row.status}</StatusBadge></td>
+                  <td className="px-6 py-3 text-right">
+                    {row.billing_id ? (
+                      <Link
+                        href={`/billing/${row.billing_id}`}
+                        className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-900 px-3 py-1.5 rounded-lg border border-teal-100 hover:bg-teal-50 transition-colors"
+                      >
+                        View Billing
+                      </Link>
+                    ) : null}
+                  </td>
+                </tr>
+              );
             })}
             emptyTitle="No outstanding balances found"
-            emptyDescription="Adjust your filters or clear date fields to view all records."
-        />
-        <TablePagination
-          meta={tableMeta}
-          page={page}
-          perPage={perPage}
-          onPageChange={setPage}
-          onPerPageChange={(n) => {
-            setPage(1);
-            setPerPage(n);
-          }}
+            emptyDescription="Adjust your filters or clear date fields to check for records in inventory."
+          />
+          <TablePagination
+            meta={tableMeta}
+            page={page}
+            perPage={perPage}
+            onPageChange={setPage}
+            onPerPageChange={(n) => {
+              setPage(1);
+              setPerPage(n);
+            }}
             disabled={isValidating}
           />
           <p className="mt-4 px-1 text-[11px] leading-relaxed text-stone-500">

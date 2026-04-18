@@ -2,29 +2,29 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\AuthorizationService;
-use App\Services\UserService;
-use App\Support\PaginationResponse;
+use App\Services\Identity\AuthorizationService;
+use App\Services\Identity\UserService;
+use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class UserController extends Controller
 {
-    use HandlesAuthorization;
 
     /**
+     * Create a new user.
+     *
+     * @param StoreUserRequest $request
+     * @return JsonResponse
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.create', 'Unauthorized: only Admin can create users.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $validated = $request->validated();
 
@@ -37,12 +37,15 @@ class UserController extends Controller
     }
 
     /**
+     * Retrieve a specific user.
+     *
+     * @param Request $request
+     * @param User $user
+     * @return JsonResponse
      */
     public function show(Request $request, User $user): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.show', 'Unauthorized: only Admin can view user details.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         return response()->json([
             'message' => 'User retrieved successfully.',
@@ -51,12 +54,15 @@ class UserController extends Controller
     }
 
     /**
+     * Update an existing user.
+     *
+     * @param UpdateUserRequest $request
+     * @param User $user
+     * @return JsonResponse
      */
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.update', 'Unauthorized: only Admin can update users.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $validated = $request->validated();
 
@@ -69,12 +75,15 @@ class UserController extends Controller
     }
 
     /**
+     * Deactivate a user account.
+     *
+     * @param Request $request
+     * @param User $user
+     * @return JsonResponse
      */
     public function deactivate(Request $request, User $user): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.deactivate', 'Unauthorized: only Admin can deactivate users.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         // Safety: Prevent self-deactivation (Admin cannot lock themselves out)
         if ($user->user_id === $request->user()->user_id) {
@@ -92,12 +101,15 @@ class UserController extends Controller
     }
 
     /**
+     * Reactivate a user account.
+     *
+     * @param Request $request
+     * @param User $user
+     * @return JsonResponse
      */
     public function reactivate(Request $request, User $user): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.reactivate', 'Unauthorized: only Admin can reactivate users.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $user = UserService::reactivate($request->user(), $user);
 
@@ -108,12 +120,15 @@ class UserController extends Controller
     }
 
     /**
+     * Assign a role to a user.
+     *
+     * @param Request $request
+     * @param User $user
+     * @return JsonResponse
      */
     public function assignRole(Request $request, User $user): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.assignRole', 'Unauthorized: only Admin can assign roles.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $validated = $request->validate([
             'role_id' => ['required', 'exists:roles,role_id'],
@@ -128,34 +143,37 @@ class UserController extends Controller
     }
 
     /**
+     * List users with pagination.
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function index(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.list', 'Unauthorized: only Admin can list users.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $validated = $request->validate(array_merge([
             'q' => ['nullable', 'string', 'max:200'],
             'role' => ['nullable', 'string', 'max:32'],
             'account_status' => ['nullable', 'string', 'in:active,inactive'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
-        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $pageParams = Pagination::normalizePageParams($validated);
 
         $paginator = UserService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
 
-        return PaginationResponse::fromPaginator($paginator);
+        return Pagination::fromPaginator($paginator);
     }
 
     /**
-     * List all available roles (Admin only)
+     * List all available roles (Admin only).
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function roles(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.roles', 'Unauthorized: only Admin can view roles.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         return response()->json([
             'message' => 'Roles retrieved successfully.',
@@ -168,9 +186,7 @@ class UserController extends Controller
      */
     public function archive(Request $request, User $user): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.archive', 'Unauthorized: only Admin can archive users.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         // Safety: Prevent self-archival
         if ($user->user_id === $request->user()->user_id) {
@@ -190,9 +206,7 @@ class UserController extends Controller
      */
     public function restore(Request $request, int $id): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'users.restore', 'Unauthorized: only Admin can restore users.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $user = UserService::restore($request->user(), $id);
 

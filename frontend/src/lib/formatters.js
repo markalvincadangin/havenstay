@@ -14,7 +14,7 @@ export function formatDateRange(fromDateStr, toDateStr) {
   const fromDate = new Date(fromDateStr);
   const toDate = new Date(toDateStr);
   if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) return "-";
-  
+
   const fromFormatted = fromDate.toLocaleDateString("en-PH", {
     month: "short",
     day: "numeric",
@@ -25,7 +25,7 @@ export function formatDateRange(fromDateStr, toDateStr) {
     day: "numeric",
     year: "numeric",
   });
-  
+
   return `${fromFormatted} – ${toFormatted}`;
 }
 
@@ -69,6 +69,20 @@ export function formatTenantDirectoryName(tenant) {
   if (last && first) return `${last}, ${first}`;
   if (last) return last;
   if (first) return first;
+  return "—";
+}
+
+/**
+ * Common style: "First Last" (given name first).
+ * Used in summaries, banners, and personalized greetings.
+ */
+export function formatTenantFullName(tenant) {
+  if (!tenant) return "—";
+  const first = String(tenant.first_name ?? "").trim();
+  const last = String(tenant.last_name ?? "").trim();
+  if (first && last) return `${first} ${last}`;
+  if (first) return first;
+  if (last) return last;
   return "—";
 }
 
@@ -116,4 +130,30 @@ export function safeParseJson(value) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Format PII (Phone/Email) for non-administrative roles.
+ */
+export function formatPII(value, type = "phone", isAuthorized = true) {
+  if (!value) return "—";
+  if (isAuthorized) return value;
+
+  const str = String(value).trim();
+
+  if (type === "phone") {
+    // Basic redaction: 0917****123
+    if (str.length < 8) return "***";
+    return str.replace(/^(\d{4})\d+(\d{3,4})$/, "$1****$2");
+  }
+
+  if (type === "email") {
+    // Redaction: j***@example.com
+    const parts = str.split("@");
+    if (parts.length !== 2) return "***";
+    const [user, domain] = parts;
+    return `${user.charAt(0)}***@${domain}`;
+  }
+
+  return "***";
 }

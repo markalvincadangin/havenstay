@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Users, Receipt, Calendar, CreditCard, PlusCircle,
-  DoorOpen, Bed
+  DoorOpen, Bed, Lock
 } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "../../lib/api";
 import { normalizePaginatedList, normalizeReportRows } from "../../lib/pagination";
 import { canManageBilling } from "../../lib/auth";
-import { formatPHP, formatDateString, formatTenantDirectoryName } from "../../lib/formatters";
+import { formatPHP, formatDateString, formatTenantDirectoryName, formatTimestamp } from "../../lib/formatters";
 import Alert from "../_components/ui/Alert";
 import Breadcrumbs from "../_components/ui/Breadcrumbs";
 import { Card } from "../_components/ui/Card";
@@ -26,10 +26,18 @@ import { useAuth } from "../_context/AuthContext";
 import PageHeaderActions from "../_components/ui/PageHeaderActions";
 import { Sparkline } from "../_components/ui/Sparkline";
 
-export default function DashboardPage() {
+export default function PlatformDashboardPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const todayStr = new Date().toLocaleDateString('en-CA');
+  
+  const canSeeFinancials = canManageBilling(currentUser);
+  const lockedValue = (
+    <div className="flex items-center gap-2" title="Role restricted: Administrative financials">
+      <Lock size={18} className="text-stone-300" aria-hidden />
+      <span className="text-lg text-stone-300 font-black">HIDDEN</span>
+    </div>
+  );
 
   // Core data hooks for dashboard context
   const { data: occupancyReport, error: occError, isLoading: occLoading, mutate: mutateOcc, isValidating: occValidating } = useSWR(
@@ -96,24 +104,12 @@ export default function DashboardPage() {
   const { rows: dueTodayRaw = [] } = useMemo(() => normalizePaginatedList(dueTodayData), [dueTodayData]);
   const { meta: activeTenantsMeta, rows: activeTenantRows = [] } = useMemo(() => normalizePaginatedList(activeTenantsData), [activeTenantsData]);
   const activeTenantCount = Number(activeTenantsMeta?.total ?? activeTenantRows.length ?? 0);
-  const dueTodayList = useMemo(() => dueTodayRaw.filter(b => (b.balance ?? 0) > 0), [dueTodayRaw]);
+  const dueTodayList = useMemo(() => dueTodayRaw.filter(b => b.status === "unpaid" || b.status === "partial"), [dueTodayRaw]);
   const { rows: recentBillings = [] } = useMemo(() => normalizeReportRows(billingReport), [billingReport]);
 
-  const strictlyOverdueCount = useMemo(() => {
-    return recentBillings.filter(b => {
-      const s = b.status?.toLowerCase().replace(/\s+/g, '_') || '';
-      return (s === 'overdue' || s === 'past_due') && (Number(b.total_paid || 0) === 0);
-    }).length;
-  }, [recentBillings]);
-
-  const strictlyOverdueTotal = useMemo(() => {
-    return recentBillings
-      .filter(b => {
-        const s = b.status?.toLowerCase().replace(/\s+/g, '_') || '';
-        return (s === 'overdue' || s === 'past_due') && (Number(b.total_paid || 0) === 0);
-      })
-      .reduce((sum, b) => sum + Number(b.amount_due || 0), 0);
-  }, [recentBillings]);
+  const globalBillSummary = billingReport?.summary || {};
+  const strictlyOverdueCount = Number(globalBillSummary.overdue_count || 0);
+  const strictlyOverdueTotal = Number(globalBillSummary.overdue_total || 0);
 
   const { rows: contractRows = [] } = useMemo(() => normalizePaginatedList(contractsData), [contractsData]);
 
@@ -143,14 +139,14 @@ export default function DashboardPage() {
   return (
     <StandardPage
       title="Dashboard"
-      subtitle="Monitor daily activities, occupancy updates, and pending administrative tasks."
+      subtitle="OPERATIONAL INTELLIGENCE AND DAILY ADMINISTRATIVE WORKFLOWS"
       breadcrumbs={<Breadcrumbs items={[{ label: "Dashboard" }]} />}
       loading={loading}
       skeleton={<DashboardSkeleton />}
       actions={
         <PageHeaderActions
-          ctaHref={canManageBilling(currentUser) ? "/payments/new" : null}
-          ctaLabel="Record Payment"
+          ctaHref={canManageBilling(currentUser) ? "/billing/wizard" : null}
+          ctaLabel="Billing Wizard"
           ctaIcon={PlusCircle}
           user={currentUser}
         />
@@ -173,7 +169,7 @@ export default function DashboardPage() {
             value={`${occupancyPct}%`}
             sub={`${occupiedBeds}/${totalBeds} BEDS OCCUPIED`}
             progress={occupancyPct}
-            href="/reports/occupancy"
+            href="/rooms"
             isLoading={occLoading}
             isSyncing={occValidating}
             error={occError}
@@ -202,12 +198,12 @@ export default function DashboardPage() {
           />
 
           <KpiCard
-            label="Overdue"
+            label="Overdue (30d+)"
             icon={CreditCard}
-            value={strictlyOverdueCount}
-            sub={strictlyOverdueCount > 0 ? `ZERO PAYMENT · ${formatPHP(strictlyOverdueTotal)}` : "ALL ACCOUNTS CURRENT"}
-            isDanger={strictlyOverdueCount > 0}
-            href="/billing"
+            value={canSeeFinancials ? strictlyOverdueCount : lockedValue}
+            sub={canSeeFinancials ? (strictlyOverdueCount > 0 ? `${strictlyOverdueCount} UNPAID BILLS · ${formatPHP(strictlyOverdueTotal)}` : "ALL ACCOUNTS CURRENT") : "RESTRICTED VIEW"}
+            isDanger={canSeeFinancials && strictlyOverdueCount > 0}
+            href={canSeeFinancials ? "/billing" : null}
             isLoading={billLoading}
             isSyncing={billValidating}
             error={billError}
@@ -216,26 +212,26 @@ export default function DashboardPage() {
           <KpiCard
             label="MTD Collections"
             icon={Receipt}
-            value={formatPHP(billSummary.collected_total)}
-            sub="TOTAL POSTED THIS MONTH"
-            isSuccess={Number(billSummary.collected_total) > 0}
-            href="/payments"
+            value={canSeeFinancials ? formatPHP(billSummary.collected_total) : lockedValue}
+            sub={canSeeFinancials ? "TOTAL POSTED THIS MONTH" : "RESTRICTED VIEW"}
+            isSuccess={canSeeFinancials && Number(billSummary.collected_total) > 0}
+            href={canSeeFinancials ? "/payments" : null}
             isLoading={billSummaryLoading}
             isSyncing={billSummaryValidating}
             error={billSummaryError}
-            sparkline={<Sparkline data={[15, 30, 25, 45, 40, 65]} color="stroke-emerald-500" />}
+            sparkline={canSeeFinancials ? <Sparkline data={[15, 30, 25, 45, 40, 65]} color="stroke-emerald-500" /> : null}
           />
 
           <KpiCard
             label="Outstanding"
             icon={CreditCard}
-            value={formatPHP(billSummary.outstanding_total)}
-            sub="TOTAL UNCOLLECTED BALANCE"
-            isWarning={Number(billSummary.outstanding_total) > 0}
-            href="/billing"
-            isLoading={billSummaryLoading}
-            isSyncing={billSummaryValidating}
-            error={billSummaryError}
+            value={canSeeFinancials ? formatPHP(globalBillSummary.total_outstanding) : lockedValue}
+            sub={canSeeFinancials ? "TOTAL UNCOLLECTED BALANCE" : "RESTRICTED VIEW"}
+            isWarning={canSeeFinancials && Number(globalBillSummary.total_outstanding) > 0}
+            href={canSeeFinancials ? "/billing" : null}
+            isLoading={billLoading}
+            isSyncing={billValidating}
+            error={billError}
           />
         </div>
 
@@ -245,12 +241,12 @@ export default function DashboardPage() {
           <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm h-full flex flex-col">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                   <Calendar size={13} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title uppercase tracking-widest text-[10px] font-bold text-stone-400">Turnover Forecast</h2>
+                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Turnover Forecast</h2>
               </div>
-              <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Next 30 Days</div>
+              <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest">Next 30 Days</div>
             </div>
             <div className="p-0 flex-1">
               <ResourceView
@@ -262,60 +258,66 @@ export default function DashboardPage() {
                   variant: "compact"
                 }}
               >
-                <div className="hs-border-t border-stone-100">
-                  <Table
-                    embedded
-                    columns={[
-                      { key: "type", label: "STATUS" },
-                      { key: "tenant", label: "RESIDENT" },
-                      { key: "date", label: "SCHEDULE", className: "text-right" }
-                    ]}
-                    rows={turnoverSchedule.slice(0, 5).map((item, idx) => (
-                      <tr
-                        key={`${item.contract.contract_id}-${idx}`}
-                        className="hover:bg-stone-50 transition-colors cursor-pointer group"
-                        onClick={() => router.push(`/contracts/${item.contract.contract_id}`)}
-                      >
-                        <td className="px-8 py-4">
-                          <StatusBadge
-                            size="xs"
-                            variant={item.type === 'move_out' ? 'danger' : 'success'}
-                          >
-                            {item.type === 'move_out' ? 'Departure' : 'Arrival'}
-                          </StatusBadge>
-                        </td>
-                        <td className="px-8 py-4 text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
+                <Table
+                  embedded
+                  columns={[
+                    { key: "type", label: "EVENT", className: "px-8" },
+                    { key: "tenant", label: "TENANT" },
+                    { key: "date", label: "SCHEDULE", className: "px-8 text-right" }
+                  ]}
+                  rows={turnoverSchedule.slice(0, 5).map((item, idx) => (
+                    <tr
+                      key={`${item.contract.contract_id}-${idx}`}
+                      className="hover:bg-stone-50/80 transition-colors cursor-pointer group"
+                      onClick={() => router.push(`/contracts/${item.contract.contract_id}`)}
+                    >
+                      <td className="px-8 py-4">
+                        <StatusBadge
+                          size="xs"
+                          variant={item.type === 'move_out' ? 'danger' : 'success'}
+                        >
+                          {item.type === 'move_out' ? 'Departure' : 'Arrival'}
+                        </StatusBadge>
+                      </td>
+                      <td className="py-4">
+                        <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
                           {formatTenantDirectoryName(item.contract.tenant)}
-                        </td>
-                        <td className="px-8 py-4 text-right">
-                          <div className="font-mono text-[10px] font-bold uppercase text-stone-500">
-                            {formatDateString(item.date)}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  />
-                </div>
+                        </div>
+                        <div className="text-[10px] font-mono font-bold uppercase text-stone-400 mt-1">
+                          Room {item.contract.bed_space?.room?.room_code || "—"}
+                        </div>
+                      </td>
+                      <td className="px-8 py-4 text-right">
+                        <div className="font-mono text-[10px] font-black uppercase text-stone-500 tabular-nums">
+                          {formatDateString(item.date)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                />
               </ResourceView>
             </div>
-            <div className="border-t border-stone-100 bg-stone-50/30 px-8 py-3.5 mt-auto">
-              <Link href="/contracts" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 transition-colors">
-                View Full Schedule →
-              </Link>
-            </div>
+            {!contractsLoading && turnoverSchedule.length > 0 && (
+              <div className="border-t border-stone-100 bg-stone-50/30 px-8 py-3.5 mt-auto">
+                <Link href="/contracts" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 transition-colors">
+                  View Full Schedule →
+                </Link>
+              </div>
+            )}
           </Card>
 
           {/* Latest Collections */}
           <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm h-full flex flex-col">
-            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-50 text-stone-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                   <Receipt size={14} aria-hidden />
                 </div>
-                <div>
-                  <h2 className="hs-strip-title uppercase tracking-widest text-[11px] font-black text-stone-400">Latest Collections</h2>
-                </div>
+                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Latest Collections</h2>
               </div>
+              <Link href="/payments" className="text-[10px] font-bold uppercase tracking-widest text-teal-600 hover:text-teal-700 transition-colors">
+                View Ledger →
+              </Link>
             </div>
 
             <div className="p-0 flex-1">
@@ -326,37 +328,44 @@ export default function DashboardPage() {
                 error={payError}
                 emptyProps={{
                   title: "No collections",
-                  message: "Recent items will appear here once recorded.",
+                  message: "No recent payments recorded today. View full history",
                   variant: "compact"
                 }}
               >
                 <Table
                   embedded
                   columns={[
-                    { key: "record", label: "ID" },
-                    { key: "tenant", label: "TENANT" },
-                    { key: "value", label: "AMOUNT", className: "text-right" }
+                    { key: "record", label: "RECORD ID", className: "px-8" },
+                    { key: "tenant", label: "TENANT NAME" },
+                    { key: "value", label: "COLLECTION", className: "px-8 text-right" }
                   ]}
                   rows={payments.map((p) => (
                     <tr
                       key={p.payment_id}
-                      className="hover:bg-stone-50 transition-colors cursor-pointer group"
+                      className="hover:bg-stone-50/80 transition-colors cursor-pointer group"
                       onClick={() => router.push(`/payments/${p.payment_id}`)}
                     >
-                      <td className="px-6 py-3">
+                      <td className="px-8 py-4">
                         <ResourceIdCell id={p.payment_id} prefix="PAY" />
                       </td>
-                      <td className="px-8 py-4">
+                      <td className="py-4">
                         <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors leading-none">
-                          {formatTenantDirectoryName(p.billing?.contract?.tenant)}
+                          {p.billing?.contract?.tenant ? formatTenantDirectoryName(p.billing.contract.tenant) : "—"}
                         </div>
-                        <div className="text-[10px] font-mono tracking-tighter text-stone-400 mt-1 uppercase">
-                          {formatDateString(p.payment_date)}
+                        <div className="text-[10px] font-mono tracking-tighter text-stone-400 mt-1.5 uppercase font-bold">
+                          {formatTimestamp(p.created_at)}
                         </div>
                       </td>
-                      <td className="px-6 py-3 text-right">
-                        <div className="font-mono text-sm font-bold tabular-nums text-teal-700">
-                          {formatPHP(p.amount_paid)}
+                      <td className="px-8 py-4 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="font-mono text-sm font-black tabular-nums text-teal-700">
+                            {formatPHP(p.amount_paid)}
+                          </div>
+                          {p.correlation_id && (
+                            <div className="font-mono text-[8px] font-bold text-stone-400 bg-stone-100 rounded-full px-2 py-0.5" title={`Linked to Transaction Log #TX-${p.correlation_id}`}>
+                              #TX-{p.correlation_id.slice(0,5).toUpperCase()}
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -373,7 +382,7 @@ export default function DashboardPage() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-50 text-red-600">
                   <Calendar size={13} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title uppercase tracking-widest text-[10px] font-bold text-stone-400">Attention: Due Today</h2>
+                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Attention: Due Today</h2>
               </div>
               <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5">
                 <div className="size-1 rounded-full bg-red-500 animate-pulse" />
@@ -388,54 +397,62 @@ export default function DashboardPage() {
                 error={dueError}
                 emptyProps={{
                   title: "All clear for today",
-                  message: "There are no billing records reaching their due date today.",
+                  message: "No billing records reaching their due date today.",
                   variant: "compact"
                 }}
               >
-                <div className="hs-border-t border-stone-100">
-                  <Table
-                    embedded
-                    columns={[
-                      { key: "tenant", label: "TENANT" },
-                      { key: "billing", label: "ID" },
-                      { key: "amount", label: "BALANCE", className: "text-right" }
-                    ]}
-                    rows={dueTodayList.map(b => (
-                      <tr
-                        key={b.billing_id}
-                        className="hover:bg-stone-50 transition-colors cursor-pointer group"
-                        onClick={() => router.push(`/billing/${b.billing_id}`)}
-                      >
-                        <td className="px-8 py-4 text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
-                          {formatTenantDirectoryName(b.contract?.tenant)}
-                        </td>
-                        <td className="px-8 py-4">
-                          <ResourceIdCell id={b.billing_id} prefix="BILL" />
-                        </td>
-                        <td className="px-8 py-4 text-right">
-                          <div className="font-mono text-sm font-bold tabular-nums text-red-600">
-                            {formatPHP(b.balance)}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  />
-                </div>
+                <Table
+                  embedded
+                  columns={[
+                    { key: "tenant", label: "TENANT NAME", className: "px-8" },
+                    { key: "billing", label: "RECORD ID" },
+                    { key: "amount", label: "UNPAID BALANCE", className: "px-8 text-right" },
+                    { key: "actions", label: "PROCESS", className: "px-8 text-right" }
+                  ]}
+                  rows={dueTodayList.map(b => (
+                    <tr
+                      key={b.billing_id}
+                      className="hover:bg-stone-50/80 transition-colors cursor-pointer group"
+                      onClick={() => router.push(`/billing/${b.billing_id}`)}
+                    >
+                      <td className="px-8 py-4 text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
+                        {b.contract?.tenant ? formatTenantDirectoryName(b.contract.tenant) : "—"}
+                      </td>
+                      <td className="py-4">
+                        <ResourceIdCell id={b.billing_id} prefix="BILL" />
+                      </td>
+                      <td className="px-8 py-4 text-right">
+                        <div className="font-mono text-sm font-bold tabular-nums text-red-600">
+                          {formatPHP(b.balance)}
+                        </div>
+                      </td>
+                      <td className="px-8 py-4 text-right">
+                        <Link 
+                          href={`/billing/${b.billing_id}`}
+                          className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-700 transition-all border border-teal-100 bg-teal-50 px-3 py-1.5 rounded-lg whitespace-nowrap inline-block"
+                        >
+                          Register Payment
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                />
               </ResourceView>
             </div>
           </Card>
 
           {/* Recent Billing */}
           <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm h-full flex flex-col">
-            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                   <Receipt size={14} aria-hidden />
                 </div>
-                <div>
-                  <h2 className="hs-strip-title uppercase tracking-widest text-[11px] font-black text-stone-400">Recent Billing</h2>
-                </div>
+                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Recent Billing</h2>
               </div>
+              <Link href="/billing" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 transition-colors">
+                View All →
+              </Link>
             </div>
 
             <div className="p-0 flex-1">
@@ -453,30 +470,30 @@ export default function DashboardPage() {
                 <Table
                   embedded
                   columns={[
-                    { key: "record", label: "ID" },
-                    { key: "amount", label: "TOTAL", className: "text-right" }
+                    { key: "record", label: "TENANT", className: "px-8" },
+                    { key: "amount", label: "BILLED AMOUNT", className: "px-8 text-right" }
                   ]}
                   rows={recentBillings.slice(0, 5).map((b) => (
                     <tr
                       key={b.billing_id}
-                      className="hover:bg-stone-50 transition-colors cursor-pointer group"
+                      className="hover:bg-stone-50/80 transition-colors cursor-pointer group"
                       onClick={() => router.push(`/billing/${b.billing_id}`)}
                     >
-                      <td className="px-8 py-5">
+                      <td className="px-8 py-4">
                         <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
                           {b.tenant_name}
                         </div>
-                        <div className="mt-1.5 flex items-center gap-2 text-[10px] font-bold text-stone-400">
+                        <div className="mt-1.5 flex items-center gap-2">
                           <ResourceIdCell id={b.billing_id} prefix="BILL" />
-                          <span className="opacity-50">·</span>
-                          <span className="uppercase tracking-widest">RM {b.room_code || "—"}</span>
+                          <span className="opacity-50 text-[10px] font-black tracking-widest text-stone-300">·</span>
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">RM {b.room_code || "—"}</span>
                         </div>
                       </td>
-                      <td className="px-8 py-5 text-right">
+                      <td className="px-8 py-4 text-right">
                         <div className="font-mono text-sm font-black tabular-nums text-stone-900">
                           {formatPHP(b.amount_due)}
                         </div>
-                        <div className="mt-2">
+                        <div className="mt-1.5">
                           <StatusBadge size="xs" variant="pastel">{b.status}</StatusBadge>
                         </div>
                       </td>

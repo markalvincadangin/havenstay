@@ -14,7 +14,8 @@ import {
   History,
   Search,
   TrendingUp,
-  PlusCircle
+  PlusCircle,
+  ShieldCheck
 } from 'lucide-react';
 
 const withDefaultProps = (IconComponent) => {
@@ -40,3 +41,4 @@ export const HistoryIcon = withDefaultProps(History);
 export const SearchIcon = withDefaultProps(Search);
 export const TrendingUpIcon = withDefaultProps(TrendingUp);
 export const PlusCircleIcon = withDefaultProps(PlusCircle);
+export const ComplianceIcon = withDefaultProps(ShieldCheck);

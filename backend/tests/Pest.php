@@ -54,6 +54,20 @@ expect()->extend('toBeOne', function () {
 function actingAsAdmin()
 {
     return test()->actingAs(User::factory()->create([
-        'role_id' => Role::where('role_name', 'admin')->first()->role_id,
+        'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+    ]));
+}
+
+function actingAsStaff()
+{
+    return test()->actingAs(User::factory()->create([
+        'role_id' => Role::where('role_name', Role::STAFF)->first()->role_id,
+    ]));
+}
+
+function actingAsViewer()
+{
+    return test()->actingAs(User::factory()->create([
+        'role_id' => Role::where('role_name', Role::VIEWER)->first()->role_id,
     ]));
 }

@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { apiRequest } from "../../../lib/api";
 import { canManageTenants } from "../../../lib/auth";
 import { applyServerFieldErrors } from "../../../lib/forms";
-import { useUnsavedChangesWarning } from "../../../lib/useUnsavedChangesWarning";
+import { useUnsavedChangesWarning } from "../../../hooks/useUnsavedChangesWarning";
 import Alert from "../../_components/ui/Alert";
 import Button from "../../_components/ui/Button";
 import { Field, Input, Textarea } from "../../_components/ui/Fields";
@@ -82,7 +82,7 @@ export default function NewTenantPage() {
    return (
       <StandardPage
          title="Register Tenant"
-         subtitle="Enter accurate tenant information for contracts and billing."
+         subtitle="Enter accurate information for tenant records to ensure billing and contract accuracy."
          breadcrumbs={
             <Breadcrumbs
                items={[{ label: "Tenant Directory", href: "/tenants" }, { label: "Register Tenant" }]}
@@ -99,11 +99,8 @@ export default function NewTenantPage() {
          <div className="mx-auto w-full max-w-4xl">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                <FormSection
-                  title="Basic Information"
+                  title="Identity Details"
                   icon={RefreshCw}
-                  rightElement={
-                     <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Directory Core</span>
-                  }
                >
                   <div className="grid gap-6 sm:grid-cols-2">
                      <Field label="First Name" required error={errors.first_name?.message}>
@@ -126,19 +123,19 @@ export default function NewTenantPage() {
                   </div>
                </FormSection>
 
-               <FormSection title="Contact Details" icon={Phone}>
+               <FormSection title="Contact Information" icon={Phone}>
                   <div className="grid gap-6 sm:grid-cols-2">
                      <Field label="Mobile Number" required error={errors.contact_number?.message}>
                         <Input
                            disabled={readOnly}
-                           className="!h-11 font-mono border-stone-200"
+                           className="!h-11 font-mono tabular-nums border-stone-200"
                            {...register("contact_number", {
                               required: "Required",
                               pattern: { value: PH_MOBILE_REGEX, message: "Invalid format" }
                            })}
                         />
                      </Field>
-                     <Field label="Email Address" required error={errors.email?.message}>
+                     <Field label="Email" required error={errors.email?.message}>
                         <Input
                            disabled={readOnly}
                            type="email"
@@ -148,7 +145,7 @@ export default function NewTenantPage() {
                         />
                      </Field>
                      <div className="sm:col-span-2">
-                        <Field label="Home Address" required error={errors.address?.message}>
+                        <Field label="Permanent Address" required error={errors.address?.message}>
                            <Textarea
                               rows={3}
                               disabled={readOnly}
@@ -162,17 +159,17 @@ export default function NewTenantPage() {
 
                <FormSection title="Emergency Contact" icon={ShieldAlert}>
                   <div className="grid gap-6 sm:grid-cols-2">
-                     <Field label="Emergency Contact Person" required error={errors.emergency_contact_name?.message}>
+                     <Field label="Contact Person" required error={errors.emergency_contact_name?.message}>
                         <Input
                            disabled={readOnly}
                            className="!h-11 border-stone-200"
-                           {...register("emergency_contact_name", { required: "Name is required." })}
+                           {...register("emergency_contact_name", { required: "Emergency contact person is required." })}
                         />
                      </Field>
-                     <Field label="Emergency Contact Number" required error={errors.emergency_contact_number?.message}>
+                     <Field label="Contact Number" required error={errors.emergency_contact_number?.message}>
                         <Input
                            disabled={readOnly}
-                           className="!h-11 font-mono border-stone-200"
+                           className="!h-11 font-mono tabular-nums border-stone-200"
                            {...register("emergency_contact_number", {
                               required: "Emergency phone is required.",
                               pattern: { value: PH_MOBILE_REGEX, message: "Invalid format" },

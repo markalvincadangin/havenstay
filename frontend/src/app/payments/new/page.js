@@ -16,7 +16,7 @@ import { useAuthGuard } from "../../../hooks/useAuthGuard";
 import { flattenApiErrors } from "../../../lib/errors";
 import { applyServerFieldErrors } from "../../../lib/forms";
 import { formatPHP, formatDateRange } from "../../../lib/formatters";
-import { useUnsavedChangesWarning } from "../../../lib/useUnsavedChangesWarning";
+import { useUnsavedChangesWarning } from "../../../hooks/useUnsavedChangesWarning";
 import { useFocusTrap } from "../../../hooks/useFocusTrap";
 import Alert from "../../_components/ui/Alert";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
@@ -122,7 +122,7 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
             <CheckCircle size={22} aria-hidden />
           </div>
           <div>
-            <h3 id="confirm-payment-title" className="hs-strip-title text-stone-900">
+            <h3 id="confirm-payment-title" className="hs-strip-title text-stone-900 uppercase tracking-[0.2em] text-[10px] font-black">
               Confirm Payment Posting
             </h3>
             <p className="mt-1 text-sm text-stone-500">This will post the collection to the billing ledger while preserving historical and audit records.</p>
@@ -146,7 +146,7 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
               <p className="mt-1 font-mono font-black text-stone-900">{formatPHP(amount)}</p>
             </div>
             <div>
-              <p className="font-bold uppercase tracking-widest text-stone-400">Gateway</p>
+              <p className="font-bold uppercase tracking-widest text-stone-400">Payment Method</p>
               <p className="mt-1 font-bold text-stone-900">{methodLabels[values?.payment_method] || values?.payment_method}</p>
             </div>
             <div className="col-span-2 border-t border-stone-100 pt-3">
@@ -186,7 +186,6 @@ export default function RecordPaymentPage() {
   const deepLinkApplied = useRef(false);
 
   const [apiError, setApiError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [billingOptions, setBillingOptions] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingValues, setPendingValues] = useState(null);
@@ -311,7 +310,6 @@ export default function RecordPaymentPage() {
 
   const onSubmit = (values) => {
     setApiError("");
-    setSuccessMessage("");
     if (!canManageBilling(currentUser)) {
       setApiError("Administrative clearance required to post collections.");
       return;
@@ -337,12 +335,12 @@ export default function RecordPaymentPage() {
         }),
       });
       setShowConfirmModal(false);
-      setSuccessMessage("Collection posted to ledger.");
+      
       const updatedBillingId = response?.billing?.billing_id;
       if (updatedBillingId) {
-        setTimeout(() => {
-          router.push(`/billing/${updatedBillingId}`);
-        }, 600);
+        router.push(`/billing/${updatedBillingId}`);
+      } else {
+        router.push('/payments');
       }
     } catch (error) {
       setShowConfirmModal(false);
@@ -558,11 +556,6 @@ export default function RecordPaymentPage() {
                 {apiError ? (
                   <Alert variant="error" title="Post Failed">
                     {apiError}
-                  </Alert>
-                ) : null}
-                {successMessage ? (
-                  <Alert variant="success" title="Posted Success">
-                    {successMessage}
                   </Alert>
                 ) : null}
 

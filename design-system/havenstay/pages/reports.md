@@ -1,7 +1,7 @@
-# Reports Page Design Specification
-
+# Reports Design Specification — v5.0 (Forensic-Hardened)
+> **Last Updated:** 2026-04-18
 > **PROJECT:** HavenStay BHMS
-> **Authoritative Specification:** Aligned to `MASTER.md` (Section 4, 5.1, 5.8, 21, 23, 24)
+> **Authoritative Specification:** Aligned to `MASTER.md` v5.0.0
 > **Implementation Scope:** `/reports`, `/reports/occupancy`, `/reports/collections`, `/reports/billing-summary`, `/reports/outstanding-balances`, `/reports/tenant-ledger`, `/reports/tenant-history`, `/reports/active-contracts`, `/reports/occupancy-status`
 
 ---
@@ -92,4 +92,4 @@ The reporting module follows the **Analytical Stack** pattern. Reports prioritiz
 
 ---
 
-*End of Design Specification. Aligned to HavenStay MASTER v4.7.*
+*Verified against HavenStay MASTER v5.0.0 Forensic Hardening pass.*

@@ -121,22 +121,22 @@ export default function OccupancyReportPage() {
     >
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard 
-          label="Total Rooms" 
-          value={report.summary?.total_rooms ?? "—"} 
-          icon={Home} 
+        <KpiCard
+          label="Total Rooms"
+          value={report.summary?.total_rooms ?? "—"}
+          icon={Home}
           isSyncing={isValidating}
         />
-        <KpiCard 
-          label="Total Beds" 
-          value={report.summary?.total_beds ?? "—"} 
-          icon={BarChart3} 
+        <KpiCard
+          label="Total Beds"
+          value={report.summary?.total_beds ?? "—"}
+          icon={BarChart3}
           isSyncing={isValidating}
         />
-        <KpiCard 
-          label="Occupied Beds" 
-          value={report.summary?.occupied_beds ?? "—"} 
-          icon={Users} 
+        <KpiCard
+          label="Occupied Beds"
+          value={report.summary?.occupied_beds ?? "—"}
+          icon={Users}
           isSyncing={isValidating}
         />
         <KpiCard
@@ -149,54 +149,54 @@ export default function OccupancyReportPage() {
       </div>
 
       <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={apiUnavailable}>
-          <div className="grid gap-6 sm:grid-cols-4">
-            <Field label="Filter by Room Type">
-              <Select
-                value={roomTypeFilter}
-                onChange={(event) => {
-                  setRoomTypeFilter(event.target.value);
-                  setPage(1);
-                }}
-                disabled={apiUnavailable}
-                className="!h-11"
-              >
-                <option value="all">All Room Types</option>
-                {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          {roomTypeFilter !== "all" && (
-            <div className="mt-6">
-              <FilterChips
-                items={[
-                  {
-                    key: "room_type",
-                    label: "Room type",
-                    value: roomTypeFilter !== "all" ? roomTypeFilter : "",
-                    onClear: () => {
-                      setRoomTypeFilter("all");
-                      setPage(1);
-                    },
+        <div className="grid gap-6 sm:grid-cols-4">
+          <Field label="Filter by Unit Type">
+            <Select
+              value={roomTypeFilter}
+              onChange={(event) => {
+                setRoomTypeFilter(event.target.value);
+                setPage(1);
+              }}
+              disabled={apiUnavailable}
+              className="!h-11"
+            >
+              <option value="all">All Unit Types</option>
+              {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        {roomTypeFilter !== "all" && (
+          <div className="mt-6">
+            <FilterChips
+              items={[
+                {
+                  key: "room_type",
+                  label: "Room type",
+                  value: roomTypeFilter !== "all" ? roomTypeFilter : "",
+                  onClear: () => {
+                    setRoomTypeFilter("all");
+                    setPage(1);
                   },
-                ]}
-                onClearAll={() => {
-                  setRoomTypeFilter("all");
-                  setPage(1);
-                }}
-              />
-            </div>
-          )}
+                },
+              ]}
+              onClearAll={() => {
+                setRoomTypeFilter("all");
+                setPage(1);
+              }}
+            />
+          </div>
+        )}
 
-          {apiUnavailable ? (
-            <Alert variant="info" className="mt-6" title="Report unavailable">
-              The occupancy report endpoint did not respond. Check API configuration and try again.
-            </Alert>
-          ) : null}
-          {apiError ? <Alert variant="error" className="mt-6" title="Sync Issue">{apiError}</Alert> : null}
+        {apiUnavailable ? (
+          <Alert variant="info" className="mt-6" title="Report unavailable">
+            The occupancy report endpoint did not respond. Check API configuration and try again.
+          </Alert>
+        ) : null}
+        {apiError ? <Alert variant="error" className="mt-6" title="Sync Issue">{apiError}</Alert> : null}
       </ReportFilterCard>
 
       <ResourceView
@@ -214,40 +214,40 @@ export default function OccupancyReportPage() {
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
           <Table
             embedded={true}
-            caption="Occupancy records"
+            caption="Bed Utilization Directory"
             ariaLabel="Bed utilization records"
             columns={[
-              { key: "room", label: "Room" },
-              { key: "type", label: "Room type" },
-              { key: "beds", label: "Beds (total)", className: "text-right" },
-              { key: "occupied", label: "Occupied", className: "text-right" },
-              { key: "vacant", label: "Vacant", className: "text-right" },
-              { key: "rate", label: "Occupancy %", className: "text-right" },
+              { key: "room", label: "UNIT CODE" },
+              { key: "type", label: "UNIT TYPE", className: "text-center" },
+              { key: "beds", label: "TOTAL BEDS", className: "text-right" },
+              { key: "occupied", label: "OCCUPIED", className: "text-right" },
+              { key: "vacant", label: "VACANCIES", className: "text-right" },
+              { key: "rate", label: "UTILIZATION", className: "text-right" },
             ]}
             rows={rows.map((row) => (
               <tr key={row.room_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
-                <td className="px-6 py-4">
-                  <div className="font-mono text-sm font-black uppercase leading-none tracking-tight text-stone-900">
+                <td className="px-6 py-3">
+                  <div className="font-mono text-[10px] font-black uppercase tracking-tighter text-stone-900 leading-tight">
                     {row.room_code}
                   </div>
                   {row.room_id != null ? (
-                    <div className="mt-0.5">
+                    <div className="mt-1">
                       <ResourceIdCell id={row.room_id} prefix="ROOM" />
                     </div>
                   ) : null}
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-6 py-3 text-center">
                   <StatusBadge>{row.room_type}</StatusBadge>
                 </td>
-                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-500">{row.total_beds}</td>
-                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-teal-700 font-bold">{row.occupied_beds}</td>
-                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-rose-700 font-bold">{row.vacant_beds}</td>
-                <td className="px-6 py-4">
+                <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-stone-500">{row.total_beds}</td>
+                <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-teal-700 font-bold">{row.occupied_beds}</td>
+                <td className="px-6 py-3 text-right font-mono text-xs tabular-nums text-rose-700 font-bold">{row.vacant_beds}</td>
+                <td className="px-6 py-3">
                   <div className="flex items-center justify-end gap-3">
-                    <div className="h-1.5 w-16 rounded-full bg-stone-100 overflow-hidden">
-                      <div className="h-full bg-teal-500" style={{ width: `${row.occupancy_rate}%` }} />
+                    <div className="h-1 w-16 rounded-full bg-stone-100 overflow-hidden">
+                      <div className="h-full bg-emerald-500" style={{ width: `${row.occupancy_rate}%` }} />
                     </div>
-                    <span className="font-mono text-[11px] font-bold tabular-nums text-stone-900">{row.occupancy_rate}%</span>
+                    <span className="font-mono text-[10px] font-black tabular-nums text-stone-900">{row.occupancy_rate}%</span>
                   </div>
                 </td>
               </tr>

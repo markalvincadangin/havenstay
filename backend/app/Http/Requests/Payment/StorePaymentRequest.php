@@ -2,11 +2,18 @@
 
 namespace App\Http\Requests\Payment;
 
+use App\Services\Identity\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validates data for recording a new payment.
+ */
 class StorePaymentRequest extends FormRequest
 {
+    /**
+     * Authorized: Admin, Staff.
+     */
     public function authorize(): bool
     {
         return true;

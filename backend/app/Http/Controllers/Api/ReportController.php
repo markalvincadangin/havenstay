@@ -2,32 +2,31 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Concerns\HandlesAuthorization;
+use App\Models\Room;
+use App\Models\RoomMeterReading;
 use App\Http\Controllers\Controller;
-use App\Services\AuthorizationService;
-use App\Services\PiiMaskingService;
-use App\Services\ReportService;
-use App\Support\PaginationResponse;
+use App\Services\Identity\AuthorizationService;
+use App\Services\Analytics\PiiMaskingService;
+use App\Services\Analytics\ReportService;
+use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
-    use HandlesAuthorization;
-
     /**
      */
     public function occupancy(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.occupancy', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'room_type' => ['nullable', 'string', 'in:solo,shared'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
         $report = ReportService::occupancy([
             'room_type' => $validated['room_type'] ?? null,
@@ -40,15 +39,13 @@ class ReportController extends Controller
      */
     public function billingSummary(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.billingSummary', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
             'current_month' => ['nullable', 'boolean'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
         $report = ReportService::billingSummary([
             'start_date' => $validated['start_date'] ?? null,
@@ -65,15 +62,13 @@ class ReportController extends Controller
      */
     public function outstandingBalances(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.outstandingBalances', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'tenant_id' => ['nullable', 'integer', 'exists:tenants,tenant_id'],
             'due_from' => ['nullable', 'date'],
             'due_to' => ['nullable', 'date'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
         $report = ReportService::outstandingBalances([
             'tenant_id' => $validated['tenant_id'] ?? null,
@@ -90,9 +85,7 @@ class ReportController extends Controller
      */
     public function occupancyExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.occupancyExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'room_type' => ['nullable', 'string', 'in:solo,shared'],
@@ -105,23 +98,16 @@ class ReportController extends Controller
         return $this->csvDownload('occupancy', $report, 'occupancy-report.csv');
     }
 
-    /**
-     */
     public function occupancyStatus(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.occupancyStatus', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'room_id' => ['nullable', 'integer', 'exists:rooms,room_id'],
             'bed_status' => ['nullable', 'string', 'in:vacant,occupied,maintenance'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
-        $report = ReportService::occupancyStatus([
-            'room_id' => $validated['room_id'] ?? null,
-            'bed_status' => $validated['bed_status'] ?? null,
-        ]);
+        $report = ReportService::occupancyStatus($validated);
 
         $report = $this->finalizeReportForViewer($request, 'occupancy_status', $report);
 
@@ -132,9 +118,7 @@ class ReportController extends Controller
      */
     public function occupancyStatusExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.occupancyStatusExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'room_id' => ['nullable', 'integer', 'exists:rooms,room_id'],
@@ -143,27 +127,20 @@ class ReportController extends Controller
 
         $report = ReportService::occupancyStatus($validated);
 
-        $report = $this->finalizeReportForViewer($request, 'occupancy_status', $report);
-
         return $this->csvDownload('occupancy-status', $report, 'occupancy-status-report.csv');
     }
 
     /**
-     * Active leases via `vw_active_contracts` (CCR-005).
      */
     public function activeContracts(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.activeContracts', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'room_id' => ['nullable', 'integer', 'exists:rooms,room_id'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
-        $report = ReportService::activeContracts([
-            'room_id' => $validated['room_id'] ?? null,
-        ]);
+        $report = ReportService::activeContracts($validated);
 
         $report = $this->finalizeReportForViewer($request, 'active_contracts', $report);
 
@@ -172,11 +149,20 @@ class ReportController extends Controller
 
     /**
      */
+    public function summaryStats(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $report = ReportService::summaryStats();
+
+        return response()->json($report);
+    }
+
+    /**
+     */
     public function activeContractsExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.activeContractsExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'room_id' => ['nullable', 'integer', 'exists:rooms,room_id'],
@@ -193,9 +179,7 @@ class ReportController extends Controller
      */
     public function billingSummaryExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.billingSummaryExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'start_date' => ['nullable', 'date'],
@@ -214,9 +198,7 @@ class ReportController extends Controller
      */
     public function outstandingBalancesExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.outstandingBalancesExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'tenant_id' => ['nullable', 'integer', 'exists:tenants,tenant_id'],
@@ -231,19 +213,15 @@ class ReportController extends Controller
         return $this->csvDownload('outstanding-balances', $report, 'outstanding-balances-report.csv');
     }
 
-    /**
-     */
     public function collectionsPerformance(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.collectionsPerformance', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
             'payment_method' => ['nullable', 'string'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
         $report = ReportService::collectionsPerformance([
             'start_date' => $validated['start_date'] ?? null,
@@ -260,9 +238,7 @@ class ReportController extends Controller
      */
     public function collectionsPerformanceExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.collectionsPerformanceExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'start_date' => ['nullable', 'date'],
@@ -279,17 +255,31 @@ class ReportController extends Controller
 
     /**
      */
+    public function collectionsByCategory(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $validated = $request->validate(array_merge([
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date'],
+        ], Pagination::queryRules()));
+
+        $report = ReportService::collectionsByCategory($validated);
+
+        return response()->json($this->withOptionalRowPagination($report, $request));
+    }
+
+    /**
+     */
     public function tenantHistory(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.tenantHistory', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
             'status' => ['nullable', 'string', 'in:all,active,moved_out,completed,terminated'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
         $filters = [
             'from' => $validated['from'] ?? null,
@@ -306,11 +296,20 @@ class ReportController extends Controller
 
     /**
      */
+    public function agingReceivables(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $report = ReportService::agingReceivables();
+
+        return response()->json($report);
+    }
+
+    /**
+     */
     public function tenantHistoryExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.tenantHistoryExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'from' => ['nullable', 'date'],
@@ -335,13 +334,11 @@ class ReportController extends Controller
      */
     public function tenantLedger(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            return $this->forbidden($request, 'reports.tenantLedger', 'Unauthorized to view reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate(array_merge([
             'tenant_id' => ['required', 'integer', 'exists:tenants,tenant_id'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
         $report = ReportService::tenantLedger((int) $validated['tenant_id']);
 
@@ -354,9 +351,7 @@ class ReportController extends Controller
      */
     public function tenantLedgerExport(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canViewReports($request->user())) {
-            $this->forbiddenExport($request, 'reports.tenantLedgerExport', 'Unauthorized to export reports.');
-        }
+        AuthorizationService::ensureCanViewReports($request->user());
 
         $validated = $request->validate([
             'tenant_id' => ['required', 'integer', 'exists:tenants,tenant_id'],
@@ -369,6 +364,110 @@ class ReportController extends Controller
         $tenantName = str_replace(' ', '_', strtolower($report['tenant']['name'] ?? 'tenant'));
 
         return $this->csvDownload('tenant-ledger', $report, "ledger-{$tenantName}.csv");
+    }
+
+    /**
+     */
+    public function revenueProjection(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $report = ReportService::revenueProjection();
+
+        return response()->json($report);
+    }
+    
+    /**
+     */
+    public function checkInEfficiency(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $report = ReportService::checkInEfficiency();
+
+        return response()->json($report);
+    }
+
+    /**
+     */
+    public function auditPulse(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $report = ReportService::auditPulse();
+
+        return response()->json($report);
+    }
+
+    /**
+     */
+    public function inventoryHealth(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $report = ReportService::inventoryHealth();
+
+        return response()->json($report);
+    }
+
+    /**
+     */
+    public function upcomingMoveOuts(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $report = ReportService::upcomingMoveOuts();
+
+        return response()->json($report);
+    }
+
+    /**
+     * FR-023: Compliance summary for utility metering coverage.
+     * Aligned with Tier-1 Forensic Audit: Pending reading filters for active billing cycle.
+     */
+    public function meterCoverage(Request $request): JsonResponse
+    {
+        AuthorizationService::ensureCanViewReports($request->user());
+
+        $totalRooms = Room::count();
+        if ($totalRooms === 0) {
+            return response()->json([
+                'electric_coverage' => 0,
+                'water_coverage' => 0,
+                'high_delta_alerts' => 0,
+                'electric_pending_count' => 0,
+                'water_pending_count' => 0,
+            ]);
+        }
+
+        $currentMonthStart = Carbon::now()->startOfMonth()->toDateString();
+        $currentMonthEnd = Carbon::now()->endOfMonth()->toDateString();
+        
+        // Coverage: Rooms with at least one reading recorded in the current billing month
+        $elecRoomsCount = RoomMeterReading::where('utility_type', 'electric')
+            ->whereBetween('reading_date', [$currentMonthStart, $currentMonthEnd])
+            ->distinct('room_id')
+            ->count('room_id');
+            
+        $waterRoomsCount = RoomMeterReading::where('utility_type', 'water')
+            ->whereBetween('reading_date', [$currentMonthStart, $currentMonthEnd])
+            ->distinct('room_id')
+            ->count('room_id');
+
+        // High-Delta Alerts: Current consumption reflects a spike (> 100 units as a forensic threshold for the KPI)
+        // Simplified to prevent SQL execution errors in complex subqueries while maintaining forensic visibility.
+        $highDeltaCount = RoomMeterReading::whereBetween('reading_date', [$currentMonthStart, $currentMonthEnd])
+            ->whereRaw('reading_value - (SELECT r2.reading_value FROM room_meter_readings r2 WHERE r2.room_id = room_meter_readings.room_id AND r2.utility_type = room_meter_readings.utility_type AND r2.reading_date < room_meter_readings.reading_date ORDER BY r2.reading_date DESC LIMIT 1) > 100')
+            ->count();
+
+        return response()->json([
+            'total_rooms' => $totalRooms,
+            'electric_coverage' => round(($elecRoomsCount / $totalRooms) * 100, 1),
+            'water_coverage' => round(($waterRoomsCount / $totalRooms) * 100, 1),
+            'high_delta_alerts' => $highDeltaCount,
+            'electric_pending_count' => max(0, $totalRooms - $elecRoomsCount),
+            'water_pending_count' => max(0, $totalRooms - $waterRoomsCount),
+        ]);
     }
 
     /**
@@ -394,8 +493,8 @@ class ReportController extends Controller
             return $report;
         }
 
-        $pageParams = PaginationResponse::normalizePageParams(
-            $request->validate(PaginationResponse::queryRules())
+        $pageParams = Pagination::normalizePageParams(
+            $request->validate(Pagination::queryRules())
         );
 
         $rows = Collection::make($report[$key] ?? []);

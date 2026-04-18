@@ -17,8 +17,8 @@ class BillingPaymentArchitectureConventionTest extends TestCase
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('use HandlesAuthorization;', $content);
-        $this->assertStringContainsString('$this->forbidden(', $content);
+        $this->assertStringContainsString('use App\Services\Identity\AuthorizationService;', $content);
+        $this->assertStringContainsString('AuthorizationService::ensureCan', $content);
     }
 
     public function test_payment_controller_uses_shared_authorization_helper(): void
@@ -27,8 +27,8 @@ class BillingPaymentArchitectureConventionTest extends TestCase
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('use HandlesAuthorization;', $content);
-        $this->assertStringContainsString('$this->forbidden(', $content);
+        $this->assertStringContainsString('use App\Services\Identity\AuthorizationService;', $content);
+        $this->assertStringContainsString('AuthorizationService::ensureCan', $content);
     }
 }
 

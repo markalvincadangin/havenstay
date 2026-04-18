@@ -2,28 +2,29 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Tenant\StoreTenantRequest;
 use App\Http\Requests\Tenant\UpdateTenantRequest;
 use App\Models\Tenant;
-use App\Services\AuthorizationService;
-use App\Services\PiiMaskingService;
-use App\Services\TenantService;
-use App\Support\PaginationResponse;
+use App\Services\Analytics\PiiMaskingService;
+use App\Services\Identity\AuthorizationService;
+use App\Services\Operations\TenantService;
+use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class TenantController extends Controller
 {
-    use HandlesAuthorization;
 
     /**
      * Get all tenants
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function index(Request $request): JsonResponse
     {
-        return $this->listTenants($request, 'tenants.index', 'Unauthorized: you do not have permission to view tenants.');
+        return $this->listTenants($request);
     }
 
     /**
@@ -31,9 +32,7 @@ class TenantController extends Controller
      */
     public function summary(Request $request): JsonResponse
     {
-        if (!AuthorizationService::canViewTenants($request->user())) {
-            return $this->forbidden($request, 'tenants.summary', 'Unauthorized: you do not have permission to view tenant summary.');
-        }
+        AuthorizationService::ensureCanViewTenants($request->user());
 
         $summary = TenantService::summary();
 
@@ -48,9 +47,7 @@ class TenantController extends Controller
      */
     public function store(StoreTenantRequest $request): JsonResponse
     {
-        if (!AuthorizationService::canManageTenants($request->user())) {
-            return $this->forbidden($request, 'tenants.create', 'Unauthorized: only Admin or Staff can create tenants.');
-        }
+        AuthorizationService::ensureCanManageTenants($request->user());
 
         $validated = $request->validated();
 
@@ -67,9 +64,7 @@ class TenantController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        if (!AuthorizationService::canViewTenants($request->user())) {
-            return $this->forbidden($request, 'tenants.show', 'Unauthorized: you do not have permission to view tenants.');
-        }
+        AuthorizationService::ensureCanViewTenants($request->user());
 
         $tenant = TenantService::findByIdWithTrashedOrFail($id);
         $payload = PiiMaskingService::maybeMaskTenantArray($request->user(), $tenant->toArray());
@@ -85,9 +80,7 @@ class TenantController extends Controller
      */
     public function update(UpdateTenantRequest $request, Tenant $tenant): JsonResponse
     {
-        if (!AuthorizationService::canManageTenants($request->user())) {
-            return $this->forbidden($request, 'tenants.update', 'Unauthorized: only Admin or Staff can update tenants.');
-        }
+        AuthorizationService::ensureCanManageTenants($request->user());
 
         $validated = $request->validated();
 
@@ -104,9 +97,7 @@ class TenantController extends Controller
      */
     public function reactivate(Request $request, Tenant $tenant): JsonResponse
     {
-        if (!AuthorizationService::canManageTenants($request->user())) {
-            return $this->forbidden($request, 'tenants.reactivate', 'Unauthorized: only Admin or Staff can reactivate tenants.');
-        }
+        AuthorizationService::ensureCanManageTenants($request->user());
 
         $tenant = TenantService::reactivate($request->user(), $tenant);
 
@@ -121,7 +112,7 @@ class TenantController extends Controller
      */
     public function search(Request $request): JsonResponse
     {
-        return $this->listTenants($request, 'tenants.search', 'Unauthorized: you do not have permission to search tenants.');
+        return $this->listTenants($request);
     }
 
     /**
@@ -129,9 +120,7 @@ class TenantController extends Controller
      */
     public function archive(Request $request, Tenant $tenant): JsonResponse
     {
-        if (!AuthorizationService::canManageTenants($request->user())) {
-            return $this->forbidden($request, 'tenants.archive', 'Unauthorized: only Admin or Staff can archive tenants.');
-        }
+        AuthorizationService::ensureCanManageTenants($request->user());
 
         $tenant = TenantService::archive($request->user(), $tenant);
 
@@ -146,9 +135,7 @@ class TenantController extends Controller
      */
     public function restore(Request $request, int $id): JsonResponse
     {
-        if (!AuthorizationService::canManageTenants($request->user())) {
-            return $this->forbidden($request, 'tenants.restore', 'Unauthorized: only Admin or Staff can restore tenants.');
-        }
+        AuthorizationService::ensureCanManageTenants($request->user());
 
         $tenant = TenantService::restore($request->user(), $id);
 
@@ -158,18 +145,16 @@ class TenantController extends Controller
         ]);
     }
 
-    private function listTenants(Request $request, string $resource, string $forbiddenMessage): JsonResponse
+    public function listTenants(Request $request): JsonResponse
     {
-        if (!AuthorizationService::canViewTenants($request->user())) {
-            return $this->forbidden($request, $resource, $forbiddenMessage);
-        }
+        AuthorizationService::ensureCanViewTenants($request->user());
 
         $validated = $request->validate(array_merge([
             'q' => ['nullable', 'string', 'max:200'],
             'status' => ['nullable', 'string', 'in:active,moved_out,archived'],
-        ], PaginationResponse::queryRules()));
+        ], Pagination::queryRules()));
 
-        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $pageParams = Pagination::normalizePageParams($validated);
         $q = $validated['q'] ?? '';
         $status = $validated['status'] ?? '';
 
@@ -180,7 +165,7 @@ class TenantController extends Controller
             return PiiMaskingService::maybeMaskTenantArray($request->user(), $tenant->toArray());
         });
 
-        return PaginationResponse::fromPaginator($paginator);
+        return Pagination::fromPaginator($paginator);
     }
 
 }

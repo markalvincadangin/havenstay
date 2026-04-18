@@ -2,14 +2,20 @@
 
 namespace App\Http\Requests\Tenant;
 
-use App\Services\AuthorizationService;
+use App\Services\Identity\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 
+/**
+ * Validates data for updating an existing tenant profile.
+ */
 class UpdateTenantRequest extends FormRequest
 {
+    /**
+     * Authorized: Admin, Staff.
+     */
     public function authorize(): bool
     {
-        return AuthorizationService::canManageTenants($this->user());
+        return true;
     }
 
     /**

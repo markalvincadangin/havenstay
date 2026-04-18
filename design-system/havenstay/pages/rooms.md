@@ -1,7 +1,7 @@
-# Room Inventory Design Specification — v4.3 (Master-Aligned)
+# Room Inventory Design Specification — v5.0 (Forensic-Hardened)
 
 > **PROJECT:** HavenStay Boarding House Management System (BHMS)
-> **Last Updated:** 2026-04-12
+> **Last Updated:** 2026-04-18
 > **Page Type:** Inventory / Detail / Form Pages
 > **Routes:** `/rooms`, `/rooms/[id]`, `/rooms/new`, `/rooms/[id]/edit`
 
@@ -165,11 +165,11 @@ The Room Inventory manages real-time property capacity across four views:
 **Override Reason:** Room detail page has unique bed space management table.
 
 **Columns:**
-1. **Bed Label** - `bed_label`, DM Mono font, 14px
-2. **Status** - StatusBadge component
-3. **Current Tenant** - tenant name (clickable link) or "—"
-4. **Move-In Date** - formatDateString(contract.move_in_date) or "—"
-5. **Actions** - "Assign Tenant" link (if available) or "View Contract" (if occupied)
+1. **Bed Label** - `bed_label`, **Forensic Label** mono style, 14px.
+2. **Status** - StatusBadge component.
+3. **Current Tenant** - tenant name (clickable link) or "—".
+4. **Move-In Date** - formatDateString(contract.move_in_date) or "—".
+5. **Actions** - "Assign Tenant" link (if available) or "View Contract" (if occupied).
 
 **Empty State:**
 ```jsx

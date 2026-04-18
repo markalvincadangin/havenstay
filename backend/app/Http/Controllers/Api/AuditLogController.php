@@ -2,40 +2,39 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Concerns\HandlesAuthorization;
 use App\Http\Controllers\Controller;
-use App\Services\AuthorizationService;
-use App\Services\AuditService;
-use App\Support\PaginationResponse;
+use App\Services\Analytics\AuditService;
+use App\Services\Identity\AuthorizationService;
+use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AuditLogController extends Controller
 {
-    use HandlesAuthorization;
 
     /**
-     * List audit logs with filters.
+     * List system audit logs with advanced filtering.
+     * Authorized: Admin only.
      *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function index(Request $request): JsonResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            return $this->forbidden($request, 'audit_logs.list', 'Unauthorized: only Admin can view audit logs.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $validated = $request->validate(array_merge([
             'entity_type' => ['sometimes', 'nullable', 'string', 'max:64'],
-            /** `audit_logs.action` ENUM — `backend/database/sql/havenstay_schema.sql` */
             'action' => ['sometimes', 'nullable', 'string', 'in:INSERT,UPDATE,DELETE,login,logout,access_denied,status_change,archive,restore'],
             'from' => ['sometimes', 'nullable', 'string', 'max:32'],
             'to' => ['sometimes', 'nullable', 'string', 'max:32'],
             'user' => ['sometimes', 'nullable', 'string', 'max:200'],
             'correlation' => ['sometimes', 'nullable', 'string', 'max:64'],
-        ], PaginationResponse::queryRules()));
+            'q' => ['sometimes', 'nullable', 'string', 'max:255'],
+        ], Pagination::queryRules()));
 
-        $pageParams = PaginationResponse::normalizePageParams($validated);
+        $pageParams = Pagination::normalizePageParams($validated);
 
         $filters = array_filter(
             [
@@ -45,6 +44,7 @@ class AuditLogController extends Controller
                 'to' => $validated['to'] ?? null,
                 'user' => $validated['user'] ?? null,
                 'correlation' => isset($validated['correlation']) ? trim((string) $validated['correlation']) : null,
+                'q' => $validated['q'] ?? null,
             ],
             fn ($v) => $v !== null && $v !== ''
         );
@@ -53,18 +53,21 @@ class AuditLogController extends Controller
 
         $accessDeniedTotal = AuditService::countAccessDeniedMatchingFilters($filters);
 
-        return PaginationResponse::fromPaginator($paginator, [
+        return Pagination::fromPaginator($paginator, [
             'access_denied_total' => $accessDeniedTotal,
         ]);
     }
 
     /**
+     * Export audit logs to CSV for external forensic analysis.
+     * Authorized: Admin only.
+     *
+     * @param Request $request
+     * @return StreamedResponse
      */
     public function export(Request $request): StreamedResponse
     {
-        if (! AuthorizationService::canManageUsers($request->user())) {
-            $this->forbiddenExport($request, 'audit_logs.export', 'Unauthorized: only Admin can export audit logs.');
-        }
+        AuthorizationService::ensureCanManageUsers($request->user());
 
         $validated = $request->validate([
             'entity_type' => ['sometimes', 'nullable', 'string', 'max:64'],
@@ -73,6 +76,7 @@ class AuditLogController extends Controller
             'to' => ['sometimes', 'nullable', 'string', 'max:32'],
             'user' => ['sometimes', 'nullable', 'string', 'max:200'],
             'correlation' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
 
         $filters = array_filter(
@@ -83,6 +87,7 @@ class AuditLogController extends Controller
                 'to' => $validated['to'] ?? null,
                 'user' => $validated['user'] ?? null,
                 'correlation' => isset($validated['correlation']) ? trim((string) $validated['correlation']) : null,
+                'q' => $validated['q'] ?? null,
             ],
             fn ($v) => $v !== null && $v !== ''
         );

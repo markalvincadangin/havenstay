@@ -11,10 +11,10 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Services\BillingService;
-use App\Services\PaymentService;
-use App\Services\ReportService;
-use App\Services\RoomService;
+use App\Services\Operations\BillingService;
+use App\Services\Operations\PaymentService;
+use App\Services\Analytics\ReportService;
+use App\Services\Operations\RoomService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -624,7 +624,7 @@ class BugConditionExplorationTest extends TestCase
         // Sync billing status so it reflects the payment (unpaid → partial).
         // Without this, autoUpdateStatus inside void() sees no status change
         // and the trigger never fires.
-        BillingService::autoUpdateStatus($billing);
+        BillingService::syncBillingStatus($billing);
         $billing->refresh();
         $this->assertEquals('partial', $billing->status, 'Billing should be partial after payment');
 

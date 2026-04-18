@@ -37,8 +37,12 @@ Use these files when changing routes listed below:
 | Users | `users.md` | `/users`, `/users/new`, `/users/[id]/edit` |
 | Audit Trail | `audit_logs.md` | `/audit-logs` |
 | Transaction Logs | `transaction_logs.md` | `/transaction-logs` |
+| Compliance Hub | `compliance.md` | `/compliance/*`, `/rooms/[id]/meters` |
+| Roles & Security | `role_reference.md` | `/settings/roles` |
+| Error States | `error_states.md` | `404`, `403`, `500` boundary pages |
+| Forensic Patterns | `patterns.md` | N/A (Project-wide tokens) |
 | Login | `login.md` | `/login` |
-| Form Pages Playbook | `FORM_PAGES.md` | `/login`, `/tenants/*`, `/rooms/*`, `/contracts/*`, `/billing/new`, `/billing/generate`, `/payments/new`, `/users/new`, `/users/[id]/edit` |
+| Form Pages Playbook | `FORM_PAGES.md` | `/login`, `/tenants/*`, `/rooms/*`, `/contracts/*`, `/billing/new`, `/compliance/*` |
 
 ---
 
@@ -181,6 +185,8 @@ Source of truth used for this matrix:
 | Payments (`payments`) | `/payments` | `/payments/[id]` | `/payments/new` | No edit route (void workflow) | Create + detail pattern; correction handled through void/re-post workflow. |
 | Audit logs (`audit_logs`) | `/audit-logs` | In-page detail modal | Not applicable | Not applicable | Immutable forensic records by design. |
 | Transaction logs (`transaction_logs`) | `/transaction-logs` | In-page run-detail modal | Not applicable | Not applicable | Immutable workflow records by design. |
+| Appliances (`add_on_registry`) | `/compliance/registry` | Registry table | Modal / Inline | Modal / Inline | Master catalog for forensic add-ons. |
+| Meter Readings (`room_meter_readings`) | `/compliance/meters` | Chronological log | `/rooms/[id]/meters` | No edit (forensic log) | Sub-meter utility tracking per room. |
 
 ### Coverage Rules
 

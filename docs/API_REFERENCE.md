@@ -1,7 +1,7 @@
 # HavenStay API Reference
 
-**Version:** 2.2  
-**Last Updated:** April 17, 2026  
+**Version:** 2.4  
+**Last Updated:** April 18, 2026  
 **Status:** Canonical integration contract for backend services; forensic alignment baseline
 
 REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**.
@@ -117,7 +117,17 @@ In accordance with **NFR-015**, PII (Personally Identifiable Information) maskin
 
 ---
 
-### 3.8 Analytical Reports
+### 3.8 Utilities and Compliance (New)
+| Method | Path | Access | FR | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/add-ons` | All | FR-023b | List master appliance registry items |
+| `POST` | `/api/add-ons` | Admin | FR-023b | Register a new allowable appliance/add-on |
+| `POST`   | `/api/contracts/{id}/add-ons` | Staff, Admin | FR-023c | Attach an appliance to an active contract |
+| `DELETE` | `/api/contracts/{id}/add-ons/{add_on_id}` | Staff, Admin | FR-023c | Detach an appliance from an active contract |
+| `PATCH`  | `/api/add-ons/{id}/status` | Admin | FR-023b | Toggle appliance active/inactive status |
+| `POST` | `/api/rooms/{id}/meter-readings` | Staff, Admin | FR-023a | Record sub-meter (electric/water) data |
+
+### 3.9 Analytical Reports
 All operational reports query standardized database views (CCR-005) and support optional pagination for large datasets. In accordance with **NFR-015**, PII (Personally Identifiable Information) data is masked/redacted for the Viewer role.
 
 | Method | Path | Access | FR | Description |
@@ -130,7 +140,7 @@ All operational reports query standardized database views (CCR-005) and support 
 | `GET` | `/api/reports/collections-performance`| All| FR-032 | Payment volume by method and period |
 | `GET` | `/api/reports/*/export` | All | FR-028–032 | Streamed CSV datasets for all reports |
 
-### 3.9 Forensic Auditing
+### 3.10 Forensic Auditing
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/api/audit-logs` | Admin | FR-034 | Row‑level change logs (trigger‑written) |
@@ -151,5 +161,57 @@ All operational reports query standardized database views (CCR-005) and support 
 
 ---
 
-*Aligned to: SRS.md v4.7 · SDD.md v3.2 · routes/api.php*  
-*Last Updated: April 17, 2026 (v2.2 — final audit alignment pass)*
+## 5. Payload Definitions (Compliance & Utilities)
+
+### 5.1 Register a New Appliance (Master Registry)
+`POST /api/add-ons`
+```json
+{
+  "item_name": "Desktop PC",
+  "default_monthly_rate": 300.00,
+  "is_active": true
+}
+```
+
+### 5.2 Attach Appliance to Contract
+`POST /api/contracts/{id}/add-ons`
+```json
+{
+  "add_on_id": 2,
+  "actual_rate": 300.00
+}
+```
+*Note: `actual_rate` is explicitly required to allow staff to offer discounted add-ons without changing the master registry.*
+
+### 5.3 Record a Room Sub-Meter Reading
+`POST /api/rooms/{id}/meter-readings`
+```json
+{
+  "utility_type": "electric", 
+  "reading_date": "2026-04-18",
+  "reading_value": 145.67
+}
+```
+*Note: `utility_type` must be strictly "electric" or "water". The backend will automatically infer `recorded_by` from the Sanctum authentication token.*
+
+### 5.4 Create a New Bill Cycle (Itemized)
+`POST /api/billing`
+```json
+{
+  "contract_id": 12,
+  "billing_period_from": "2026-04-01",
+  "billing_period_to": "2026-04-30",
+  "due_date": "2026-05-05",
+  "reading_ids": [45, 46],
+  "line_items": [
+    { "item_type": "base_rent", "amount": 5500.00 },
+    { "item_type": "utility", "item_description": "Water (145.67 - 140.23)", "amount": 150.00 }
+  ]
+}
+```
+*Note: `reading_ids` are used for forensic linkage only; the financial value must still be calculated and passed via `line_items` to maintain independent accounting/billing control.*
+
+---
+
+*Aligned to: SRS.md v5.2 · SDD.md v3.5 · routes/api.php*  
+*Last Updated: April 18, 2026 (v2.4 — compliance hardening pass)*

@@ -9,7 +9,7 @@ import { apiRequest } from "../../../lib/api";
 import { canManageRooms } from "../../../lib/auth";
 import { applyServerFieldErrors } from "../../../lib/forms";
 import { parseMoneyInput } from "../../../lib/money";
-import { useUnsavedChangesWarning } from "../../../lib/useUnsavedChangesWarning";
+import { useUnsavedChangesWarning } from "../../../hooks/useUnsavedChangesWarning";
 import Alert from "../../_components/ui/Alert";
 import Breadcrumbs from "../../_components/ui/Breadcrumbs";
 import Button from "../../_components/ui/Button";
@@ -135,14 +135,14 @@ export default function NewRoomPage() {
     >
       <form onSubmit={handleSubmit(onSubmit)} className="mx-auto w-full max-w-4xl space-y-6">
         <FormSection
-          title="Basic Information"
+          title="Identity Details"
           icon={RefreshCw}
           rightElement={<span className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Required fields</span>}
         >
           <div className="space-y-8">
             <div className="grid gap-6 sm:grid-cols-2">
               <Field 
-                label="Room Number" 
+                label="Unit Number" 
                 required 
                 error={errors.physical_number?.message}
                 helpText="The number displayed on the unit door (e.g. 101)."
@@ -156,7 +156,7 @@ export default function NewRoomPage() {
                 />
               </Field>
 
-              <Field label="Room Code" required error={errors.room_code?.message} helpText="System identifier for internal tracking.">
+              <Field label="Unit Code" required error={errors.room_code?.message} helpText="System identifier for internal tracking.">
                 <Input
                   readOnly
                   placeholder="UNIT-101"
@@ -167,7 +167,7 @@ export default function NewRoomPage() {
             </div>
 
             <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Monthly Rent (PHP)" required error={errors.monthly_rate?.message}>
+              <Field label="Rental Rate (PHP)" required error={errors.monthly_rate?.message}>
                 <Input
                   type="number"
                   step="1"
@@ -178,7 +178,7 @@ export default function NewRoomPage() {
                 />
               </Field>
 
-              <Field label="Room Category" required error={errors.room_type?.message}>
+              <Field label="Unit Category" required error={errors.room_type?.message}>
                 <Select className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("room_type")}>
                   {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
@@ -191,7 +191,7 @@ export default function NewRoomPage() {
 
         {roomType === "shared" && (
           <FormSection
-            title="Room Layout"
+            title="Bed Inventory"
             icon={ShieldCheck}
             rightElement={
               <div className="flex items-center gap-3">
@@ -251,12 +251,12 @@ export default function NewRoomPage() {
           </FormSection>
         )}
 
-        <FormSection title="Important Notes" icon={Box}>
+        <FormSection title="Registry Details" icon={Box}>
           <div className="space-y-6">
-            <Field label="Included Amenities" helpText="e.g. AC, Wi-Fi, personal desk">
+            <Field label="Amenities" helpText="e.g. AC, Wi-Fi, personal desk">
               <Textarea rows={3} placeholder="List room amenities…" className="border-stone-200 focus:border-teal-500/50" disabled={readOnly} {...register("amenities")} />
             </Field>
-            <Field label="Management Notes" helpText="Internal staff context only (not visible to tenants).">
+            <Field label="Administrative Notes" helpText="Internal staff context only (not visible to tenants).">
               <Textarea rows={3} placeholder="Optional staff notes…" className="border-stone-200 focus:border-teal-500/50" disabled={readOnly} {...register("description")} />
             </Field>
           </div>

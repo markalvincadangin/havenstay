@@ -1,118 +1,78 @@
-# Billing Page Design Specification
-
-> **PROJECT:** HavenStay
-> **VERSION:** 4.3 (Human-First Language Sync)
-> **STATUS:** Authoritative Standard
-> **Routes:** `/billing`, `/billing/[id]`, `/billing/new`, `/billing/generate` (alias of `/billing/new`)
+# Billing Design Specification — v5.0 (Forensic-Hardened)
+> **Last Updated:** 2026-04-18
+> **Routes:** `/billing`, `/billing/[id]`, `/billing/wizard` (v3.0 itemizer)
 
 ## Form Contract Reference
 
 - Shared form theme and validation behavior: `FORM_PAGES.md` §1
-- Billing form routes and allowed fields: `FORM_PAGES.md` §2.6
-- Source of truth: `docs/SRS.md` (FR-020 to FR-023, BR-001, BR-003, BR-014), `docs/API_REFERENCE.md`, `backend/database/sql/havenstay_schema.sql`
+- Itemized Billing Wizard contract: `FORM_PAGES.md` §2.13
+- Source of truth: `docs/SRS.md` (FR-020 to FR-023c), `docs/API_REFERENCE.md`, `havenstay_schema.sql` v3.0
 
 ---
 
 ## 1. Module Purpose
-The Billing module manages all rent collections, utility charges, and payment tracking. It provides a clear, simple way for staff to see who has paid and who still owes.
+The Billing module manages the lifecycle of monthly ledger entries. For Release 1, it utilizes the **Itemized Billing Wizard** to ensure that rent, utilities (sub-metered), and appliances are captured atomically.
 
-**Design Philosophy:** Human-Centric Management. Financial data should be clear and easy to read, using familiar boarding house terms like "Rent" and "Unpaid Balance" instead of technical jargon.
+**Design Philosophy:** Disciplined Operational Integrity. Financial data is presented with forensic precision (Mono IDs, audit trails) but with frictionless administrative flows.
 
 ---
 
 ## 2. Page Architecture
 
 ### 2.1 Billing List
-A bird's-eye view of all current and past rent cycles.
+- **Summary Layer**: `KpiCard` grid (Total Collections, Outstanding Balance, Active Cycles).
+- **Filters**: Registry Card with **Filters** strip. Search by Tenant Name or `#BILL-{id}`.
+- **Billing Table**: 
+  - **Billing ID**: `#BILL-{id}` (**Forensic Label** mono).
+  - **Tenant**: `{LastName}, {FirstName}`.
+  - **Cycle**: `MM/DD - MM/DD`.
+  - **Balance**: `CurrencyCell` (Outstanding amount).
+  - **Status**: `StatusBadge` (Paid, Partial, Overdue, Unpaid).
 
-**Layout Summary:**
-- **Summary Cards**: Quick count of **Total Collections**, **Unpaid Rent**, and **Active Bills**.
-- **Filters**: Simple search by name or room, plus status filters (Paid, Unpaid, Overdue).
-- **Billing Table**: A scannable list showing the resident, room, billing dates, and current balance.
+### 2.2 Billing Detail (`/billing/[id]`)
+- **Split View**:
+  - **Sidebar (4)**: Balance Summary (Total Billed, Total Paid, Remaining) and `Record Payment` Primary CTA.
+  - **Main (8)**: 
+    - **Line Items**: Table of `base_rent`, `utility`, and `add_on` entries.
+    - **Payment History**: Table of non-voided payments.
+    - **Metadata Strip**: Forensic trail (Created by, Correlation ID).
 
-### 2.2 Billing Detail
-A deep dive into a specific resident's monthly bill.
-
-- **Sidebar (Summary)**: Shows the current balance, total paid, and the **Record Payment** button.
-- **Main View**:
-  - **Billing Summary**: Basic details like the billing dates and the room assigned.
-  - **Charges & Fees**: A breakdown of rent and utility costs for the month.
-  - **Recent Payments**: List of payments already made toward this bill.
-
-### 2.3 New Billing Form
-Used to create a new monthly bill for a resident.
-
-- **Contract**: Choose the active contract.
-- **Billing Dates**: Select Billing Period Start, Billing Period End, and Due Date.
-- **Line Items**: Enter Charge Type, Description, and Amount.
-- **Actions**: Click **Generate Bill** to save or **Cancel** to go back.
-
-### 2.5 Exact Form Labels (Parity with `FORM_PAGES.md` §2.6)
-Header fields:
-- Contract (`contract_id`)
-- Billing Period Start (`billing_period_from`)
-- Billing Period End (`billing_period_to`)
-- Due Date (`due_date`)
-
-Line item fields:
-- Charge Type (`item_type`)
-- Description (`item_description`)
-- Amount (`amount`)
-
-### 2.4 Billing Generate Alias
-`/billing/generate` is a route alias that renders the same page as `/billing/new`.
-
-- **Behavior**: Same form, validation, and submit flow as `/billing/new`.
-- **Labeling**: Keep user-facing copy as **Generate Bill** / **Create Bill** (no separate alias-specific wording).
+### 2.3 Itemized Billing Wizard (`/billing/wizard`)
+The authoritative generation workflow. 
+- **Section 1: Lease Context**: Selection of active contract (auto-fills Base Rent).
+- **Section 2: Utility Sync**: Multi-select unbilled meter readings (`reading_ids`).
+- **Section 3: Appliance Add-ons**: Toggle active appliances for the period.
+- **Section 4: Summary**: Impact Preview showing the **Total Bill Amount**.
 
 ---
 
-## 3. Data & Labeling (Human-First)
+## 3. Data & Labeling (Forensic-Hardened)
 
-| UI Label | Technical Key | Friendly Mapping |
+| UI Label | Technical Key | Format |
 | :--- | :--- | :--- |
-| **ID** | `billing_id` | Simplified identifier |
-| **Contract** | `contract_id` | Selected active contract for the billing cycle |
-| **Total Amount** | `total_amount` | The full amount of the bill |
-| **Paid** | `total_paid` | Amount already collected |
-| **Unpaid Balance** | `balance` | Remaining amount to collect |
-| **Billing Cycle** | `period_from/to` | The start and end dates of the stay |
-| **Status** | `status` | Paid, Unpaid, Partial, or Overdue |
+| **Billing ID** | `billing_id` | `#BILL-{id}` (Mono) |
+| **Cycle** | `period_from/to` | Date Range |
+| **Unpaid Balance** | `balance` | `CurrencyCell` |
+| **Status** | `status` | `StatusBadge` |
+| **Correlation** | `correlation_id` | `CorrelationIdCell` |
 
 ---
 
 ## 4. UI Standards
-
-### 4.1 Typography
-- **Currency**: Clear, aligned numbers (Mono).
-- **Labels**: Small, bold, and clear caps for headers.
-- **Descriptive Text**: Medium font weight for easy reading.
-
-### 4.2 Friendly Terminology
-- **Header Button**: "Generate Bill"
-- **Detail Button**: "Record Payment"
-- **Form Action**: "Create Bill"
-- **Navigation**: "Go Back" or "Cancel"
+- **Currency**: `DM Mono` tabular-nums.
+- **IDs**: `#BILL-` prefix mandatory.
+- **Wizard Labels**: All Caps strip titles (e.g., `UTILITY SYNC`, `LEASE CONTEXT`).
 
 ---
 
-## 5. Quality Checklist
-
-- [ ] Does the page use "Unpaid Balance" instead of "Receivable"?
-- [ ] Is "Record Payment" used instead of "Process Reception"?
-- [ ] Are dates clearly labeled "Billing Cycle"?
-- [ ] Are all section headers simple (e.g., "Charges & Fees" instead of "Ledger Items")?
-
----
-
-## 6. Page Titles and Subtitles (Master §21 Exact)
+## 5. Page Titles and Subtitles (Master §21 Exact)
 
 | Route | Title (H1) | Subtitle |
 | :--- | :--- | :--- |
 | `/billing` | `Billing` | `Monitor account balances and track monthly billing cycles across all contracts.` |
 | `/billing/[id]` | `Billing *(# id)*` | `Line items, payments, and status for this cycle.` |
-| `/billing/new` and `/billing/generate` | `Billing` | `Monitor account balances and track monthly billing cycles across all contracts.` |
+| `/billing/wizard` | `Billing Wizard` | `Generate monthly ledger entries with automated utility and appliance itemization.` |
 
 ---
 
-*Verified against human-centric management goals for HavenStay.*
+*Verified against forensic v3.0 schema and ManagesWorkflows requirement.*

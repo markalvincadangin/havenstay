@@ -28,7 +28,7 @@ export default function NotFound() {
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Button asChild>
-              <Link href="/dashboard">Return to Operations</Link>
+              <Link href="/dashboard">Return to Dashboard</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link href="#" onClick={(e) => { e.preventDefault(); window.history.back(); }}>

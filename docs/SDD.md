@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## System Design Document (SDD)
 
-**Version:** 3.2  
-**Last Updated:** April 17, 2026  
+**Version:** 3.5  
+**Last Updated:** April 18, 2026  
 **Status:** Canonical architectural design and forensic implementation patterns
 
 ---
@@ -87,7 +87,7 @@ The system utilizes a primary‑replica architecture to satisfy distributed data
 ## 4. Database Design
 
 ### 4.1 Design Philosophy
-The database is normalized to the 3rd Normal Form (3NF) where operationally practical, specifically to ensure that financial and occupancy data are derived from singular points of truth. The schema consists of **11 tables**, **6 reporting views**, and **24 forensic triggers**.
+The database is normalized to the 3rd Normal Form (3NF) where operationally practical, specifically to ensure that financial and occupancy data are derived from singular points of truth. The schema consists of **14 tables**, **6 reporting views**, and **42 forensic triggers**.
 
 > **Schema Authority:** `db/havenstay_schema.sql` is the canonical DDL. 
 
@@ -103,9 +103,12 @@ The database is normalized to the 3rd Normal Form (3NF) where operationally prac
 | `contracts` | Rental agreements (anchored to `bed_space_id`) | Soft Delete |
 | `billing` | Monthly billing cycle headers | Immutable |
 | `billing_line_items` | Itemized charges and adjustments | Immutable |
-| `payments` | Transactional records with soft‑void support | Soft Void |
-| `audit_logs` | Row‑level change logs (Trigger-written) | Append-Only |
-| `transaction_logs` | Workflow-level outcome logs | Append-Only |
+| `payments` | Transactional settlement records | Forensic Lock |
+| `add_on_registry` | Master catalog of billable appliances | Reference data |
+| `contract_add_ons` | Active appliance assignments | Referential Lock |
+| `room_meter_readings` | Sub-meter utility consumption | Append-Only |
+| `audit_logs` | Change-set forensics (BEFORE/AFTER snapshots) | Forensic Trail |
+| `transaction_logs` | Workflow state and operational history | Forensic Trail |
 
 ### 4.3 Data Relationship Architecture
 - **Bed-Centric Occupancy:** All contracts are linked to a `bed_space_id`. Room context is derived via `bed_spaces.room_id`. This prevents data anomalies where a tenant might be assigned to a room but not a specific bed space.
@@ -124,7 +127,8 @@ The system enforces strict status transitions to maintain occupancy integrity:
     - `total_amount` = `SUM(billing_line_items.amount)`
     - `total_paid` = `SUM(payments.amount_paid)` (non‑voided)
     - `balance` = `total_amount - total_paid`
-- **Recalculation Authority:** `BillingService::autoUpdateStatus()` is the single source of truth for evaluating billing status priority in sequence: `paid` > `overdue` > `partial` > `unpaid`.
+- **Recalculation Authority:** `BillingService::syncBillingStatus()` is the single source of truth for evaluating billing status priority in sequence: `paid` > `overdue` > `partial` > `unpaid`.
+
 ## 5. Transaction Design (CCR-006)
 
 ### 5.1 Transaction Management
@@ -140,9 +144,15 @@ To fulfill the requirement for traceable workflow outcomes, particularly during 
 This pattern ensures that even if a database transaction is reverted, the record of the attempt and its failure remains persistent in the append-only transaction log.
 
 ### 5.3 Audit Automation (CCR-008)
-Row‑level change logging is handled exclusively by **24 AFTER triggers** on the MySQL primary.
+Row‑level change logging is handled exclusively by **42 AFTER triggers** on the MySQL primary.
 - **Mechanism:** The application sets a session variable `@current_user_id` via the `SetAuditContext` middleware.
 - **Triggers:** Capture `INSERT`, `UPDATE`, and `DELETE` events, writing full "before" and "after" JSON snapshots to the `audit_logs` table.
+
+### 5.4 Philippine Compliance Workflows
+
+**Two-Phase Check-In:** To prevent phantom occupancy, the `ContractService` initializes all new leases in a **Pending Payment** state. The transaction does not decrement room availability or mark the bed as occupied until the first payment transaction is successfully committed and the contract is activated.
+
+**Gate Pass Clearance:** The move-out transaction enforces a hard zero-balance check. The system will roll back any attempt to transition a contract to completed if the associated billing records have an outstanding balance > ₱0.00.
 
 ---
 
@@ -192,14 +202,14 @@ The following design decisions satisfy the binding constraints of the Informatio
 
 | CCR | Requirement | Design Realization |
 | :--- | :--- | :--- |
-| **CCR-001** | Relational Model | 11 Normalized tables in MySQL InnoDB |
+| **CCR-001** | Relational Model | 14 Normalized tables in MySQL InnoDB | SDD 4.2 | TC-INT-101 |
 | **CCR-002** | Distributed Data | Primary‑Replica topology with GTID replication |
 | **CCR-003** | SQL CRUD | Service‑layer Eloquent/SQL implementation |
 | **CCR-004** | SQL Operators | Date‑range (BETWEEN), Search (LIKE), Filters (AND/OR) |
 | **CCR-005** | SQL JOINs | 6 Automated views utilizing complex INNER/LEFT JOINS |
 | **CCR-006** | ACID Transactions | Explicit `DB::transaction()` boundaries in services |
 | **CCR-007** | Transaction Logs | Append‑only `transaction_logs` capturing started/committed/failed |
-| **CCR-008** | Change Audit | 24 AFTER triggers capturing attribute snapshots |
+| **CCR-008** | Change Audit | 42 AFTER triggers capturing snapshots | SDD 4.3.4 | TC-TRIGGER-001 |
 
 ---
 
@@ -216,7 +226,7 @@ The following design decisions satisfy the binding constraints of the Informatio
 
 ## 11. Implementation Notes
 
-- **Forensic Audit Coverage:** All 24 triggers are implemented and validated. Role‑level changes are captured in the unified `audit_logs` table.
+- **Forensic Audit Coverage:** All 42 triggers are implemented and validated. Role‑level changes are captured in the unified `audit_logs` table.
 - **Reporting Consistency:** Standardized views (`vw_*`) ensure that "Last, First" name formatting and void‑aware balance logic are consistent across all reports.
 - **Correlation Propagation:** The `AuditService` ensures that the `correlation_id` is propagated from the service layer down to the database triggers.
 
@@ -235,7 +245,7 @@ The following design decisions satisfy the binding constraints of the Informatio
 | **Payment Management (FR-024–027a)** | `PaymentService`, `payments`, `soft-void` |
 | **Reporting (FR-028–032)** | `ReportService`, 6 Reporting Views (`vw_*`) |
 | **Operational Dashboard (FR-033–033a)** | `DashboardController`, Aggregate service queries |
-| **Forensic Logging (FR-034–036)** | `TransactionService`, `audit_logs`, `transaction_logs`, 24 Triggers |
+| Forensic Logging | TransactionService, audit_logs, transaction_logs, 42 Triggers | FR-034–036 |
 | **System Integrity (FR-037–040)** | MySQL Check Constraints, `RoomService` sync logic |
 
 ---
@@ -247,9 +257,11 @@ The following design decisions satisfy the binding constraints of the Informatio
 | v1.0–v2.6 | 2026-03–04 | Initial architecture through compliance remediation and hardening. |
 | v2.7 | 2026-04-17 | Core-doc standardization pass; added document boundary. |
 | v3.1 | 2026-04-17 | Final forensic cleanup and alignment pass. Synchronized functional requirements with canonical schema constraints (24 triggers); corrected billing status priority (paid > overdue > partial > unpaid) to match SRS BR-009; polished RBAC design notes. |
-| **v3.2** | **2026-04-17** | **Final audit accuracy and metadata sync pass.** Synchronized all version pointers to SRS v4.6 baseline; corrected architectural residue in forensic mapping. |
+| **v3.3** | **2026-04-18** | Synchronized trigger count to 33 and documented Two-Phase Check-In and Gate Pass transaction logic. |
+| **v3.4** | **2026-04-18** | Synchronized data model to 14 tables; expanded Room Status ENUM documentation. |
+| **v3.5** | **2026-04-18** | **Forensic Lock.** Synchronized to 14 tables and 42 triggers (full Roles coverage); documented Surrogate PK for Junction Tables. |
 
 ---
 
-*Aligned to: SRS.md v4.7 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.2 · OPERATIONS_RUNBOOK.md · TEST_PLAN.md v4.2*  
-*Last Updated: April 17, 2026 (v3.2 — final audit alignment pass)*
+*Aligned to: SRS.md v5.2 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.4 · OPERATIONS_RUNBOOK.md · TEST_PLAN.md v4.3*  
+*Last Updated: April 18, 2026 (v3.5 — final forensic lock pass)*

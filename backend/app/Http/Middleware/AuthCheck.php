@@ -2,11 +2,15 @@
 
 namespace App\Http\Middleware;
 
-use App\Services\AuditService;
+use App\Services\Analytics\AuditService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Security middleware for verifying user authentication and account state.
+ * Enforces 'isActive' account status and forensicly logs denial events.
+ */
 class AuthCheck
 {
     public function handle(Request $request, Closure $next): Response

@@ -116,7 +116,12 @@ export function KpiCard({
         <div className="mt-4">
           <div className="h-1 w-full overflow-hidden rounded-full bg-stone-100">
             <motion.div
-              className="h-full bg-teal-500"
+              className={`h-full ${
+                isDanger ? 'bg-red-600' : 
+                isSuccess ? 'bg-emerald-600' : 
+                isWarning ? 'bg-amber-600' : 
+                'bg-teal-600'
+              }`}
               initial={{ width: 0 }}
               animate={{ width: `${Math.min(100, progress)}%` }}
               transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.6, ease: [0.16, 1, 0.3, 1] }}

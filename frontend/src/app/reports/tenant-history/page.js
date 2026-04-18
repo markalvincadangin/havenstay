@@ -227,7 +227,7 @@ export default function TenantHistoryReportPage() {
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
           title: "No history records found",
-          message: "Broaden your date range or clear filters to view historical lease data."
+          message: "Adjust filters or check for archive entries to view historical lease data."
         }}
       >
       <Card className="relative mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
@@ -238,8 +238,9 @@ export default function TenantHistoryReportPage() {
             columns={[
               { key: "tenant", label: "Tenant" },
               { key: "email", label: "Email" },
-              { key: "move_in", label: "Move-in" },
-              { key: "move_out", label: "Move-out" },
+              { key: "move_in", label: "Move-in", className: "text-center" },
+              { key: "move_out", label: "Move-out", className: "text-center" },
+              { key: "clearance", label: "Gate Pass", className: "text-center" },
               { key: "room", label: "Room" },
               { key: "status", label: "Status" },
               { key: "action", label: "", className: "text-right w-16" },
@@ -251,10 +252,18 @@ export default function TenantHistoryReportPage() {
                 >
                   <td className="px-6 py-4 text-xs font-bold text-stone-900">{row?.tenant_name || "—"}</td>
                   <td className="px-6 py-4 font-mono text-[10px] text-stone-400 lowercase">{row?.email || "—"}</td>
-                  <td className="px-6 py-4 text-[10px] font-medium text-stone-500">{formatDateString(row?.move_in_date)}</td>
-                  <td className="px-6 py-4 text-[10px] font-medium text-stone-500">{formatDateString(row?.move_out_date)}</td>
-                  <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-teal-600">{row?.room_label || "—"}</td>
+                  <td className="px-6 py-4 text-center text-[10px] font-medium text-stone-500">{formatDateString(row?.move_in_date)}</td>
+                  <td className="px-6 py-4 text-center text-[10px] font-medium text-stone-500">{formatDateString(row?.move_out_date)}</td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${row?.is_cleared ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {row?.is_cleared ? 'Cleared' : 'Pending'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4">
+                    <div className="font-mono text-[10px] font-black uppercase tracking-tighter text-teal-600 leading-tight">{row?.room_label || "—"}</div>
+                    {row?.room_id && <ResourceIdCell id={row.room_id} prefix="ROOM" />}
+                  </td>
+                  <td className="px-6 py-4 text-center">
                     <StatusBadge>{row?.status || "—"}</StatusBadge>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -265,7 +274,7 @@ export default function TenantHistoryReportPage() {
                 </tr>
             ))}
             emptyTitle="No history records found"
-            emptyDescription="Broaden your date range or clear filters to view historical lease data."
+            emptyDescription="Adjust filters or check for archive entries to view historical lease data."
           />
         <TablePagination
           meta={tableMeta}

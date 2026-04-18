@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AuthCheck;
 use App\Http\Middleware\SetAuditContext;
+use App\Services\Analytics\AuditService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -48,6 +49,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(function (AuthorizationException $exception, Request $request) {
             if ($request->is('api/*')) {
+                AuditService::logAccessDenied($request->user(), $request->path());
+
                 return response()->json([
                     'message' => $exception->getMessage() ?: 'Forbidden.',
                 ], 403);

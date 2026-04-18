@@ -33,14 +33,15 @@ export default function LifecycleActions({
           Reactivate
         </Button>
       ) : null}
-      {canArchive ? (
+      {!isArchived ? (
         <Button
           type="button"
           variant="ghost"
           onClick={onArchive}
           loading={busyAction === "archive"}
-          disabled={Boolean(busyAction)}
-          className="!h-11 rounded-xl border border-rose-100 px-6 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50"
+          disabled={Boolean(busyAction) || hasActiveContract}
+          className="!h-11 rounded-xl border border-rose-100 px-6 text-[10px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          title={hasActiveContract ? "Cannot archive tenant with active lease" : undefined}
         >
           Archive
         </Button>

@@ -12,7 +12,9 @@ export default function FilterPanelCard({ icon: Icon, title = "Filters", childre
               <Icon size={14} aria-hidden />
             </div>
           ) : null}
-          <h2 className="hs-strip-title text-stone-400">{title}</h2>
+          <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">
+            {title}
+          </h2>
         </div>
       </div>
       <div className="p-8">{children}</div>

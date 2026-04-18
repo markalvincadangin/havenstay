@@ -2,10 +2,17 @@
 
 namespace App\Http\Requests\Billing;
 
+use App\Services\Identity\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 
+/**
+ * Validates data for creating a new billing entry.
+ */
 class StoreBillingRequest extends FormRequest
 {
+    /**
+     * Authorized: Admin, Staff.
+     */
     public function authorize(): bool
     {
         return true;
@@ -21,7 +28,9 @@ class StoreBillingRequest extends FormRequest
             'line_items' => ['required', 'array', 'min:1'],
             'line_items.*.item_type' => ['required', 'in:base_rent,utility,add_on,penalty,adjustment'],
             'line_items.*.item_description' => ['nullable', 'string', 'max:255'],
-            'line_items.*.amount' => ['required', 'numeric'],
+            'line_items.*.amount' => ['required', 'numeric', 'min:0.01'],
+            'reading_ids' => ['nullable', 'array'],
+            'reading_ids.*' => ['integer', 'exists:room_meter_readings,reading_id'],
         ];
     }
 }

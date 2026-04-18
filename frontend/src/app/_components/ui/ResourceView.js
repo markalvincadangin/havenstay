@@ -87,9 +87,9 @@ export default function ResourceView({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute left-0 top-0 z-50 h-[2px] w-full overflow-hidden bg-stone-100/30"
+            className="absolute left-0 top-0 z-50 h-[1.5px] w-full overflow-hidden bg-stone-100/30"
           >
-            <div className="hs-indeterminate-bar h-full w-full bg-teal-500" />
+            <div className="hs-indeterminate-bar h-full w-full bg-teal-600/30" />
           </motion.div>
         )}
       </AnimatePresence>

@@ -10,9 +10,9 @@ import { Calendar, RefreshCw, Wallet, ShieldCheck } from "lucide-react";
 import { apiRequest, fetcher } from "../../../../lib/api";
 import { canManageContracts } from "../../../../lib/auth";
 import { useAuthGuard } from "../../../../hooks/useAuthGuard";
-import { flattenApiErrors } from "../../../../lib/errors";
+import { applyServerFieldErrors } from "../../../../lib/forms";
 import { parseMoneyInput } from "../../../../lib/money";
-import { useUnsavedChangesWarning } from "../../../../lib/useUnsavedChangesWarning";
+import { useUnsavedChangesWarning } from "../../../../hooks/useUnsavedChangesWarning";
 import Alert from "../../../_components/ui/Alert";
 import Button from "../../../_components/ui/Button";
 import { Field, Input, Select, Textarea } from "../../../_components/ui/Fields";
@@ -47,6 +47,7 @@ export default function EditContractPage() {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting, isDirty },
   } = useForm({
     defaultValues: {
@@ -119,7 +120,7 @@ export default function EditContractPage() {
 
       router.push(`/contracts/${contractId}`);
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      applyServerFieldErrors(error, setError, { setApiError });
     }
   };
 
@@ -188,7 +189,7 @@ export default function EditContractPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <SectionCard
-            title="Basic Information"
+            title="Identity Details"
             icon={RefreshCw}
             iconClassName="bg-stone-100 text-stone-600"
             rightElement={(
@@ -198,12 +199,12 @@ export default function EditContractPage() {
             )}
           >
             <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Resident (read-only)">
+              <Field label="Primary Tenant (read-only)">
                 <div className="flex h-11 items-center rounded-xl border border-stone-100 bg-stone-50/50 px-4 text-sm font-bold text-stone-700">
                   {contract?.tenant ? formatTenantDirectoryName(contract.tenant) : "—"}
                 </div>
               </Field>
-              <Field label="Assigned Room (read-only)">
+              <Field label="Assigned Unit (read-only)">
                 <div className="flex h-11 items-center rounded-xl border border-stone-100 bg-stone-50/50 px-4 text-sm font-bold text-stone-700">
                   {contract?.room?.room_code ? `${contract.room.room_code} · ${bedLabel}` : "—"}
                 </div>
@@ -212,7 +213,7 @@ export default function EditContractPage() {
           </SectionCard>
 
           <SectionCard
-            title="Lease Terms"
+            title="Contract Schedule"
             icon={Calendar}
             iconClassName="bg-teal-50 text-teal-600"
           >
@@ -242,7 +243,7 @@ export default function EditContractPage() {
                 </Field>
               </div>
               <div className="grid gap-6 sm:grid-cols-2">
-                <Field label="Expected Move-Out" error={errors.expected_move_out?.message}>
+                <Field label="Contract Expiration" error={errors.expected_move_out?.message}>
                   <Input
                     type="date"
                     disabled={readOnly}
@@ -259,7 +260,7 @@ export default function EditContractPage() {
                     })}
                   />
                 </Field>
-                <Field label="Actual Move-Out" error={errors.actual_move_out?.message}>
+                <Field label="Termination Date" error={errors.actual_move_out?.message}>
                   <Input
                     type="date"
                     disabled={readOnly || isContractActive(contract?.status)}
@@ -273,12 +274,12 @@ export default function EditContractPage() {
           </SectionCard>
 
           <SectionCard
-            title="Financial Terms"
+            title="Financial Obligations"
             icon={Wallet}
             iconClassName="bg-emerald-50 text-emerald-600"
           >
             <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Monthly Rent" required error={errors.monthly_rate?.message}>
+              <Field label="Monthly Obligation" required error={errors.monthly_rate?.message}>
                 <Input
                   type="number"
                   step="0.01"
@@ -291,7 +292,7 @@ export default function EditContractPage() {
                   })}
                 />
               </Field>
-              <Field label="Deposit" required error={errors.deposit_amount?.message}>
+              <Field label="Security Deposit" required error={errors.deposit_amount?.message}>
                 <Input
                   type="number"
                   step="0.01"
@@ -307,9 +308,9 @@ export default function EditContractPage() {
           </SectionCard>
 
           <SectionCard
-            title="Notes"
+            title="Registry Details"
           >
-            <Field label="Special Notes">
+            <Field label="Administrative Notes">
               <Textarea
                 rows={3}
                 disabled={readOnly}

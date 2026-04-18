@@ -17,12 +17,15 @@ export default function Button({
   variant = "primary",
   size = "md",
   loading = false,
+  isLoading = false, // Support both aliases
   disabled = false,
   className = "",
   children,
+  asChild = false, // Destructure asChild to prevent leaking to DOM
   ...props
 }) {
-  const isDisabled = disabled || loading;
+  const isActuallyLoading = loading || isLoading;
+  const isDisabled = disabled || isActuallyLoading;
 
   // "outline" is a legacy alias — maps to secondary per MASTER.md Section 5.5
   const resolvedVariant = variant === "outline" ? "secondary" : variant;
@@ -76,7 +79,7 @@ export default function Button({
       ].join(" ")}
       {...props}
     >
-      {loading ? (
+      {isActuallyLoading ? (
         <span
           className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
           aria-hidden="true"

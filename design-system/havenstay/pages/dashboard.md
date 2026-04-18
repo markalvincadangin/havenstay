@@ -1,7 +1,7 @@
-# Dashboard Design Specification — v4.3 (Master-Aligned)
+# Dashboard Design Specification — v5.0 (Forensic-Hardened)
 
 > **PROJECT:** HavenStay Boarding House Management System (BHMS)
-> **Last Updated:** 2026-04-12
+> **Last Updated:** 2026-04-18
 > **Page Type:** Dashboard / Operational Overview
 > **Route:** `/dashboard`
 
@@ -39,13 +39,15 @@ The page utilizes the **AppMain** column (`max-w-7xl`) with a vertical stack of 
     - Bed Occupancy (with progress bar)
     - Active Tenants (linked to /tenants)
     - Vacant Beds (linked to /rooms)
-    - Past Due Cycles (Danger state if counts > 0)
-    - Collected This Month
-    - Outstanding This Month
+    - Overdue Accounts (Danger state if counts > 0)
+    - MTD Collections (Collected this month)
+    - Outstanding Balance (Global uncollected total)
 
 2.  **Split Hub / Registry Grid** (Grid: `lg:grid-cols-12`):
     - **Main Column (lg:8)**:
-        - **Quick Links**: Registry Card with Hub pattern grid.
+        - **Turnover Forecast**: Registry Card with embedded Table showing move-in/move-out schedules for the next 30 days. 
+          > [!NOTE]
+          > **Intentional Deviation (2026-04-18):** Replaced static "Quick Links" hub with the Turnover Forecast. Operationally, real-time arrival/departure tracking (BR-019) provides higher utility for boarding house managers than static navigation shortcuts.
         - **Attention: Due Today**: Registry Card with **embedded Table**.
     - **Sidebar Column (lg:4)**:
         - **Latest Collections**: Registry Card with **embedded Table** showing recent payments.
@@ -100,7 +102,7 @@ All data must map to the authoritative schema in `db/havenstay_schema.sql` and r
 ## 5. Interaction & Motion (Master §6)
 
 - **Entrance**: `pageVariants` (opacity + gentle y-offset).
-- **Interactive Lift**: Only on **Quick Link** hub items (`hover:-translate-y-1 shadow-lg`). **Static** cards remain static to maintain operational focus.
+- **Interactive Lift**: Only on interactive Registry Card items (e.g., Turnover Forecast rows or dedicated navigation hubs, if present). **Static** KPI cards remain static to maintain operational focus.
 - **Reduced Motion**: Honored via `useReducedMotion()`.
 
 ---

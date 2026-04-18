@@ -21,7 +21,7 @@ export function FormSection({ title, icon: Icon, rightElement, children, classNa
               <Icon size={14} aria-hidden />
             </div>
           )}
-          <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">
+          <h2 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">
             {title}
           </h2>
         </div>

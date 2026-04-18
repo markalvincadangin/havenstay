@@ -117,7 +117,7 @@ export default function BillingSummaryReportPage() {
       title="Billing Summary"
       subtitle={timestampLabel}
       loading={authLoading || loading}
-      skeleton={<Spinner label="Assembling billing data..." />}
+      skeleton={<SkeletonListPage rows={10} />}
       breadcrumbs={
         <Breadcrumbs
           items={[
@@ -255,7 +255,7 @@ export default function BillingSummaryReportPage() {
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
           title: "No billing records found",
-          message: "Adjust your date filters or clear the range to view all records."
+          message: "Adjust your date filters or clear the range to check for billing records."
         }}
       >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl">
@@ -264,29 +264,32 @@ export default function BillingSummaryReportPage() {
               caption="Billing Summary"
               ariaLabel="Billing records"
               columns={[
-              { key: "id", label: "Billing ID" },
-              { key: "tenant", label: "Tenant" },
-              { key: "room", label: "Room" },
-              { key: "period", label: "Billing period" },
-              { key: "due", label: "Amount due", className: "text-right" },
-              { key: "paid", label: "Amount paid", className: "text-right" },
-              { key: "balance", label: "Balance", className: "text-right" },
-              { key: "status", label: "Status" },
+                { key: "id", label: "RECORD ID" },
+                { key: "tenant", label: "TENANT NAME" },
+                { key: "room", label: "UNIT CODE", className: "text-center" },
+                { key: "period", label: "BILLING PERIOD", className: "text-center" },
+                { key: "due", label: "BILLED", className: "text-right" },
+                { key: "paid", label: "COLLECTED", className: "text-right" },
+                { key: "balance", label: "OUTSTANDING", className: "text-right" },
+                { key: "status", label: "STATUS", className: "text-center" },
               ]}
               rows={rows.map((row) => (
               <tr key={row.billing_id} className="border-t border-stone-100 hover:bg-stone-50 transition-colors duration-100">
                   <td className="px-6 py-4"><ResourceIdCell id={row.billing_id} prefix="BILL" /></td>
                   <td className="px-6 py-4 text-xs font-bold text-stone-900">{row.tenant_name}</td>
-                  <td className="px-6 py-4 font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500">{row.room_code}</td>
-                  <td className="px-6 py-4 text-[10px] font-medium text-stone-400">{formatDateString(row.billing_period_from)} – {formatDateString(row.billing_period_to)}</td>
+                  <td className="px-6 py-4 text-center">
+                    <div className="font-mono text-[10px] font-black uppercase tracking-tighter text-stone-500 leading-tight">{row.room_code}</div>
+                    <ResourceIdCell id={row.room_id} prefix="ROOM" />
+                  </td>
+                  <td className="px-6 py-4 text-center text-[10px] font-medium text-stone-400">{formatDateString(row.billing_period_from)} – {formatDateString(row.billing_period_to)}</td>
                   <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-900 font-bold">{formatPHP(row.amount_due)}</td>
                   <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-teal-700 font-bold">{formatPHP(row.amount_paid)}</td>
                   <td className="px-6 py-4 text-right font-mono text-xs tabular-nums font-black text-rose-800">{formatPHP(row.outstanding_balance)}</td>
-                  <td className="px-6 py-4"><StatusBadge>{row.status}</StatusBadge></td>
+                  <td className="px-6 py-4 text-center"><StatusBadge>{row.status}</StatusBadge></td>
               </tr>
               ))}
               emptyTitle="No billing records found"
-              emptyDescription="Adjust your date filters or clear the range to view all records."
+              emptyDescription="Adjust your date filters or clear the range to check for billing records."
           />
           <TablePagination
             meta={tableMeta}

@@ -41,7 +41,9 @@ export function usePaginatedFilters({
   }, [initialFilters]);
 
   const queryString = useMemo(() => {
-    const extra = buildExtraParams({ filters, debounced: debouncedValues });
+    const extra = typeof buildExtraParams === "function" 
+      ? buildExtraParams({ filters, debounced: debouncedValues })
+      : { ...filters, ...debouncedValues };
     return buildPaginationQuery(page, perPage, extra);
   }, [buildExtraParams, debouncedValues, filters, page, perPage]);
 

@@ -1,7 +1,7 @@
-# Audit Trail Design Specification — v4.3 (Master-Aligned)
+# Audit Logs Design Specification — v5.0 (Forensic-Hardened)
 
 > **PROJECT:** HavenStay Boarding House Management System (BHMS)
-> **Last Updated:** 2026-04-12
+> **Last Updated:** 2026-04-18
 > **Page Type:** Administration / Security Oversight
 > **Routes:** `/audit-logs`
 > **Requirements:** SRS FR-034 (Audit Trail), FR-036 (Correlation Linkage)
@@ -14,7 +14,7 @@
 ## 1. Page Purpose
 
 The Audit Trail provides a tamper-proof record of all system interactions and state changes.
-- **Data Integrity**: Visualizing the capture of 24 database-level triggers ensuring no update occurs without a trace.
+- **Data Integrity**: Visualizing the capture of 42 database-level triggers ensuring no update occurs without a trace.
 * **Operational Accountability**: Linking actions (CRUD) to specific administrative users and timestamps.
 * **Security Monitoring**: Tracking authentication events (login, logout, access denied).
 
