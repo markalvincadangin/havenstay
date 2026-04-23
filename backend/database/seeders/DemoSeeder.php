@@ -39,28 +39,33 @@ class DemoSeeder extends Seeder
     public function run(): void
     {
         try {
-            // 1. Setup Users and Roles
+            echo "[seeder] Starting users...\n";
             $users = $this->seedUsers();
+            echo "[seeder] Users seeded.\n";
 
-            // Forensic v5.0: Initialize system context for seeder operations
             AuditService::setSystemContext();
-            AuditService::setAuditUserContext($users['admin']->user_id);
+            echo "[seeder] Audit context set.\n";
 
-            // 2. Setup Utilities and Rates (PH-Standard Metering)
+            echo "[seeder] Starting utilities...\n";
             $this->seedUtilities();
+            echo "[seeder] Utilities seeded.\n";
 
-            // 3. Setup Room Inventory (Sampaloc/University Belt Archetypes)
+            echo "[seeder] Starting inventory...\n";
             $inventory = $this->seedInventory();
+            echo "[seeder] Inventory seeded (Rooms: " . count($inventory['rooms']) . ").\n";
             
-            // 4. Setup Meters and Initial Assignments
+            echo "[seeder] Starting meters...\n";
             $this->seedMeters($inventory['rooms']);
+            echo "[seeder] Meters seeded.\n";
 
-            // 5. Setup Scenarios
+            echo "[seeder] Starting operational data scenarios...\n";
             $this->seedOperationalData($users, $inventory);
+            echo "[seeder] Operational scenarios complete.\n";
             gc_collect_cycles();
 
-            // 6. Final Sync
+            echo "[seeder] Starting final sync...\n";
             $this->syncInventoryStatus($inventory['rooms']);
+            echo "[seeder] Final sync complete.\n";
             gc_collect_cycles();
         } catch (\Throwable $e) {
             echo "\n[SEEDER ERROR] " . $e->getMessage() . "\n";
