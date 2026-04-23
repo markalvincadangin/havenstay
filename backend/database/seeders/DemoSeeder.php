@@ -38,27 +38,33 @@ class DemoSeeder extends Seeder
 
     public function run(): void
     {
-        // 1. Setup Users and Roles
-        $users = $this->seedUsers();
+        try {
+            // 1. Setup Users and Roles
+            $users = $this->seedUsers();
 
-        // Forensic v5.0: Initialize system context for seeder operations
-        AuditService::setSystemContext();
-        AuditService::setAuditUserContext($users['admin']->user_id);
+            // Forensic v5.0: Initialize system context for seeder operations
+            AuditService::setSystemContext();
+            AuditService::setAuditUserContext($users['admin']->user_id);
 
-        // 2. Setup Utilities and Rates (PH-Standard Metering)
-        $this->seedUtilities();
+            // 2. Setup Utilities and Rates (PH-Standard Metering)
+            $this->seedUtilities();
 
-        // 3. Setup Room Inventory (Sampaloc/University Belt Archetypes)
-        $inventory = $this->seedInventory();
-        
-        // 4. Setup Meters and Initial Assignments
-        $this->seedMeters($inventory['rooms']);
+            // 3. Setup Room Inventory (Sampaloc/University Belt Archetypes)
+            $inventory = $this->seedInventory();
+            
+            // 4. Setup Meters and Initial Assignments
+            $this->seedMeters($inventory['rooms']);
 
-        // 5. Setup Scenarios
-        $this->seedOperationalData($users, $inventory);
+            // 5. Setup Scenarios
+            $this->seedOperationalData($users, $inventory);
 
-        // 6. Final Sync
-        $this->syncInventoryStatus($inventory['rooms']);
+            // 6. Final Sync
+            $this->syncInventoryStatus($inventory['rooms']);
+        } catch (\Throwable $e) {
+            echo "\n[SEEDER ERROR] " . $e->getMessage() . "\n";
+            echo "[SEEDER TRACE] " . $e->getTraceAsString() . "\n";
+            throw $e;
+        }
     }
 
     private function seedUsers(): array
