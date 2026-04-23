@@ -57,9 +57,11 @@ class DemoSeeder extends Seeder
 
             // 5. Setup Scenarios
             $this->seedOperationalData($users, $inventory);
+            gc_collect_cycles();
 
             // 6. Final Sync
             $this->syncInventoryStatus($inventory['rooms']);
+            gc_collect_cycles();
         } catch (\Throwable $e) {
             echo "\n[SEEDER ERROR] " . $e->getMessage() . "\n";
             echo "[SEEDER TRACE] " . $e->getTraceAsString() . "\n";
