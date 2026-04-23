@@ -28,9 +28,15 @@ done
 echo "[entrypoint] Database connection established."
 
 if [ "${DB_SEED}" = "true" ]; then
-    echo "[entrypoint] DB_SEED=true — running migrate:fresh --seed (all data will be wiped)"
-    php -d memory_limit=-1 artisan migrate:fresh --seed --force
-    echo "[entrypoint] Seeding complete. IMPORTANT: Set DB_SEED=false and redeploy to prevent re-seeding on next restart."
+    echo "[entrypoint] DB_SEED=true — running migrate:fresh (Step 1/2)"
+    php -d memory_limit=-1 artisan migrate:fresh --force
+    
+    echo "[entrypoint] Cooling down (5s)..."
+    sleep 5
+    
+    echo "[entrypoint] Running database seeder (Step 2/2)"
+    php -d memory_limit=-1 artisan db:seed --force
+    echo "[entrypoint] Seeding complete."
 else
     echo "[entrypoint] Running safe migration (no data loss)..."
     php artisan migrate --force
