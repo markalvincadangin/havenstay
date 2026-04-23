@@ -1,17 +1,17 @@
 <?php
- 
- namespace App\Http\Controllers\Api;
- 
- use App\Http\Controllers\Controller;
- use App\Http\Requests\Report\ManageReportsRequest;
- use App\Services\Core\AuthorizationService;
- use App\Services\Analytics\PiiMaskingService;
- use App\Services\Analytics\ReportService;
- use App\Support\Pagination;
- use Illuminate\Http\JsonResponse;
- use Illuminate\Http\Request;
- use Illuminate\Support\Collection;
- use Symfony\Component\HttpFoundation\StreamedResponse;
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Report\ManageReportsRequest;
+use App\Services\Core\AuthorizationService;
+use App\Services\Analytics\PiiMaskingService;
+use App\Services\Analytics\ReportService;
+use App\Support\Pagination;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Symfony\Component\HttpFoundation\StreamedResponse;
  
  /**
   * ReportController

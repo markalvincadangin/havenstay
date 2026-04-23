@@ -276,8 +276,8 @@ class ReportService
             DB::raw('SUM(total_amount) as billed_total'),
             DB::raw('SUM(total_paid) as collected_total'),
             DB::raw('SUM(total_amount - total_paid) as outstanding_total'),
-            DB::raw("SUM(CASE WHEN status = 'overdue' THEN 1 ELSE 0 END) as overdue_count"),
-            DB::raw("SUM(CASE WHEN status = 'overdue' THEN total_amount - total_paid ELSE 0 END) as overdue_total"),
+            DB::raw("SUM(CASE WHEN billing_status = 'overdue' THEN 1 ELSE 0 END) as overdue_count"),
+            DB::raw("SUM(CASE WHEN billing_status = 'overdue' THEN total_amount - total_paid ELSE 0 END) as overdue_total"),
         ])->first();
 
         // 2. Paginated Rows
