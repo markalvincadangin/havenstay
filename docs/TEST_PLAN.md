@@ -1,281 +1,101 @@
-# HavenStay BHMS — Test Plan
+# HavenStay Master Test Plan & Acceptance Criteria
 
-**Version:** 4.3  
-**Last Updated:** April 18, 2026  
-**Status:** Canonical validation registry and evidence quality standard
-
-## 1. Purpose and Scope
-This document serves as the authoritative registry for all validation activities required to certify the HavenStay BHMS for Release 1. It defines the testing strategy, environment requirements, to-target traceability, and evidence quality standards for both functional and forensic requirements.
-
-### 1.1 Document Boundary
-The Test Plan is the **how** of validation. It maps the requirements defined in [**SRS.md**](SRS.md) to specific automated tests, integration scenarios, and live user acceptance (UAT) checks.
+**Version:** 1.4  
+**Last Updated:** April 20, 2026  
+**Status:** Authoritative QA Baseline — Forensic Refactor  
 
 ---
 
-## 2. Sources of Truth
+## 1. Scope and Strategy
+This document defines the Acceptance Criteria (AC) and critical Test Cases (TC) required to validate the HavenStay BHMS against its Business Rules (BR) and Software Requirements Specification (SRS). 
 
-| Artifact | Responsibility in Testing |
-| :--- | :--- |
-| `docs/SRS.md` v5.2 | Authoritative source for Functional (FR) and Non-Functional (NFR) requirements. |
-| `docs/SDD.md` v3.5 | Defines the technical design (Triggers, Views, Transactions) to be validated. |
-| `db/havenstay_schema.sql`| Canonical DDL for schema-assertive integration tests (`INT-*`). |
-
-### 2.1 Forensic Evidence Requirements
-To satisfy course compliance, evidence for the following must be derived from a **MySQL 8.4+** environment:
-- **Triggers (CCR-008):** Verification of 42 row-level audit entries.
-- **Transactions (CCR-007):** Verification of `started` and `committed/rolled_back` log pairs.
-- **Reporting (CCR-005):** Verification of 6 views for correct JOIN and aggregation logic.
+**Test Strategy:**
+* **Unit Testing:** Validates pure business logic (e.g., `BillingService` calculating balances).
+* **Integration Testing:** Validates database write atomicity, forensic triggers, and temporal pricing queries.
+* **Course Compliance (CCR) Validation:** Ensures all academic database requirements are physically demonstrable.
 
 ---
 
-## 3. Test Strategy and Environments
+## 2. Core Acceptance Criteria (by Domain)
 
-| Layer | Environment | Tooling | Objective |
+### AC-1: Roles and Security (BR-GEN-003, BR-GEN-004)
+* **Given** a user is logged in as a `Viewer`,
+* **When** they attempt to `POST /api/contracts`,
+* **Then** the API must reject the request with a `403 Forbidden` and log the unauthorized attempt.
+
+### AC-2: Occupancy State Machine (BR-ROM-003, BR-ROM-004)
+* **Given** a Room with 2 Bed Spaces (both `vacant`),
+* **When** a new Contract is finalized for Bed A,
+* **Then** Bed A must update to `occupied`, Bed B must remain `vacant`, and the Room must remain `available`.
+* **When** a Contract is finalized for Bed B,
+* **Then** the Room status must automatically update to `unavailable`.
+
+### AC-3: Temporal Utility Pricing (BR-MET-007)
+* **Given** a Utility Rate of ₱12.00 effective `Jan 1`, and a new Rate of ₱15.00 effective `May 1`,
+* **When** generating a billing cycle for `April 15 to May 14`,
+* **Then** the system must calculate the utility charge using the ₱12.00 rate (the rate active at the *start* of the period).
+
+### AC-4: Meter Monotonicity (BR-MET-005)
+* **Given** a Meter's last reading was `1,500.5`,
+* **When** Staff submits a new reading of `1,490.0` with `is_rollover: false`,
+* **Then** the system must reject the reading with a `422 Validation Error`.
+
+### AC-5: Void & Recalculation Integrity (BR-BIL-008, BR-PAY-004)
+* **Given** a Billing Cycle with a ₱5,000 balance and a ₱5,000 payment applied (Status: `paid`),
+* **When** Staff voids the ₱5,000 payment,
+* **Then** the payment must be marked `voided_at` (not deleted), AND the Billing Cycle status must immediately revert to `unpaid` (or `overdue` depending on the date).
+
+---
+
+## 3. Critical Test Cases
+
+### TC-01: The "Phantom Move-In" Prevention
+* **Objective:** Verify DB transactions prevent partial state changes.
+* **Action:** Attempt to create a contract, but simulate a database failure during the deposit insertion.
+* **Expected Result:** The `DB::transaction()` rolls back. The bed remains `vacant`, the room capacity is unaffected, and no partial mutations appear in the `audit_logs`.
+
+### TC-02: Shared Room Apportionment (BR-MET-011)
+* **Objective:** Verify dynamic utility splitting.
+* **Action:** Submit a water meter reading yielding a ₱1,000 charge for a Shared Room with 2 active contracts. Generate bills for both tenants.
+* **Expected Result:** Tenant A's bill includes a ₱500 utility line item. Tenant B's bill includes a ₱500 utility line item.
+
+### TC-04: Financial XOR Violation
+* **Objective:** Verify database-level exclusive relationship enforcement.
+* **Action:** Attempt to insert a payment record containing both a `billing_id` and a `contract_id`.
+* **Expected Result:** Database throws a `CHECK constraint violation` (XOR failure). Record creation is rejected.
+
+### TC-05: Fractional Penny Reconciliation
+* **Objective:** Verify zero-balance drift in utility apportionment (BR-MET-011).
+* **Action:** Split a ₱50.00 utility charge among 3 shared-room tenants.
+* **Expected Result:** Tenant A (earliest contract) is billed ₱16.68. Tenants B and C are billed ₱16.66. Total lines (16.68 + 16.66 + 16.66) exactly equals 50.00.
+
+### TC-08: Forensic Re-registration Performance
+* **Objective:** Verify virtual keys permit re-use of emails after soft-delete.
+* **Action:** Soft-delete Tenant A (email: `a@test.com`). Attempt to register a new Tenant B with the same email `a@test.com`.
+* **Expected Result:** Registration is successful. Both profiles exist in forensic history, but only Tenant B is active.
+
+### TC-09: Security Deposit Rollover
+* **Objective:** Verify cross-contract deposit transfers (BR-PAY-009).
+* **Action:** Assign a `rollover` category payment to Contract B, with `reference_number` = 'Contract A ID'.
+* **Expected Result:** Payment is successfully committed. Contract B shows the bond balance; Contract A shows a corresponding transfer-out event.
+
+### TC-10: Utility Reference Mandate
+* **Objective:** Verify database-level utility traceability (Level 5 Hardening).
+* **Action:** Attempt to insert a `billing_line_items` record with `item_type = 'utility'` but `utility_id = NULL`.
+* **Expected Result:** Database throws a `CHECK constraint violation`. Record creation is rejected.
+
+---
+
+## 4. Course Compliance Sign-Off Matrix
+
+Before final submission to the evaluator, the following must be successfully demonstrated:
+
+| ID | Requirement | Verification Method | Status |
 | :--- | :--- | :--- | :--- |
-| **Feature** | SQLite | PHPUnit | Regression / Fast CRUD validation |
-| **Forensic** | MySQL | PHPUnit / SQL | CCR triggered-audit and transaction log validation |
-| **Live/UAT** | Browser | Playwright / Manual | User experience and role-based navigation (RBAC) |
-
-### 3.1 NFR Verification Thresholds
-
-| ID | Category | Acceptance Criteria | Measurement Method |
-| :--- | :--- | :--- | :--- |
-| **NFR-001** | Performance | 90th percentile < 2s | PHPUnit `microtime` benchmark |
-| **NFR-002** | Performance | 90th percentile < 5s | PHPUnit `microtime` benchmark |
-| **NFR-006** | Reliability | 0 partial writes on abort | Failure injection (TC-TX-003) |
-| **NFR-015** | Privacy | Role-aware masking verified | TC-PII-001 (Selective Assertion) |
-| **NFR-016** | Availability | 99% Uptime during UAT | UAT Log Verification |
-| **NFR-017** | Scalability | 1,000+ Record handling | Seeder-based load test |
-
-### 3.2 Environments and Tooling
-
----
-
-## 4. Identifier conventions
-
-| Prefix | Meaning | Automation |
-| :--- | :--- | :--- |
-| **TC-** | Implemented PHPUnit feature test (name in docblock) | Yes (when suite green) |
-| **INT-** | Integration scenario — DB + API contract | Planned / partial; some overlap with `TC-*` |
-| **LIVE-** | Human or E2E — UI + API | Manual or scripted |
-
----
-
-## 5. Automated Backend Coverage (`TC-*`)
-
-| Test ID | Method Snapshot | Requirement Mapping |
-| :--- | :--- | :--- |
-| **TC-AUTH-001** | `test_valid_admin_login` | FR-001, FR-002 |
-| **TC-AUTH-002** | `test_invalid_login_credentials` | FR-001 |
-| **TC-AUTH-003** | `test_deactivated_user_rejected`| FR-004 |
-| **TC-USER-001** | `test_admin_creates_user` | FR-005, FR-007 |
-| **TC-TENANT-001**| `test_onboarding_workflow` | FR-008, FR-011 |
-| **TC-TENANT-002**| `test_deactivate_is_blocked_when_tenant_has_active_contract` | FR-009, BR-005b, BR-016 |
-| **TC-TENANT-003**| `test_index_returns_rich_fields_for_tenant_directory` | FR-011 |
-| **TC-TENANT-004**| `test_viewer_sees_masked_tenant_pii_on_index_and_search` | FR-011, NFR-015 |
-| **TC-ROOM-001** | `test_room_inventory_management`| FR-012, FR-015 |
-| **TC-BED-002** | `test_bed_overlap_prevention` | FR-037, FR-040 |
-| **TC-CONTRACT-002**| `test_tenant_overlap_prevention`| FR-017, FR-037 |
-| **TC-CONTRACT-003**| `test_move_out_forensics` | FR-019, FR-035 (CCR-007) |
-| **TC-BILLING-001** | `test_bulk_bill_generation` | FR-020, FR-022 |
-| **TC-BILLING-004** | `test_line_item_constraints` | FR-023, BR-013 |
-| **TC-PAYMENT-001** | `test_payment_posting_flow` | FR-024, FR-025 |
-| **TC-PAYMENT-004** | `test_payment_void_forensics` | FR-026, FR-034 (CCR-008) |
-| **TC-REPORT-001** | `test_occupancy_report_parity` | FR-028, CCR-005 |
-| **TC-REPORT-002** | `test_billing_summary_filters` | FR-029, CCR-004 |
-| **TC-REPORT-005** | `test_tenant_ledger_ordering` | FR-031, RPT-01 |
-| **TC-AUDIT-001** | `test_admin_export_audit_csv` | FR-034 |
-| **TC-PII-001** | `test_viewer_sees_masked_tenant_pii_on_show`, `test_admin_sees_unmasked_tenant_pii_on_show` | NFR-015 |
-
----
-
-## 6. Forensic Verification (`TC-TX-*` and `TC-TRIGGER-*`)
-
-These tests validate the integrity and auditability requirements (CCR-007, CCR-008).
-
-| Test ID | Assertion Target | Requirement |
-| :--- | :--- | :--- |
-| **TC-TX-001** | Payment Post → Log `committed` | FR-035 |
-| **TC-TX-003** | Aborted Payment → Log `rolled_back`| FR-035, CCR-006 |
-| **TC-TX-004** | Tenant Move-out → Log `committed` | FR-035 |
-| **TC-TRIGGER-001**| After INSERT → New Audit Row | FR-034 |
-| **TC-TRIGGER-002**| After UPDATE → Old/New Snapshots | FR-034 |
-| **TC-TRIGGER-003**| Global coverage (42 triggers) | FR-034, CCR-008 |
-
-**TC-CCR-006:** Rollback prevents partial writes — covered by **TC-PAYMENT-003** (billing stays `unpaid` when payment invalid).
-
----
-
-## 7. Integration Test Catalog (`INT-*`) — Schema-Driven
-
-Use these as **checklists** for new PHPUnit cases or MySQL-only jobs. Map each to **FK/ENUM/view/trigger** in `havenstay_schema.sql`.
-
-### 7.1 Referential integrity and constraints
-
-| ID | Scenario | Schema |
-| :--- | :--- | :--- |
-| INT-101 | `contracts.bed_space_id` required; no `room_id` on `contracts` | Table `contracts` |
-| INT-102 | Duplicate billing cycle rejected | `uq_billing_cycle` |
-| INT-103 | Line item amount ≠ 0 | `chk_line_amount` |
-| INT-104 | Payment amount > 0 | `chk_payment_amount` |
-| INT-105 | Room capacity / rate CHECKs | `chk_rooms_*` |
-| INT-106 | Contract rate / deposit CHECKs | `chk_contracts_*` |
-
-### 7.2 ENUM boundary (API rejects invalid strings)
-
-| ID | Columns |
-| :--- | :--- |
-| INT-201 | `tenants.status`, `rooms.status`, `bed_spaces.status` |
-| INT-202 | `contracts.status`, `billing.status` |
-| INT-203 | `billing_line_items.item_type`, `payments.payment_method` |
-
-
-### 7.3 Reporting views (CCR-005)
-
-| ID | View | Assertion |
-| :--- | :--- | :--- |
-| INT-301 | `vw_billing_summary` | `total_paid` excludes `payments.voided_at IS NOT NULL` |
-| INT-302 | `vw_active_contracts` | Only `contracts.status = 'active'` |
-| INT-303 | `vw_room_occupancy` | Aggregates match underlying `bed_spaces` |
-| INT-304 | `vw_occupancy_status` | Bed ↔ active contract LEFT JOIN semantics |
-| INT-305 | `vw_collections_summary` | Non-voided payments only |
-| INT-306 | `vw_tenant_contract_history` | All contract statuses for history report |
-
-### 7.4 Triggers and session context (CCR-008, MySQL)
-
-| ID | Assertion |
-| :--- | :--- |
-| INT-401 | After INSERT on trigger-covered table, **new** `audit_logs` row |
-| INT-402 | UPDATE produces `old_value` / `new_value` snapshots per trigger |
-| INT-403 | `AuditService::setAuditUserContext($actor->id)` before write → `audit_logs.changed_by` matches actor |
-
-### 7.5 Business workflow (cross-table)
-
-| ID | Flow |
-| :--- | :--- |
-| INT-601 | Tenant create → search (LIKE) → update → status `moved_out` / `archived` |
-| INT-602 | Room + beds → contract → billing + line items → payment → void |
-| INT-603 | Move-out → contract terminal state + bed `vacant` |
-| INT-700 | **BR-023:** Automated proration is out of scope for Release 1; staff enter manually approved amounts. Evidence: `ContractService::create` comment; `/billing/new` in-app notice; PHPUnit does not assert proration math. |
-
----
-
-## 8. Live / UAT Catalog (`LIVE-*`)
-
-Use these for manual runs, Playwright, or TestSprite. Aligned with product routes.
-
-### 8.1 Smoke (every build)
-
-| ID | Steps |
-| :--- | :--- |
-| LIVE-001 | Login as Admin; all sidebar items visible (10). |
-| LIVE-002 | Login as Staff; **Users** absent (9 items). |
-| LIVE-003 | Login as Viewer; no create/edit primary actions on registries. |
-| LIVE-004 | Navigate `/dashboard` → `/tenants` → `/rooms` → `/contracts` → `/billing` → `/payments` → `/reports` — no 5xx. |
-
-### 8.2 RBAC and access denial
-
-| ID | Steps |
-| :--- | :--- |
-| LIVE-010 | Viewer opens `/users` — alert: permission message per TEST_READINESS §6. |
-| LIVE-011 | Viewer opens `/audit-logs` — same. |
-| LIVE-012 | Viewer opens `/transaction-logs` — same. |
-
-### 8.3 Module happy paths
-
-| ID | Steps |
-| :--- | :--- |
-| LIVE-020 | Tenant: register → open detail → edit. |
-| LIVE-021 | Room: create → detail → bed list; status badges match **room** vs **bed** ENUMs. |
-| LIVE-022 | Contract: create with bed space; list/detail. |
-| LIVE-023 | Billing: `/billing/new` — first active contract pre-selected when list non-empty; **BR-023** notice visible (manual proration for partial first/last cycles). |
-| LIVE-024 | Payment: receive payment → void → billing balance consistent. |
-
-### 8.4 Reports and exports
-
-| ID | Steps |
-| :--- | :--- |
-| LIVE-030 | Each report card loads data; CSV export returns 200 and matches on-screen columns (FR-032). |
-| LIVE-031 | Open **Occupancy (bed-level)** and **Active contracts** from `/reports`; filters apply; CSV download uses authenticated download helper (same pattern as other reports). |
-| LIVE-032 | **Tenant ledger** for a tenant with billing + payment on the same calendar date: running balance matches debit-then-credit order (spot-check vs **TC-REPORT-005** on SQLite; optional MySQL seed confirmation). |
-
-### 8.5 Logs and audit UI
-
-| ID | Steps |
-| :--- | :--- |
-| LIVE-040 | Admin views **Audit Logs** and **Transaction Logs**; tables readable. |
-| LIVE-041 | **Admin:** Audit Logs → set filters → **Export CSV**; file opens and matches table. **Staff/Viewer:** export URL returns **403** (see **TC-AUDIT-EXPORT-002**). |
-| LIVE-042 | **Admin:** Transaction Logs — optional `?per_page=` in network tab or embedded tab reflects row cap; invalid `per_page` shows validation error. |
-
----
-
-## 9. Traceability Matrix Summary
-
-| Requirement Range | Primary Evidence (TC / LIVE) | Status |
-| :--- | :--- | :--- |
-| **FR-001–004** | TC-AUTH-*, LIVE-001–003 | Aligned |
-| **FR-005–007** | TC-USER-*, LIVE-010 | Aligned |
-| **FR-008–011** | TC-TENANT-*, LIVE-020 | Aligned |
-| **FR-012–015** | TC-ROOM-*, LIVE-021 | Aligned |
-| **FR-016–019** | TC-CONTRACT-*, LIVE-022 | Aligned |
-| **FR-020–023** | TC-BILLING-*, LIVE-023 | Aligned |
-| **FR-024–027** | TC-PAYMENT-*, LIVE-024 | Aligned |
-| **FR-028–032** | TC-REPORT-*, LIVE-030–032 | Aligned |
-| **FR-033–033** | TC-DASHBOARD-*, LIVE-004 | Aligned |
-| **FR-034–036** | TC-TRIGGER-*, TC-TX-*, LIVE-040 | Aligned |
-
-## 10. NFR Traceability Matrix
-
-| Requirement | Validation Evidence | Result |
-| :--- | :--- | :--- |
-| **NFR-001/002** | TC-PERF-001, TC-PERF-002 | Aligned |
-| **NFR-003/004** | TC-AUTH-001, TC-AUTH-002 | Aligned |
-| **NFR-005/009** | TC-USER-001, TC-PAYMENT-001 | Aligned |
-| **NFR-006/007** | TC-TX-003 (Rollback Validation) | Aligned |
-| **NFR-011/012** | LIVE-020, LIVE-024 | Aligned |
-| **NFR-015** | TC-PII-001 (Masking Assertion) | Aligned |
-| **NFR-016/017** | INT-601, INT-602 (Load context) | Aligned |
-
-## 11. Course Compliance (CCR) Reference
-
-| CCR | Validation Evidence |
-| :--- | :--- |
-| **CCR-001** | Database Schema (14 Tables) in `havenstay_schema.sql` |
-| **CCR-002** | Primary-Replica GTID topology implementation |
-| **CCR-003** | Automated CRUD verification across all 4 operational modules |
-| **CCR-004** | Date‑range and Wildcard Search implementation evidence |
-| **CCR-005** | Verification of 6 views for analytical consistency |
-| **CCR-006** | Transaction Rollback (ACID) verification via `TC-TX-003` |
-| **CCR-007** | Transaction Log pair verification (`started` → `committed`) |
-| **CCR-008** | Audit Trigger verification (42 triggers producing snapshots) |
-
----
-
-## 12. Execution Commands
-
-```bash
-# Backend — default (SQLite)
-cd backend && php artisan test
-
-# Backend — MySQL (Triggers & Views)
-cd backend && composer test:mysql
-
-# Frontend — Logic & Lint
-cd frontend && npm test && npm run lint
-```
-
----
-
-## 13. Revision History
-
-| Version | Date | Changes |
-| :--- | :--- | :--- |
-| 3.3 | 2026-04-17 | Core-doc standardization pass: aligned traceability ranges to SRS v4.1 requirement expansion and added explicit coverage-confidence notes for evidence quality governance. |
-| 4.1 | 2026-04-17 | Final audit alignment: corrected trigger count to 24; synchronized traceability mapping; verified RBAC visibility for user management. |
-| 4.2 | 2026-04-17 | Final audit-ready pass: implemented NFR verification matrix with explicit thresholds; synchronized all version pointers to SRS v4.6 and SDD v3.2 baseline. |
-| 4.3 | 2026-04-18 | Forensic Lock. Synchronized to 14 tables and 42 triggers; updated compliance mapping for Philippine Compliance entities; fixed section numbering. |
-
----
-
-*Aligned to: SRS.md v5.2 · SDD.md v3.5 · db/havenstay_schema.sql (canonical) · API_REFERENCE.md v2.4*  
-*Last Updated: April 18, 2026 (v4.3 — final forensic lock pass)*
+| **CCR-001** | ≥ 6 tables in relational DB | `SHOW TABLES;` (Must show 15 core tables) | Pending |
+| **CCR-002** | Distributed DB (Primary/Replica) | Write to Primary, `SELECT` from Replica | Pending |
+| **CCR-003** | SQL CRUD logic | Run Application workflows (Create, Read, Update) | Pending |
+| **CCR-004** | AND, OR, BETWEEN, LIKE | Execute `vw_collections_summary` with date filter | Pending |
+| **CCR-005** | Multi-table JOINs | Query `vw_billing_summary` (5-table JOIN) | Pending |
+| **CCR-006** | ACID Transactions | Show `DB::beginTransaction()` in service code | Pending |
+| **CCR-007** | AFTER Triggers | Show `audit_logs` auto-populating on changes | Pending |

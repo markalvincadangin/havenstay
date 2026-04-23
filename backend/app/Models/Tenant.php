@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Enums\TenantStatus;
 
 /**
  * Tenant Model
@@ -21,7 +22,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $emergency_contact_name
  * @property string $emergency_contact_number
  * @property string $address
- * @property string $status
+ * @property \App\Enums\TenantStatus $status
+ * @property string|null $active_email
  */
 class Tenant extends Model
 {
@@ -42,16 +44,11 @@ class Tenant extends Model
         'status',
     ];
 
-    const STATUS_ACTIVE = 'active';
-
-    const STATUS_MOVED_OUT = 'moved_out';
-
-    const STATUS_ARCHIVED = 'archived';
 
     protected function casts(): array
     {
         return [
-            'status' => 'string',
+            'status' => TenantStatus::class,
         ];
     }
 

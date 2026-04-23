@@ -2,56 +2,98 @@
 
 namespace App\Services\Concerns;
 
-use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * HasReportingFilters
- * 
- * Shared logic for applying standardized date ranges and search filters
- * to reporting and logging services.
+ *
+ * Provides standardized query filtering for analytics and forensic reports.
+ * Enforces uniform date range handling and keyword searching across services.
  */
 trait HasReportingFilters
 {
     /**
-     * Apply date range filtering to a query builder.
+     * Apply standard date range filters to a query.
      */
-    protected static function applyDateFilters(EloquentBuilder|QueryBuilder $query, array $filters, string $column, string $startKey = 'from', string $endKey = 'to'): void
+    public static function applyDateRange(Builder|QueryBuilder $query, array $filters, string $column = 'created_at'): Builder|QueryBuilder
     {
-        if (! empty($filters[$startKey]) && ! empty($filters[$endKey])) {
-            $query->whereBetween($column, [$filters[$startKey], $filters[$endKey]]);
-        } elseif (! empty($filters[$startKey])) {
-            $query->where($column, '>=', $filters[$startKey]);
-        } elseif (! empty($filters[$endKey])) {
-            $query->where($column, '<=', $filters[$endKey]);
+        if (!empty($filters['start_date'])) {
+            $query->whereDate($column, '>=', Carbon::parse($filters['start_date']));
         }
+
+        if (!empty($filters['end_date'])) {
+            $query->whereDate($column, '<=', Carbon::parse($filters['end_date']));
+        }
+
+        if (!empty($filters['from'])) {
+            $query->whereDate($column, '>=', Carbon::parse($filters['from']));
+        }
+
+        if (!empty($filters['to'])) {
+            $query->whereDate($column, '<=', Carbon::parse($filters['to']));
+        }
+
+        if (!empty($filters['due_from'])) {
+            $query->whereDate($column, '>=', Carbon::parse($filters['due_from']));
+        }
+
+        if (!empty($filters['due_to'])) {
+            $query->whereDate($column, '<=', Carbon::parse($filters['due_to']));
+        }
+
+        return $query;
     }
 
     /**
-     * Apply "Current Month" date range if no specific dates are provided.
+     * Apply a fuzzy keyword search across specified columns.
      */
-    protected static function applyCurrentMonthDefault(EloquentBuilder|QueryBuilder $query, array $filters, string $column): void
+    public static function applySearch(Builder|QueryBuilder $query, ?string $keyword, array $columns): Builder|QueryBuilder
     {
-        $currentMonthOnly = (bool) ($filters['current_month'] ?? false);
-        
-        if ($currentMonthOnly && empty($filters['start_date']) && empty($filters['end_date'])) {
-            $start = Carbon::now()->startOfMonth()->toDateString();
-            $end = Carbon::now()->endOfMonth()->toDateString();
-            $query->whereBetween($column, [$start, $end]);
+        if (empty($keyword)) {
+            return $query;
         }
+
+        $keyword = strtolower(trim($keyword));
+
+        return $query->where(function (Builder|QueryBuilder $q) use ($keyword, $columns) {
+            foreach ($columns as $column) {
+                $q->orWhereRaw("LOWER({$column}) LIKE ?", ["%{$keyword}%"]);
+            }
+        });
     }
 
     /**
-     * Standardize the flattened user context for paginated logs.
+     * Apply status filtering if present in the filter array.
      */
-    protected static function attachUserContext($collection): void
+    public static function applyStatus(Builder|QueryBuilder $query, array $filters, string $column = 'status'): Builder|QueryBuilder
     {
-        $collection->transform(function ($item) {
-            $item->user_username = $item->user?->username ?? 'system';
-            $item->user_first_name = $item->user?->first_name;
-            $item->user_last_name = $item->user?->last_name;
-            return $item;
+        if (!empty($filters['status']) && $filters['status'] !== 'all') {
+            $query->where($column, $filters['status']);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Decorate a collection of log results with actor information.
+     * Standardizes 'actor_name' field across audit and transaction logs.
+     */
+    public static function attachUserContext(Collection $collection): void
+    {
+        $collection->each(function ($item) {
+            if ($item->user) {
+                $user = $item->user;
+                $item->actor_name = "{$user->first_name} {$user->last_name} ({$user->username})";
+            } elseif (isset($item->changed_by) && $item->changed_by === null) {
+                $item->actor_name = 'System';
+            } elseif (isset($item->initiated_by) && $item->initiated_by === null) {
+                $item->actor_name = 'System';
+            } else {
+                $item->actor_name = 'Unknown Actor';
+            }
         });
     }
 }

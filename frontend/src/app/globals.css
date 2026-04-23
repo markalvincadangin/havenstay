@@ -37,6 +37,7 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-glass: 0 8px 32px 0 rgba(13, 148, 136, 0.12);
 
   /* Legacy & Semantic (for backward compatibility) */
   --surface-base: var(--color-background);
@@ -155,6 +156,33 @@
     letter-spacing: -0.015em;
     word-spacing: 0.055em;
     color: rgb(41 37 36);
+  }
+
+  .hs-table-row-dense td {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  .hs-glass-effect {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .hs-pulse-glow {
+    animation: hs-pulse-glow 2s infinite ease-in-out;
+  }
+
+  @keyframes hs-pulse-glow {
+    0%, 100% { 
+      box-shadow: 0 0 0px rgba(13, 148, 136, 0); 
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 0 15px rgba(13, 148, 136, 0.3); 
+      transform: scale(1.02);
+    }
   }
 }
 

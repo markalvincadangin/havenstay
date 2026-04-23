@@ -23,7 +23,7 @@ Rapid urbanization has increased the demand for communal housing solutions such 
 By transitioning to a digital framework, HavenStay realizes the following:
 - **Centralized Data**: Single source of truth for tenants and rooms.
 - **Automated Billing**: Reduced manual computation and improved accuracy.
-- **Audit Trails**: 27 database triggers on core tables (plus application audit and transaction logs) supporting full accountability for data changes.
+- **Audit Trails**: 42 database triggers on core tables (including BEFORE/AFTER snapshots) supporting full accountability for data changes.
 
 ---
 

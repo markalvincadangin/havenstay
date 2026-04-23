@@ -2,7 +2,7 @@
 
 use App\Http\Middleware\AuthCheck;
 use App\Http\Middleware\SetAuditContext;
-use App\Services\Analytics\AuditService;
+use App\Services\Core\AuditService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;

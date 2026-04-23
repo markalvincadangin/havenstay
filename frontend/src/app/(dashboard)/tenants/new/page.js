@@ -1,0 +1,242 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { apiRequest } from "@/lib/api";
+import { canManageTenants } from "@/lib/auth";
+import { applyServerFieldErrors } from "@/lib/forms";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
+import { useAuth } from "@/context/AuthContext";
+import { useToasts } from "@/context/ToastContext";
+
+import Alert from "@/components/ui/Alert";
+import { Field, Input, Textarea } from "@/components/ui/Fields";
+import Breadcrumbs from "@/components/ui/Breadcrumbs";
+import StandardPage from "@/components/ui/StandardPage";
+import { SkeletonDetailPage } from "@/components/ui/Skeleton";
+import { WizardFrame } from "@/components/ui/WizardFrame";
+
+const PH_MOBILE_REGEX = /^(09\d{9}|(\+639)\d{9})$/;
+
+export default function NewTenantPage() {
+   const router = useRouter();
+   const { user: currentUser } = useAuth();
+   const { showToast } = useToasts();
+   const [apiError, setApiError] = useState("");
+   
+   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+
+   const {
+      register,
+      trigger,
+      setError,
+      getValues,
+      formState: { errors, isSubmitting, isDirty },
+   } = useForm({
+      defaultValues: {
+         first_name: "",
+         last_name: "",
+         address: "",
+         contact_number: "",
+         email: "",
+         emergency_contact_name: "",
+         emergency_contact_number: "",
+      },
+   });
+
+   useUnsavedChangesWarning(isDirty && !isSubmitting);
+
+   const validateStep = async (index) => {
+      if (index === 0) {
+         return await trigger(["first_name", "last_name", "address"]);
+      }
+      if (index === 1) {
+         return await trigger(["contact_number", "email"]);
+      }
+      return true;
+   };
+
+   const onNext = async () => {
+      const isValid = await validateStep(currentStepIndex);
+      if (isValid) {
+         setCurrentStepIndex((prev) => Math.min(prev + 1, 2));
+      }
+   };
+
+   const onBack = () => {
+      setCurrentStepIndex((prev) => Math.max(prev - 1, 0));
+   };
+
+   const onSubmitTenant = async (shouldCreateLease) => {
+      const isValid = await trigger();
+      if (!isValid) return;
+
+      setApiError("");
+      if (!canManageTenants(currentUser)) return;
+
+      const values = getValues();
+      try {
+         const response = await apiRequest("/api/tenants", {
+            method: "POST",
+            body: JSON.stringify({
+               ...values,
+               first_name: values.first_name?.trim(),
+               last_name: values.last_name?.trim(),
+               contact_number: values.contact_number?.trim(),
+               email: values.email?.trim() || null,
+               emergency_contact_name: values.emergency_contact_name?.trim(),
+               emergency_contact_number: values.emergency_contact_number?.trim(),
+               address: values.address?.trim(),
+            }),
+         });
+
+         const tenantId = response?.tenant?.tenant_id || response?.tenant_id;
+         if (tenantId) {
+            showToast(`Tenant ${values.first_name} registered successfully.`, "success");
+            if (shouldCreateLease === "lease") {
+               router.push(`/contracts/new?tenant_id=${tenantId}`);
+            } else {
+               router.push(`/tenants/${tenantId}`);
+            }
+         }
+      } catch (error) {
+         applyServerFieldErrors(error, setError, { setApiError });
+      }
+   };
+
+   const readOnly = useMemo(() => !canManageTenants(currentUser), [currentUser]);
+
+   const wizardSteps = [
+      { label: "Identity Profile" },
+      { label: "Communications" },
+      { label: "Emergency & Save" }
+   ];
+
+   return (
+      <StandardPage
+         title="Register Tenant"
+         subtitle="Complete a multi-step profile creation for a new residency applicant."
+         skeleton={<SkeletonDetailPage />}
+         breadcrumbs={
+            <Breadcrumbs
+               items={[{ label: "Tenant Directory", href: "/tenants" }, { label: "Register Tenant" }]}
+            />
+         }
+      >
+         {apiError && <Alert variant="error" title="Registration Failed" className="max-w-4xl mx-auto mb-6">{apiError}</Alert>}
+         {readOnly && <Alert variant="warning" title="Restricted" className="max-w-4xl mx-auto mb-6">Read-only mode. Registration is disabled.</Alert>}
+
+         <WizardFrame
+            title="Tenant Onboarding"
+            steps={wizardSteps}
+            currentStepIndex={currentStepIndex}
+            onNext={onNext}
+            onBack={onBack}
+            onCancel={() => router.push("/tenants")}
+            onSubmit={() => onSubmitTenant("view")}
+            isSubmitting={isSubmitting}
+            nextLabel="Next Step"
+            submitLabel="Finalize Registration"
+            cancelLabel="Discard Changes"
+         >
+            <div className="space-y-6">
+               {currentStepIndex === 0 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                     <div className="grid gap-6 sm:grid-cols-2">
+                        <Field label="First Name" required error={errors.first_name?.message}>
+                           <Input
+                              autoFocus
+                              disabled={readOnly}
+                              placeholder="Juan"
+                              className="!h-11 border-stone-200"
+                              {...register("first_name", { required: "First name represents the identity root." })}
+                           />
+                        </Field>
+                        <Field label="Last Name" required error={errors.last_name?.message}>
+                           <Input
+                              disabled={readOnly}
+                              placeholder="Dela Cruz"
+                              className="!h-11 border-stone-200"
+                              {...register("last_name", { required: "Family name is structurally required." })}
+                           />
+                        </Field>
+                     </div>
+                     <Field label="Permanent Registration Address" required error={errors.address?.message}>
+                        <Textarea
+                           rows={3}
+                           disabled={readOnly}
+                           className="border-stone-200"
+                           {...register("address", { required: "A permanent physical address is required for regulatory compliance." })}
+                        />
+                     </Field>
+                  </div>
+               )}
+
+               {currentStepIndex === 1 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                     <div className="grid gap-6 sm:grid-cols-2">
+                        <Field label="Primary Mobile Number" required error={errors.contact_number?.message}>
+                           <Input
+                              autoFocus
+                              disabled={readOnly}
+                              className="!h-11 font-mono tabular-nums border-stone-200"
+                              {...register("contact_number", {
+                                 required: "A primary communications number is essential.",
+                                 pattern: { value: PH_MOBILE_REGEX, message: "Use local PH active format." }
+                              })}
+                           />
+                        </Field>
+                        <Field label="Digital Communication (Email)" required error={errors.email?.message}>
+                           <Input
+                              disabled={readOnly}
+                              type="email"
+                              placeholder="juan@example.ph"
+                              className="!h-11 border-stone-200 gap-x-6"
+                              {...register("email", { required: "An electronic address is required." })}
+                           />
+                        </Field>
+                     </div>
+                  </div>
+               )}
+
+               {currentStepIndex === 2 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                     <div className="grid gap-6 sm:grid-cols-2">
+                        <Field label="Emergency Proxy Name" required error={errors.emergency_contact_name?.message}>
+                           <Input
+                              autoFocus
+                              disabled={readOnly}
+                              className="!h-11 border-stone-200"
+                              {...register("emergency_contact_name", { required: "Proxy is required for security incidents." })}
+                           />
+                        </Field>
+                        <Field label="Emergency Number" required error={errors.emergency_contact_number?.message}>
+                           <Input
+                              disabled={readOnly}
+                              className="!h-11 font-mono tabular-nums border-stone-200"
+                              {...register("emergency_contact_number", {
+                                 required: "Emergency phone is non-negotiable.",
+                                 pattern: { value: PH_MOBILE_REGEX, message: "Invalid format" },
+                              })}
+                           />
+                        </Field>
+                     </div>
+
+                     <div className="pt-8 flex sm:justify-end">
+                        <button
+                           type="button"
+                           onClick={() => onSubmitTenant("lease")}
+                           disabled={readOnly || isSubmitting}
+                           className="text-xs font-black uppercase tracking-widest text-[#0e7490] hover:text-[#164e63] underline underline-offset-4 decoration-2"
+                        >
+                           Or Save & Generate Lease Immediately
+                        </button>
+                     </div>
+                  </div>
+               )}
+            </div>
+         </WizardFrame>
+      </StandardPage>
+   );
+}

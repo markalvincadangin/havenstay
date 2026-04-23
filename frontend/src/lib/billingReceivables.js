@@ -1,13 +1,9 @@
+import { startOfDay } from "./formatters";
+
 /**
  * Calendar-based receivables helpers. Billing `status` may be `partial` even when past due
  * (see BillingService::autoUpdateStatus / BR-004); do not use `status === "overdue"` alone for collections KPIs.
  */
-
-export function startOfDay(d) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
 
 /**
  * True when there is a positive balance and the due date is before today (start of day).

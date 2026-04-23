@@ -2,8 +2,12 @@
 
 namespace App\Http\Requests\Room;
 
-use App\Services\Identity\AuthorizationService;
+use App\Services\Core\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use App\Enums\RoomType;
+use App\Enums\RoomStatus;
+use App\Enums\BedSpaceStatus;
 
 /**
  * Validates data for creating a new room and its initial bed space configuration.
@@ -15,6 +19,7 @@ class StoreRoomRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        AuthorizationService::ensureCanManageRooms($this->user());
         return true;
     }
 
@@ -22,15 +27,15 @@ class StoreRoomRequest extends FormRequest
     {
         return [
             'room_code' => ['required', 'string', 'max:20', 'unique:rooms'],
-            'room_type' => ['required', 'in:solo,shared'],
+            'room_type' => ['required', Rule::enum(RoomType::class)],
             'capacity' => ['sometimes', 'integer', 'min:1'],
             'monthly_rate' => ['required', 'numeric', 'min:0'],
-            'status' => ['sometimes', 'in:vacant,partially_occupied,fully_occupied,maintenance'],
+            'status' => ['sometimes', Rule::enum(RoomStatus::class)],
             'amenities' => ['nullable', 'string'],
             'description' => ['nullable', 'string'],
             'bed_spaces' => ['sometimes', 'array'],
             'bed_spaces.*.bed_label' => ['required_with:bed_spaces', 'string', 'max:20'],
-            'bed_spaces.*.status' => ['sometimes', 'in:vacant,occupied,maintenance'],
+            'bed_spaces.*.status' => ['sometimes', Rule::enum(BedSpaceStatus::class)],
         ];
     }
 }

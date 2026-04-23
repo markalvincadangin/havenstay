@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
 
 /**
  * Room Model
@@ -14,10 +16,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * 
  * @property int $room_id
  * @property string $room_code
- * @property string $room_type
+ * @property \App\Enums\RoomType $room_type
  * @property int $capacity
  * @property float $monthly_rate
- * @property string $status
+ * @property \App\Enums\RoomStatus $status
  * @property array|null $amenities
  */
 class Room extends Model
@@ -38,32 +40,14 @@ class Room extends Model
         'description',
     ];
 
-    /**
-     * Appended forensic attributes.
-     */
-    protected $appends = ['last_meter_readings'];
-
-    const TYPE_SOLO = 'solo';
-
-    const TYPE_SHARED = 'shared';
-
-    const STATUS_VACANT = 'vacant';
-
-    const STATUS_PARTIALLY_OCCUPIED = 'partially_occupied';
-
-    const STATUS_FULLY_OCCUPIED = 'fully_occupied';
-
-    const STATUS_MAINTENANCE = 'maintenance';
-    const STATUS_ARCHIVED = 'archived';
-
     protected function casts(): array
     {
         return [
             'room_code' => 'string',
-            'room_type' => 'string',
+            'room_type' => RoomType::class,
             'capacity' => 'integer',
             'monthly_rate' => 'decimal:2',
-            'status' => 'string',
+            'status' => RoomStatus::class,
             'amenities' => 'array',
             'description' => 'string',
         ];
@@ -75,35 +59,12 @@ class Room extends Model
     }
 
     /**
-     * Utility meter readings for this room.
+     * Meter assignments for this room.
      */
-    public function meterReadings(): HasMany
+    public function meterAssignments(): HasMany
     {
-        return $this->hasMany(RoomMeterReading::class, 'room_id', 'room_id');
-    }
-
-    /**
-     * Forensic Accessor: Latest utility readings for billing cycle verification.
-     */
-    public function getLastMeterReadingsAttribute(): array
-    {
-        // Note: For performance, ensure 'meterReadings' is eager loaded in controllers.
-        $readings = $this->relationLoaded('meterReadings') 
-            ? $this->meterReadings 
-            : $this->meterReadings()->orderByDesc('reading_date')->orderByDesc('created_at')->get();
-
-        $elec = $readings->where('utility_type', RoomMeterReading::UTILITY_ELECTRIC)->first();
-        $water = $readings->where('utility_type', RoomMeterReading::UTILITY_WATER)->first();
-
-        return [
-            'electric' => $elec ? [
-                'value' => (float) $elec->reading_value,
-                'date' => $elec->reading_date->toDateString(),
-            ] : null,
-            'water' => $water ? [
-                'value' => (float) $water->reading_value,
-                'date' => $water->reading_date->toDateString(),
-            ] : null,
-        ];
+        return $this->hasMany(MeterAssignment::class, 'room_id', 'room_id')
+            ->whereNull('valid_to')
+            ->orWhere('valid_to', '>', now()->toDateString());
     }
 }

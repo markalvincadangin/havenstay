@@ -1,6 +1,18 @@
+const HTTP_STATUS_MESSAGES = {
+  0: "Unable to connect to the registry. Please check your internet connection.",
+  400: "The request was invalid. Please check your input.",
+  401: "Your session has expired. Please sign in again.",
+  403: "You do not have permission to perform this action.",
+  404: "The requested record could not be found.",
+  422: "Please correct the validation errors below.",
+  429: "Too many requests. Please wait a moment and try again.",
+  500: "A system error occurred. Our team has been notified.",
+  503: "The system is briefly undergoing maintenance. Please try again in a few minutes.",
+};
+
 export function flattenApiErrors(error, _field = null) {
   if (!error) {
-    return "Request failed.";
+    return HTTP_STATUS_MESSAGES[0];
   }
 
   if (error.errors && typeof error.errors === "object") {
@@ -12,7 +24,7 @@ export function flattenApiErrors(error, _field = null) {
       .join(" ");
   }
 
-  return error.message || "Request failed.";
+  return error.message || HTTP_STATUS_MESSAGES[error.status] || "Request failed.";
 }
 
 /**

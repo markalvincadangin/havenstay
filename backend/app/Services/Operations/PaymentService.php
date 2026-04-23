@@ -1,213 +1,216 @@
 <?php
-
-namespace App\Services\Operations;
-
-use App\Services\Concerns\ManagesWorkflows;
-use App\Models\Billing;
-use App\Models\Contract;
-use App\Models\Payment;
-use App\Models\User;
-use App\Support\Financials;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Validation\ValidationException;
-
-/**
- * PaymentService
- * 
- * Handles the posting, validation, and voiding of financial transactions.
- * Orchestrates atomic billing status reconciliation following every payment event.
- */
-class PaymentService
-{
-    use ManagesWorkflows;
-
-    /**
-     * Get a specific payment record with full forensic context.
-     * 
-     * @param int $paymentId
-     * @return Payment|null
-     */
-    public static function getById(int $paymentId): ?Payment
-    {
-        return Payment::query()
-            ->with([
-                'billing.contract.tenant',
-                'billing.contract.bedSpace.room',
-                'billing.contract.room',
-                'processor',
-            ])
-            ->find($paymentId);
-    }
-
-    /**
-     * Record a new payment with atomic balance update and transaction logging.
-     * 
-     * Forensic Rules:
-     * - Rule: Payments are immutable; only voiding is permitted for correction.
-     * - Trigger: Automates contract activation if initial (Rent+Deposit) is settled.
-     * - Logic: Multi-entity reconciliation (Billing -> Contract -> BedSpace).
-     * 
-     * @param User $actor The staff member performing the action.
-     * @param array $data Input including billing_id, amount_paid, and method.
-     * @return Billing The updated billing header after posting.
-     * @throws ValidationException
-     */
-    public static function record(User $actor, array $data): Billing
-    {
-        return self::runWriteWorkflow(
-            actorId: $actor->user_id,
-            action: 'POST_PAYMENT',
-            txnReference: self::buildTxnReference('PAY'),
-            payload: ['billing_id' => $data['billing_id']],
-            operation: function () use ($actor, $data): Billing {
-                $billing = Billing::where('billing_id', (int) $data['billing_id'])
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $billing) {
-                    throw ValidationException::withMessages([
-                        'billing_id' => ['Billing record not found.'],
-                    ]);
-                }
-
-                if ((float) $data['amount_paid'] <= 0) {
-                    throw ValidationException::withMessages([
-                        'amount_paid' => ['Payment amount must be greater than zero.'],
-                    ]);
-                }
-
-                Payment::create([
-                    'billing_id' => $billing->billing_id,
-                    'processed_by' => $actor->user_id,
-                    'amount_paid' => (float) $data['amount_paid'],
-                    'payment_date' => $data['payment_date'],
-                    'payment_method' => $data['payment_method'] ?? 'cash',
-                    'reference_number' => $data['reference_number'] ?? null,
-                    'remarks' => $data['remarks'] ?? null,
-                ]);
-
-                // Authority: Reconcile billing status
-                BillingService::syncBillingStatus($billing);
-
-                // Forensic Hook: Auto-activate contract if pending_payment and settled
-                $contract = $billing->contract;
-                if ($contract && (string) $contract->status === Contract::STATUS_PENDING_PAYMENT) {
-                    try {
-                        $totalPaid = Financials::getTotalPaid((int) $contract->contract_id);
-                        $initialTotal = ($contract->monthly_rate_override ?: ($contract->room->monthly_rate ?? 0)) + $contract->deposit_amount;
-                        
-                        if ($totalPaid >= ($initialTotal - 0.01)) {
-                            ContractService::activate($actor, $contract);
-                        }
-                    } catch (\Exception $e) {
-                        \Illuminate\Support\Facades\Log::warning("Auto-activation deferred: " . $e->getMessage());
-                    }
-                }
-
-                return BillingService::getById((int) $billing->billing_id);
-            },
-            resultDetails: fn (Billing $billing): array => [
-                'billing_id' => (int) $data['billing_id'],
-                'amount_paid' => (float) $data['amount_paid'],
-            ]
-        );
-    }
-
-    /**
-     * Void a payment and reverse billing status effects.
-     * 
-     * Forensic Rules:
-     * - Constraint: Payments cannot be deleted, only marked as voided.
-     * - Reconciliation: Reverse the balance impact on the associated bill.
-     * 
-     * @param User $actor The staff member performing the action.
-     * @param Payment $payment Target payment entity.
-     * @param string|null $reason Audit reason for voiding.
-     * @return Billing
-     * @throws ValidationException
-     */
-    public static function void(User $actor, Payment $payment, ?string $reason = null): Billing
-    {
-        return self::runWriteWorkflow(
-            actorId: $actor->user_id,
-            action: 'VOID_PAYMENT',
-            txnReference: self::buildTxnReference('VOID'),
-            payload: ['payment_id' => $payment->payment_id],
-            operation: function () use ($actor, $payment, $reason): Billing {
-                $billing = Billing::where('billing_id', $payment->billing_id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                if ($payment->voided_at !== null) {
-                    throw ValidationException::withMessages([
-                        'payment_id' => ['Payment is already voided.'],
-                    ]);
-                }
-
-                $payment->update([
-                    'voided_at' => now(),
-                    'voided_by' => $actor->user_id,
-                    'void_reason' => $reason ?: 'User requested void (Standard Protocol)',
-                ]);
-
-                BillingService::syncBillingStatus($billing);
-
-                return BillingService::getById((int) $billing->billing_id);
-            },
-            resultDetails: fn (Billing $billing) => [
-                'payment_id' => $payment->payment_id,
-                'amount_voided' => $payment->amount_paid,
-            ]
-        );
-    }
-
-    /**
-     * List payment history with forensic filters.
-     * 
-     * @param array $filters (billing_id, contract_id, tenant_id, q, dates).
-     * @return Builder<Payment>
-     */
-    public static function listHistoryQuery(array $filters = []): Builder
-    {
-        $query = Payment::query()
-            ->select('payments.*')
-            ->join('billing', 'billing.billing_id', '=', 'payments.billing_id')
-            ->join('contracts', 'contracts.contract_id', '=', 'billing.contract_id')
-            ->with(['billing.contract.tenant', 'billing.contract.bedSpace.room', 'processor'])
-            ->orderByDesc('payments.payment_date');
-
-        if (! empty($filters['billing_id'])) {
-            $query->where('payments.billing_id', (int) $filters['billing_id']);
-        }
-
-        if (! empty($filters['contract_id'])) {
-            $query->where('billing.contract_id', (int) $filters['contract_id']);
-        }
-
-        if (! empty($filters['tenant_id'])) {
-            $query->where('contracts.tenant_id', (int) $filters['tenant_id']);
-        }
-
-        if (! empty($filters['posting_status'])) {
-            if ($filters['posting_status'] === 'posted') {
-                $query->whereNull('voided_at');
-            } elseif ($filters['posting_status'] === 'voided') {
-                $query->whereNotNull('voided_at');
-            }
-        }
-
-        if (! empty($filters['q'])) {
-            $needle = trim($filters['q']);
-            $query->where(function ($w) use ($needle): void {
-                $w->where('payments.payment_id', 'like', "%{$needle}%")
-                    ->orWhere('payments.reference_number', 'like', "%{$needle}%")
-                    ->orWhereHas('billing.contract.tenant', function ($t) use ($needle): void {
-                        $t->where('first_name', 'like', "%{$needle}%")
-                            ->orWhere('last_name', 'like', "%{$needle}%");
-                    });
-            });
-        }
-
-        return $query;
-    }
-}
+ 
+ namespace App\Services\Operations;
+ 
+ use App\Services\Concerns\ManagesWorkflows;
+ use App\Models\Billing;
+ use App\Models\Contract;
+ use App\Models\Payment;
+ use App\Models\User;
+ use App\Enums\ContractStatus;
+ use App\Support\Financials;
+ use Illuminate\Database\Eloquent\Builder;
+ use Illuminate\Validation\ValidationException;
+ 
+ /**
+  * PaymentService
+  * 
+  * Handles the posting, validation, and voiding of financial transactions.
+  * Supports XOR targeting (Billing Cycle vs. Contract-linked Deposits).
+  * Optimized for HavenStay Forensic v5.0.
+  */
+ class PaymentService
+ {
+     use ManagesWorkflows;
+ 
+     /**
+      * Retrieve a payment by ID with full relationship context.
+      * 
+      * @param int $paymentId
+      * @return Payment|null
+      */
+     public static function getById(int $paymentId): ?Payment
+     {
+         return Payment::with(['billing.contract.tenant', 'contract.tenant', 'processor'])->find($paymentId);
+     }
+ 
+     /**
+      * Record a new payment with XOR targeting and forensic atomic logic.
+      * 
+      * Forensic Rules:
+      * - XOR: Payment must link to EITHER billing_id OR contract_id (for deposits).
+      * - Activation: Trigger contract activation if total paid (Rent + Deposit) is met.
+      * 
+      * @param User $actor The staff member recording the payment.
+      * @param array $data Input details (amount, category, method, targets).
+      * @return Payment
+      * @throws ValidationException
+      */
+     public static function record(User $actor, array $data): Payment
+     {
+         $category = $data['payment_category'] ?? 'billing';
+         $billingId = $data['billing_id'] ?? null;
+         $contractId = $data['contract_id'] ?? null;
+         $amount = (float)($data['amount_paid'] ?? 0);
+         $method = $data['payment_method'] ?? 'cash';
+ 
+         // XOR Validation (BR-PAY-001)
+         if ($billingId && $contractId) {
+             throw ValidationException::withMessages(['billing_id' => ['Payment cannot target both a bill and a contract directly.']]);
+         }
+         if (!$billingId && !$contractId) {
+             throw ValidationException::withMessages(['billing_id' => ['Target (billing or contract) is required.']]);
+         }
+ 
+         return self::runWriteWorkflow(
+             actorId: $actor->user_id,
+             action: 'POST_PAYMENT',
+             payload: [
+                 'billing_id' => $billingId, 
+                 'contract_id' => $contractId, 
+                 'category' => $category,
+                 'amount_fact' => $amount,
+                 'method_fact' => $method,
+             ],
+             operation: function () use ($actor, $data, $category, $billingId, $contractId, $amount, $method): Payment {
+                 
+                 // If targeting a bill, we also need the contract_id for the forensic payment record
+                 if ($billingId) {
+                     $billing = Billing::findOrFail($billingId);
+                     $contractId = $billing->contract_id;
+                 }
+ 
+                 $payment = Payment::create([
+                     'billing_id' => $billingId,
+                     'contract_id' => $contractId,
+                     'payment_category' => $category,
+                     'processed_by' => $actor->user_id,
+                     'amount_paid' => $amount,
+                     'payment_date' => $data['payment_date'],
+                     'payment_method' => $method,
+                     'reference_number' => $data['reference_number'] ?? null,
+                     'remarks' => $data['remarks'] ?? null,
+                 ]);
+ 
+                 // 1. Reconcile Billing Status if applicable
+                 if ($billingId) {
+                     $billing = Billing::find($billingId);
+                     BillingService::syncBillingStatus($actor, $billing);
+                 }
+ 
+                 // 2. Forensic Hook: Auto-activate contract if pending_payment and settled
+                 $contract = Contract::find($contractId);
+                 if ($contract) {
+                     // Update is_cleared if this is a refund or rollover (BR-PAY-010)
+                     if (in_array($category, ['refund', 'rollover'])) {
+                         $contract->update(['is_cleared' => true]);
+                     }
+ 
+                     if ($contract->status === ContractStatus::PENDING_PAYMENT) {
+                         $totalPaid = Financials::getTotalPaid((int) $contract->contract_id);
+                         $minRequired = $contract->monthly_rate + $contract->deposit_amount;
+                         
+                         if ($totalPaid >= ($minRequired - 0.01)) {
+                             ContractService::activate($actor, $contract);
+                         }
+                     }
+                 }
+ 
+                 return $payment;
+             }
+         );
+     }
+ 
+     /**
+      * Void a payment and reverse financial impacts.
+      * 
+      * @param User $actor The staff member voiding the payment.
+      * @param Payment $payment
+      * @param string|null $reason
+      * @return Payment
+      * @throws ValidationException
+      */
+     public static function void(User $actor, Payment $payment, ?string $reason = null): Payment
+     {
+         return self::runWriteWorkflow(
+             actorId: $actor->user_id,
+             action: 'VOID_PAYMENT',
+             payload: [
+                 'payment_id' => $payment->payment_id,
+                 'void_amount_fact' => $payment->amount_paid,
+                 'reason_fact' => $reason ?: 'N/A'
+             ],
+             operation: function () use ($actor, $payment, $reason): Payment {
+                 if ($payment->voided_at !== null) {
+                     throw ValidationException::withMessages(['payment_id' => ['Payment is already voided.']]);
+                 }
+ 
+                 $payment->update([
+                     'voided_at' => now(),
+                     'voided_by' => $actor->user_id,
+                     'void_reason' => $reason ?: 'User requested void',
+                 ]);
+ 
+                 // Re-sync billing if was linked to one
+                 if ($payment->billing_id) {
+                     BillingService::syncBillingStatus($actor, $payment->billing);
+                 }
+ 
+                 return $payment->fresh();
+             }
+         );
+     }
+ 
+     /**
+      * List payments with pagination.
+      */
+     public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
+     {
+         return self::listHistoryQuery($filters)->paginate($perPage, ['*'], 'page', $page);
+     }
+ 
+     /**
+      * List payment history with forensic filters.
+      * 
+      * @param array $filters
+      * @return Builder<\App\Models\Payment>
+      */
+     public static function listHistoryQuery(array $filters = []): Builder
+     {
+         $query = Payment::query()
+             ->with(['billing.contract.tenant', 'contract.tenant', 'processor'])
+             ->orderByDesc('payment_date')
+             ->orderByDesc('payment_id');
+ 
+         if (! empty($filters['contract_id'])) {
+             $query->where('contract_id', (int) $filters['contract_id']);
+         }
+ 
+         if (! empty($filters['billing_id'])) {
+             $query->where('billing_id', (int) $filters['billing_id']);
+         }
+ 
+         if (! empty($filters['tenant_id'])) {
+             $query->whereHas('contract', fn($q) => $q->where('tenant_id', $filters['tenant_id']));
+         }
+ 
+         if (! empty($filters['payment_category'])) {
+             $query->where('payment_category', $filters['payment_category']);
+         }
+ 
+         if (! empty($filters['q'])) {
+             $needle = trim($filters['q']);
+             $query->where(function ($w) use ($needle): void {
+                 $w->where('payment_id', 'like', "%{$needle}%")
+                     ->orWhere('reference_number', 'like', "%{$needle}%")
+                     ->orWhereHas('contract.tenant', function ($t) use ($needle): void {
+                         $t->where('first_name', 'like', "%{$needle}%")
+                             ->orWhere('last_name', 'like', "%{$needle}%");
+                     });
+             });
+         }
+ 
+         /** @var Builder $query */
+         return $query;
+     }
+ }

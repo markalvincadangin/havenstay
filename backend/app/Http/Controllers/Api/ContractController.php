@@ -1,167 +1,125 @@
 <?php
-
-namespace App\Http\Controllers\Api;
-
-use App\Http\Controllers\Controller;
-use App\Http\Requests\Contract\MoveOutRequest;
-use App\Http\Requests\Contract\StoreContractRequest;
-use App\Http\Requests\Contract\UpdateContractRequest;
-use App\Models\Contract;
-use App\Services\Analytics\PiiMaskingService;
-use App\Services\Identity\AuthorizationService;
-use App\Services\Operations\ContractService;
-use App\Support\Pagination;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-
-class ContractController extends Controller
-{
-    /**
-     * List all contracts with deep filtering and pagination.
-     * Authorized: Admin, Staff.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function index(Request $request): JsonResponse
-    {
-        AuthorizationService::ensureCanViewContracts($request->user());
-
-        $validated = $request->validate(array_merge([
-            'tenant_id' => ['nullable', 'integer'],
-            'status' => ['nullable', 'string', 'max:32'],
-            'q' => ['nullable', 'string', 'max:200'],
-        ], Pagination::queryRules()));
-
-        $pageParams = Pagination::normalizePageParams($validated);
-
-        $paginator = ContractService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
-
-        $paginator->through(function (Contract $contract) use ($request) {
-            $row = $contract->toArray();
-
-            return PiiMaskingService::maskContractNestedTenant($request->user(), $row);
-        });
-
-        return Pagination::fromPaginator($paginator);
-    }
-
-    public function store(StoreContractRequest $request): JsonResponse
-    {
-        AuthorizationService::ensureCanManageContracts($request->user());
-
-        $validated = $request->validated();
-
-        $contract = ContractService::create($request->user(), $validated);
-
-        return response()->json([
-            'message' => 'Contract created successfully.',
-            'data' => $contract,
-        ], 201);
-    }
-
-    public function show(Request $request, Contract $contract): JsonResponse
-    {
-        AuthorizationService::ensureCanViewContracts($request->user());
-
-        $loaded = ContractService::getById((int) $contract->contract_id);
-        if (!$loaded) {
-            return response()->json(['message' => 'Contract not found.'], 404);
-        }
-
-        $payload = PiiMaskingService::maskContractNestedTenant($request->user(), $loaded->toArray());
-
-        return response()->json([
-            'message' => 'Contract retrieved successfully.',
-            'data' => $payload,
-        ]);
-    }
-
-    public function moveOut(MoveOutRequest $request, Contract $contract): JsonResponse
-    {
-        AuthorizationService::ensureCanManageContracts($request->user());
-
-        $validated = $request->validated();
-
-        $updated = ContractService::moveOut($request->user(), $contract, $validated);
-
-        return response()->json([
-            'message' => 'Contract move-out processed successfully.',
-            'data' => $updated,
-        ]);
-    }
-
-    /**
-     * Activate a contract (Post-payment verification)
-     */
-    public function activate(Request $request, Contract $contract): JsonResponse
-    {
-        AuthorizationService::ensureCanManageContracts($request->user());
-
-        $contract = ContractService::activate($request->user(), $contract);
-
-        return response()->json([
-            'message' => 'Contract activated. Tenant bed space is now occupied.',
-            'data' => $contract,
-        ]);
-    }
-
-    public function update(UpdateContractRequest $request, Contract $contract): JsonResponse
-    {
-        AuthorizationService::ensureCanManageContracts($request->user());
-
-        $validated = $request->validated();
-
-        if ($contract->status === Contract::STATUS_ACTIVE) {
-            if (array_key_exists('status', $validated) && $validated['status'] !== Contract::STATUS_ACTIVE) {
-                return response()->json([
-                    'message' => 'Active contracts cannot be transitioned via contract update. Process move-out first.',
-                ], 422);
-            }
-
-            // Even if `status` is not changed, setting `actual_move_out_date` is part of completing a stay.
-            if (array_key_exists('actual_move_out_date', $validated) && !empty($validated['actual_move_out_date'])) {
-                return response()->json([
-                    'message' => 'Active contracts cannot set actual move-out date via contract update. Process move-out first.',
-                ], 422);
-            }
-        }
-
-        $contract = ContractService::update($request->user(), $contract, $validated);
-
-        return response()->json([
-            'message' => 'Contract updated successfully.',
-            'data' => $contract,
-        ]);
-    }
-
-    /**
-     * Archive a contract (Soft Delete)
-     */
-    public function archive(Request $request, Contract $contract): JsonResponse
-    {
-        AuthorizationService::ensureCanManageContracts($request->user());
-
-        $contract = ContractService::archive($request->user(), $contract);
-
-        return response()->json([
-            'message' => 'Contract agreement archived for forensic retention.',
-            'data' => $contract,
-        ]);
-    }
-
-    /**
-     * Restore an archived contract
-     */
-    public function restore(Request $request, int $id): JsonResponse
-    {
-        AuthorizationService::ensureCanManageContracts($request->user());
-
-        $contract = ContractService::restore($request->user(), $id);
-
-        return response()->json([
-            'message' => 'Contract agreement restored to operational history.',
-            'data' => $contract,
-        ]);
-    }
-}
+ 
+ namespace App\Http\Controllers\Api;
+ 
+ use App\Http\Controllers\Controller;
+ use App\Http\Requests\Contract\IndexContractRequest;
+ use App\Http\Requests\Contract\ManageContractRequest;
+ use App\Http\Requests\Contract\StoreContractRequest;
+ use App\Http\Requests\Contract\UpdateContractRequest;
+ use App\Http\Requests\Contract\MoveOutRequest;
+ use App\Http\Resources\ContractResource;
+ use App\Models\Contract;
+ use App\Services\Core\AuthorizationService;
+ use App\Services\Operations\ContractService;
+ use App\Support\Pagination;
+ use Illuminate\Http\JsonResponse;
+ use Illuminate\Http\Request;
+ 
+ /**
+  * ContractController
+  * 
+  * Manages the lifecycle of lease agreements (check-in, activation, move-out).
+  * Optimized for HavenStay Forensic v5.0 with API Resource serialization.
+  */
+ class ContractController extends Controller
+ {
+     /**
+      * FR-021: List all tenant contracts with filtering.
+      */
+     public function index(IndexContractRequest $request): JsonResponse
+     {
+         $validated = $request->validated();
+         $pageParams = Pagination::normalizePageParams($validated);
+ 
+         $paginator = ContractService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
+ 
+         return $this->paginated($paginator, [], 'Contracts retrieved successfully.');
+     }
+ 
+     /**
+      * FR-021a: Retrieve detailed contract forensic record.
+      */
+     public function show(Request $request, Contract $contract): JsonResponse
+     {
+         AuthorizationService::ensureCanViewContracts($request->user());
+         
+         $loaded = ContractService::getById((int) $contract->contract_id);
+         if (!$loaded) {
+             return $this->error('Contract not found.', 404);
+         }
+ 
+         return $this->success('Contract retrieved successfully.', new ContractResource($loaded));
+     }
+ 
+     /**
+      * FR-022: Initial check-in and contract creation.
+      */
+     public function store(StoreContractRequest $request): JsonResponse
+     {
+         $contract = ContractService::create($request->user(), $request->validated());
+ 
+         return $this->created('Contract created successfully.', new ContractResource($contract));
+     }
+ 
+     /**
+      * FR-023: Update contract metadata.
+      */
+     public function update(UpdateContractRequest $request, Contract $contract): JsonResponse
+     {
+         $updated = ContractService::update($request->user(), $contract, $request->validated());
+ 
+         return $this->success('Contract updated successfully.', new ContractResource($updated));
+     }
+ 
+     /**
+      * FR-024: Tenant move-out workflow.
+      */
+     public function moveOut(MoveOutRequest $request, Contract $contract): JsonResponse
+     {
+         $updated = ContractService::moveOut($request->user(), $contract, $request->validated());
+ 
+         return $this->success('Move-out processed successfully. Room status synced.', new ContractResource($updated));
+     }
+ 
+     /**
+      * FR-025: Activate lease after settlement.
+      */
+     public function activate(ManageContractRequest $request, Contract $contract): JsonResponse
+     {
+         $updated = ContractService::activate($request->user(), $contract);
+ 
+         return $this->success('Contract activated successfully.', new ContractResource($updated));
+     }
+ 
+     /**
+      * FR-022v: Void a contract created in error.
+      */
+     public function void(ManageContractRequest $request, Contract $contract): JsonResponse
+     {
+         $reason = $request->input('reason', 'Contract created in error');
+         $voided = ContractService::void($request->user(), $contract, $reason);
+ 
+         return $this->success('Contract voided successfully.', new ContractResource($voided));
+     }
+ 
+     /**
+      * Archive a contract (Soft Delete).
+      */
+     public function archive(ManageContractRequest $request, Contract $contract): JsonResponse
+     {
+         $archived = ContractService::archive($request->user(), $contract);
+ 
+         return $this->success('Contract archived successfully.', new ContractResource($archived));
+     }
+ 
+     /**
+      * Restore an archived contract.
+      */
+     public function restore(ManageContractRequest $request, int $id): JsonResponse
+     {
+         $restored = ContractService::restore($request->user(), $id);
+ 
+         return $this->success('Contract restored successfully.', new ContractResource($restored));
+     }
+ }

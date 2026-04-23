@@ -1,18 +1,31 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "../app/_context/AuthContext";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 export function useAuthGuard() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace("/login");
+      let callback = pathname;
+      const search = searchParams.toString();
+      if (search) {
+        callback += `?${search}`;
+      }
+      
+      const loginUrl = new URL("/login", window.location.origin);
+      if (callback && callback !== "/" && callback !== "/login") {
+        loginUrl.searchParams.set("callbackUrl", callback);
+      }
+      
+      router.replace(loginUrl.pathname + loginUrl.search);
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, pathname, searchParams]);
 
   return {
     user,

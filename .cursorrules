@@ -1,67 +1,39 @@
-# HavenStay Project Rules
-
-## Project Identity
-- **HavenStay** is a Boarding House Management System (BHMS) for small-scale operations.
-- **Academic Context:** Strict adherence to Course Compliance Requirements (CCR-001 to CCR-008) is required.
-- **Authority:** Always refer to `CLAUDE.md`, `docs/SRS.md`, `docs/SDD.md`, `docs/BACKEND_CODING_BLUEPRINT.md`, and `docs/FRONTEND_CODING_BLUEPRINT.md` before implementation.
-
-## Tech Stack
-- **Backend:** Laravel 13 (PHP 8.3+), Sanctum 4.x
-- **Frontend:** Next.js 16 (App Router, React 19), Tailwind CSS v4, React Hook Form 7.x
-- **Database**: MySQL 8.4+ (Authoritative Source of Truth / Audit Triggers)
-- **API Style:** RESTful JSON
-
-## Directory Structure
-- `backend/`: Laravel API
-- `frontend/`: Next.js Web App
-- **backend/database/sql/**: Canonical SQL schema, triggers, and views
-- `docs/`: Product and engineering documentation
-
-## Core Constraints (Non-Negotiable)
-1. **CCR Compliance:** Never remove or simplify away triggers (33 total), views (6 total), or transaction logs.
-2. **Database Integrity:**
-   - Contracts link to `bed_space_id`, NEVER direct `room_id`.
-   - `billing` table has NO amount columns; totals are computed from `billing_line_items` and `payments`.
-   - `rooms.status` must never be set to 'occupied' (invalid ENUM).
-4. **Philippine Regulatory Compliance (R.A. 9653):**
-   - **Rent Increase Cap:** Block annual increases > 1% for units ≤ ₱10,000 in `ContractService`.
-   - **Two-Phase Check-in:** Initialize contracts as `pending_payment`; ignore vacancy updates until manual `activation`.
-   - **Gate Pass:** Mandatory clearance check during move-out; block if `balance > 0`.
-3. **Logic Placement:** Business logic MUST live in Service classes, NOT Controllers or Models.
-4. **Authorization:** Use `AuthorizationService` exclusively. NEVER use Laravel Gates/Policies.
-5. **Multi-Tenant Safety:** Call `AuditService::setAuditUserContext($actor->id)` before every transaction-based write to trigger-covered tables on MySQL.
-
-## Backend Blueprint Enforcement (Agent Rules)
-- Treat `docs/BACKEND_CODING_BLUEPRINT.md` as mandatory for all backend code generation/refactors.
-- Keep Controllers thin: authorize, validate, delegate to Service, map JSON response.
-- Do NOT perform direct Eloquent writes in Controllers (`create`, `update`, `delete`, `restore`).
-- Keep business logic and multi-table workflows in Services only.
-- Service write methods MUST accept `User $actor` as the first parameter.
-- Never use `Auth::id()` or `Auth::user()` inside Service methods.
-- For critical writes, follow the full transaction-audit sequence:
-  - `TransactionService::logStarted(...)`
-  - `AuditService::setAuditUserContext($actor->user_id)`
-  - `AuditService::setCorrelationContext(...)`
-  - `DB::transaction(...)`
-  - `TransactionService::logCommitted(...)` or `logRolledBack(...)`
-  - `AuditService::clearCorrelationContext()` in `finally`
-- Keep domain validation in Services (`ValidationException::withMessages()`), request-shape validation in Controllers.
-- Keep API status and error semantics consistent (`401`, `403`, `422`) with field-level validation errors.
-- Comments must explain intent/invariants, not obvious code narration.
-
-## Frontend Blueprint Enforcement (Agent Rules)
-- Treat `docs/FRONTEND_CODING_BLUEPRINT.md` as mandatory for all frontend code generation/refactors.
-- Keep pages thin: compose UI, validate route/search params, delegate data access to `apiRequest`.
-- Route backend communication through `frontend/src/lib/api.js` (`apiRequest`) only.
-- Keep domain labels/status mappings centralized in `frontend/src/lib/constants.js`.
-- Preserve role-aware UX (Admin/Staff/Viewer) and hide/disable unauthorized write actions.
-- Keep table/form patterns aligned to `design-system/havenstay/MASTER.md`.
-
-## Workflow Rules
-- Check `docs/SRS.md` for Functional Requirements (FR-*).
-- Check `docs/SDD.md` for technical design and DB patterns.
-- Run `php artisan test` in `backend/` for logic validation.
-- Run `npm run lint && npm run build` in `frontend/` regularly.
-
-## How to use CLAUDE.md
-- For any complex task, explicitly read `CLAUDE.md` to ensure operational alignment.
+{
+  "project_standards": {
+    "framework": "Laravel 14 (PHP 8.3+)",
+    "database": "MySQL 8.0 (Hardened 3NF Schema v4.6)",
+    "architecture": "Thin Controller / Fat Service / Anemic Model",
+    "forensics": "42-Trigger Audit Engine | 16 Normalized Tables"
+  },
+  "business_logic_mandates": {
+    "reservation_lock": "CRITICAL: Bed space status must transition to 'occupied' immediately upon contract creation (even if contract status is 'pending_payment') to prevent double-booking. (Ref: BR-CON-002)",
+    "utility_traceability": "All utility billing line items must physically link to a meter reading via 'reading_id' and 'utility_id'. (Ref: BR-MET-009)",
+    "financial_xor": "Payments must link to either a billing cycle OR a contract, never both. (Ref: chk_pay_target)",
+    "soft_deletes": "Soft-deletes must use virtual unique keys (active_email/active_username) to allow re-registration of archived profiles."
+  },
+  "code_generation_rules": {
+    "controllers": [
+      "Keep controllers strictly for request/response handling.",
+      "Inject services for all business logic.",
+      "Use FormRequests for validation."
+    ],
+    "services": [
+      "Wrap all write operations in DB::transaction().",
+      "Inject actor ID for audit triggers: DB::statement('SET @current_user_id = ?', [$userId]).",
+      "Generate correlation IDs for complex cross-entity transactions."
+    ],
+    "models": [
+      "Keep models anemic (properties and relationships only).",
+      "Use Enum casting for statuses.",
+      "Define relationships using strict type hints."
+    ],
+    "migrations": [
+      "Do not modify columns directly; use forensic-safe ALTER or sync with havenstay_schema.sql."
+    ]
+  },
+  "nomenclature": {
+    "utility_registry": "utilities / utility_rates",
+    "meter_management": "meters / meter_assignments / meter_readings",
+    "human_entities": "tenants (NOT boarders) / users"
+  }
+}

@@ -8,7 +8,8 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Services\ContractService;
+use App\Enums\ContractStatus;
+use App\Services\Operations\ContractService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -96,9 +97,11 @@ class ContractServiceTest extends TestCase
             'bed_space_id' => $bed->bed_space_id,
             'created_by' => $admin->user_id,
             'move_in_date' => now()->subMonths(6)->toDateString(),
+            'monthly_rate' => 5000,
             'monthly_rate_override' => 5000,
             'deposit_amount' => 5000,
-            'status' => Contract::STATUS_COMPLETED,
+            'status' => ContractStatus::COMPLETED->value,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
             'created_at' => now()->subMonths(6),
         ]);
 
@@ -108,9 +111,11 @@ class ContractServiceTest extends TestCase
             'bed_space_id' => $bed->bed_space_id,
             'created_by' => $admin->user_id,
             'move_in_date' => now()->toDateString(),
+            'monthly_rate' => 5000,
             'monthly_rate_override' => 5000,
             'deposit_amount' => 5000,
-            'status' => Contract::STATUS_ACTIVE,
+            'status' => ContractStatus::ACTIVE->value,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
             'created_at' => now(),
         ]);
 

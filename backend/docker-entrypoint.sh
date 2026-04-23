@@ -11,6 +11,22 @@ set -e
 echo "[entrypoint] Clearing config cache..."
 php artisan config:clear
 
+# ── DB CONNECTIVITY GUARD ──
+echo "[entrypoint] Waiting for database connection..."
+MAX_RETRIES=30
+RETRY_COUNT=0
+
+until php artisan db:monitor > /dev/null 2>&1; do
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+        echo "[entrypoint] ERROR: Database connection timed out after ${MAX_RETRIES} attempts."
+        exit 1
+    fi
+    echo "[entrypoint] Database not ready yet (attempt ${RETRY_COUNT}/${MAX_RETRIES})... waiting 2s"
+    sleep 2
+done
+echo "[entrypoint] Database connection established."
+
 if [ "${DB_SEED}" = "true" ]; then
     echo "[entrypoint] DB_SEED=true — running migrate:fresh --seed (all data will be wiped)"
     php artisan migrate:fresh --seed --force
@@ -19,6 +35,11 @@ else
     echo "[entrypoint] Running safe migration (no data loss)..."
     php artisan migrate --force
 fi
+
+echo "[entrypoint] Optimizing for production..."
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
 
 echo "[entrypoint] Starting Apache..."
 exec apache2-foreground

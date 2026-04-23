@@ -29,11 +29,9 @@ export const TENANT_STATUS_LABELS = {
 
 // 3. Room Statuses
 export const ROOM_STATUS_LABELS = {
-  vacant: "Vacant",
-  partially_occupied: "Partially Occupied",
-  fully_occupied: "Fully Occupied",
+  available: "Available",
+  unavailable: "Fully Occupied",
   maintenance: "Maintenance",
-  archived: "Archived",
 };
 
 /** Valid `rooms.status` keys (schema ENUM order). */
@@ -51,7 +49,7 @@ export const ROOM_UNIT_OFFLINE_BED_HINT = {
  * Room edit form — descriptive `<option>` text (same keys as ROOM_STATUS_LABELS).
  */
 export const ROOM_STATUS_OPTION_LABELS = {
-  vacant: "Vacant (Available)",
+  available: "Available",
   maintenance: "Maintenance",
 };
 
@@ -59,7 +57,7 @@ export const ROOM_STATUS_OPTION_LABELS = {
  * Room edit form — descriptive room type options (same keys as ROOM_TYPE_LABELS).
  */
 export const ROOM_TYPE_OPTION_LABELS = {
-  solo: "Solo (Private Unit)",
+  private: "Private (Single Bed Unit)",
   shared: "Shared (Multi-Bed Unit)",
 };
 
@@ -70,9 +68,16 @@ export const BED_STATUS_LABELS = {
   maintenance: "Maintenance",
 };
 
+// 4.1 Meter Statuses
+export const METER_STATUS_LABELS = {
+  active: "Active",
+  maintenance: "Maintenance",
+  replaced: "Replaced",
+};
+
 // 5. Room Category Types
 export const ROOM_TYPE_LABELS = {
-  solo: "Solo Room",
+  private: "Private Room",
   shared: "Shared Room",
 };
 
@@ -85,12 +90,18 @@ export const CONTRACT_STATUS_LABELS = {
   voided: "Voided",
 };
 
+/**
+ * Statuses that represent an ongoing financial or occupancy commitment.
+ * Used for tenant availability checks and occupancy reports.
+ */
+export const ACTIVE_CONTRACT_STATUS_KEYS = ["active", "pending_payment"];
+
 // 7. Billing Ledger Statuses
 export const BILLING_STATUS_LABELS = {
   unpaid: "Unpaid",
-  partial: "Partial Payment",
-  paid: "Settled",
-  overdue: "Past Due",
+  partial: "Partial",
+  paid: "Paid",
+  overdue: "Overdue",
 };
 
 export const BILLING_AGING_FILTER_LABELS = {
@@ -103,13 +114,13 @@ export const BILLING_AGING_FILTER_LABELS = {
 export const BILLING_ITEM_TYPE_LABELS = {
   base_rent: "Base Rent",
   utility: "Utility",
-  add_on: "Add-on",
   penalty: "Penalty",
   adjustment: "Adjustment",
 };
 
 // 9. Audit & System Actions
 export const AUDIT_ACTION_LABELS = {
+  // Lowercase keys for REST API consistency
   insert: "Insert",
   update: "Update",
   delete: "Delete",
@@ -120,6 +131,10 @@ export const AUDIT_ACTION_LABELS = {
   status_change: "Status Change",
   archive: "Archive",
   restore: "Restore",
+  // Uppercase keys for Direct Database Trigger Parity
+  INSERT: "Insert",
+  UPDATE: "Update",
+  DELETE: "Delete",
 };
 
 /** `audit_logs.target_table` display names (filters + table). */
@@ -127,24 +142,43 @@ export const AUDIT_ENTITY_LABELS = {
   tenants: "Tenants",
   rooms: "Rooms",
   contracts: "Contracts",
-  billing: "Billing",
+  billing: "Billings",
   payments: "Payments",
   users: "Users",
+  roles: "System Roles",
   bed_spaces: "Bed Spaces",
   billing_line_items: "Line Items",
+  meters: "Utility Meters",
+  meter_assignments: "Meter Assignments",
+  meter_readings: "Meter Readings",
+  utility_rates: "Utility Rates",
+  utilities: "Utility Services",
 };
 
-/** Entity filter on audit log API — tables with AFTER INSERT/UPDATE/DELETE audit triggers per schema. */
-export const AUDIT_ENTITY_FILTER_KEYS = [
-  "tenants",
-  "rooms",
-  "contracts",
-  "billing",
-  "billing_line_items",
-  "payments",
-  "users",
-  "bed_spaces",
-];
+/** 
+ * Entity filter groupings for audit log UI.
+ * Standardizes the 3-category administrative filter standard.
+ */
+export const AUDIT_ENTITY_FILTER_GROUPS = {
+  "Core Entities": [
+    "tenants",
+    "rooms",
+    "bed_spaces",
+    "contracts",
+    "users",
+  ],
+  "Metrology & Assets": [
+    "meters",
+    "meter_readings",
+    "meter_assignments",
+    "utility_rates",
+  ],
+  "Financial": [
+    "billing",
+    "billing_line_items",
+    "payments",
+  ],
+};
 
 /**
  * Human labels for `audit_logs.target_table` when it stores an app permission / resource key
@@ -189,7 +223,6 @@ export const AUDIT_RESOURCE_LABELS = {
   "tenants.deactivate": "Tenants (deactivate)",
   "tenants.reactivate": "Tenants (reactivate)",
   "tenants.update": "Tenants (update)",
-  "transaction_logs.list": "Transaction logs (list)",
   "users.assignRole": "Users (assign role)",
   "users.create": "Users (create)",
   "users.deactivate": "Users (deactivate)",
@@ -223,13 +256,7 @@ export function formatAuditEntityIdDisplay(entityId, action) {
   return s;
 }
 
-// 10. Transaction log states (`transaction_logs.status` — SRS.md §6.3; same order as schema ENUM)
-export const TX_LOG_STATUS_LABELS = {
-  started: "In Progress",
-  committed: "Committed",
-  failed: "Failed",
-  rolled_back: "Rolled Back",
-};
+/** Transaction logs were retired in v4.8 in favor of trigger-based audit logs. */
 
 /**
  * Tenant history report filter labels — GET /api/reports/tenant-history?status=
@@ -275,6 +302,32 @@ export function isContractActive(status) {
   return normalizeEnumKey(status) === "active";
 }
 
+/**
+ * BR-CON-010: Core terms are immutable once a contract has ended.
+ * Returns true if the contract is in a terminal state.
+ */
+export function isContractEnded(status) {
+  const key = normalizeEnumKey(status);
+  return ["completed", "terminated", "voided"].includes(key);
+}
+
+/**
+ * Returns true if the contract allows general metadata edits (notes, expected move-out).
+ * Terminal states block all edits except notes (handled at form level).
+ */
+export function isContractEditable(status) {
+  return !isContractEnded(status);
+}
+
+/**
+ * BR-CON-005: Rates and deposits are locked once a contract is active.
+ * Only 'pending_payment' allows correction of financial terms.
+ */
+export function isContractFinanciallyLocked(status) {
+  const key = normalizeEnumKey(status);
+  return ["active", "completed", "terminated", "voided"].includes(key);
+}
+
 export function isPaymentMethodCash(method) {
   return normalizeEnumKey(method) === "cash";
 }
@@ -284,3 +337,25 @@ export function isBillingCollectibleStatus(status) {
   const key = normalizeEnumKey(status);
   return key === "unpaid" || key === "partial";
 }
+
+/** Predefined Tailwind classes for interactive registry table rows. */
+export const INTERACTIVE_TABLE_ROW_CLASS =
+  "group cursor-pointer border-t border-stone-100 transition-colors hover:bg-stone-50 active:bg-stone-100";
+
+/** 
+ * Authoritative ID prefixes for forensic display.
+ * Maps entity types to their UI-facing prefixes.
+ */
+export const ID_PREFIX_MAP = {
+  tenant: "TENANT",
+  contract: "CON",
+  billing: "BILL",
+  room: "ROOM",
+  bed: "BS",
+  payment: "PAY",
+  audit: "AUDIT",
+  reading: "RDG",
+  meter: "MTR",
+  rate: "RATE",
+  user: "USER",
+};

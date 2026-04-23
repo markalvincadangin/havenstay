@@ -57,10 +57,10 @@ class RoomManagementTest extends TestCase
     {
         $response = $this->actingAs($this->adminUser)->postJson('/api/rooms', [
             'room_code' => '101',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5000.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
             'amenities' => 'Air conditioning, Free WiFi',
             'description' => 'Single occupancy room',
         ]);
@@ -71,10 +71,10 @@ class RoomManagementTest extends TestCase
         // Verify room stored in database
         $this->assertDatabaseHas('rooms', [
             'room_code' => '101',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5000.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         // Verify audit log entry for INSERT action (Trigger)
@@ -92,7 +92,7 @@ class RoomManagementTest extends TestCase
     {
         $response = $this->actingAs($this->viewerUser)->postJson('/api/rooms', [
             'room_code' => '301',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5000.00,
         ]);
@@ -113,10 +113,10 @@ class RoomManagementTest extends TestCase
     {
         $room = Room::create([
             'room_code' => '201',
-            'room_type' => 'shared',
+            'room_type' => \App\Enums\RoomType::SHARED->value,
             'capacity' => 2,
             'monthly_rate' => 3000.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         // Add first bed space
@@ -128,7 +128,7 @@ class RoomManagementTest extends TestCase
         $this->assertDatabaseHas('bed_spaces', [
             'room_id' => $room->room_id,
             'bed_label' => 'Bed A',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         // Verify audit log for INSERT action
@@ -146,16 +146,16 @@ class RoomManagementTest extends TestCase
     {
         $room = Room::create([
             'room_code' => '203',
-            'room_type' => 'shared',
+            'room_type' => \App\Enums\RoomType::SHARED->value,
             'capacity' => 2,
             'monthly_rate' => 3000.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Bed A',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         // First occupancy - should succeed
@@ -164,7 +164,7 @@ class RoomManagementTest extends TestCase
         $response1->assertOk();
         $this->assertDatabaseHas('bed_spaces', [
             'bed_space_id' => $bedSpace->bed_space_id,
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         // Verify audit log for UPDATE action
@@ -185,16 +185,16 @@ class RoomManagementTest extends TestCase
     {
         $room = Room::create([
             'room_code' => 'HS-901',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 7000.00,
-            'status' => 'fully_occupied',
+            'status' => \App\Enums\RoomStatus::UNAVAILABLE->value,
         ]);
 
         BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Solo Bed',
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $response = $this->actingAs($this->adminUser)->postJson("/api/rooms/{$room->room_id}/archive");
@@ -209,16 +209,16 @@ class RoomManagementTest extends TestCase
     {
         $room = Room::create([
             'room_code' => 'HS-902',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 7200.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Solo Bed',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         $tenant = Tenant::create($this->tenantAttributes([
@@ -226,7 +226,7 @@ class RoomManagementTest extends TestCase
             'last_name' => 'Blocked',
             'email' => 'archive.blocked@example.com',
             'contact_number' => '09170000000',
-            'status' => 'active',
+            'status' => \App\Enums\TenantStatus::ACTIVE->value,
         ]));
 
         Contract::create([
@@ -237,7 +237,8 @@ class RoomManagementTest extends TestCase
             'expected_move_out_date' => now()->addMonths(6)->toDateString(),
             'deposit_amount' => 2000.00,
             'monthly_rate' => 7200.00,
-            'status' => 'active',
+            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
         ]);
 
         $response = $this->actingAs($this->adminUser)->postJson("/api/rooms/{$room->room_id}/archive");
@@ -252,22 +253,22 @@ class RoomManagementTest extends TestCase
     {
         $room = Room::create([
             'room_code' => 'HS-903',
-            'room_type' => 'shared',
+            'room_type' => \App\Enums\RoomType::SHARED->value,
             'capacity' => 2,
             'monthly_rate' => 5000.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Bed A',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Bed B',
-            'status' => 'maintenance',
+            'status' => \App\Enums\BedSpaceStatus::MAINTENANCE->value,
         ]);
 
         $response = $this->actingAs($this->adminUser)->postJson("/api/rooms/{$room->room_id}/archive");
@@ -280,18 +281,18 @@ class RoomManagementTest extends TestCase
     {
         $room = Room::create([
             'room_code' => 'HS-910',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5000.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         Room::create([
             'room_code' => 'HS-911',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5200.00,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $ok = $this->actingAs($this->adminUser)->putJson("/api/rooms/{$room->room_id}", [

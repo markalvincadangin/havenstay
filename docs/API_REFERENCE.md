@@ -1,13 +1,13 @@
 # HavenStay API Reference
 
-**Version:** 2.4  
-**Last Updated:** April 18, 2026  
-**Status:** Canonical integration contract for backend services; forensic alignment baseline
+**Version:** 3.8  
+**Last Updated:** April 20, 2026  
+**Status:** Canonical integration contract for backend services; forensic alignment baseline (v4.8 engine)
 
-REST API for HavenStay BHMS (Laravel 13, Sanctum). Base path: **`/api`**.
+REST API for HavenStay BHMS (Laravel, Sanctum). Base path: **`/api`**.
 
 ## 1. Document Boundary
-This document defines the technical interface contract between the HavenStay presentation layer and the application services. It specifies the endpoints, security schemes, request/response structures, and error modalities required to realize the capabilities defined in [**SRS.md**](SRS.md).
+This document defines the technical interface contract between the HavenStay presentation layer and the application services. It specifies the endpoints, security schemes, request/response structures, and error modalities required to realize the capabilities defined in [**SRS.md**](../docs/SRS.md).
 
 ---
 
@@ -24,7 +24,7 @@ This document defines the technical interface contract between the HavenStay pre
 
 ### 2.2 Global Parameters
 - **Pagination:** `page` (integer ≥ 1), `per_page` (integer 1–100; default 25).
-- **Correlation:** Every write operation generates a `correlation_id` which is returned in the response headers. This ID is used to link application actions to forensic audit and transaction logs.
+- **Correlation:** Every write operation generates a `correlation_id` which is returned in the response headers. This ID is used to link application actions to forensic audit log entries.
 
 ### 2.3 Authentication and Role-Based Access
 - **Scheme:** Bearer Token via Laravel Sanctum.
@@ -34,7 +34,7 @@ This document defines the technical interface contract between the HavenStay pre
 | Role | Operational Scope |
 | :--- | :--- |
 | **Admin** | Full system management (Users, Audit, Finance) |
-| **Staff** | Operational management (Tenants, Rooms, Contracts, Billing) |
+| **Staff** | Operational management (Tenants, Rooms, Contracts, Billing, Meters) |
 | **Viewer** | Read-only access to operational data and reports |
 
 ### 2.4 Data Privacy (NFR-015)
@@ -57,7 +57,6 @@ In accordance with **NFR-015**, PII (Personally Identifiable Information) maskin
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/api/users` | Admin | FR-005 | Query user accounts (filter by role/status) |
 | `POST` | `/api/users` | Admin | FR-005 | Provision new user account |
-| `GET` | `/api/users/roles` | Admin | FR-005 | List assignable roles |
 | `GET` | `/api/users/{id}` | Admin | FR-005 | Retrieve detailed user profile |
 | `PUT` | `/api/users/{id}` | Admin | FR-005 | Update profile (optional password change) |
 | `POST` | `/api/users/{id}/deactivate`| Admin | FR-006 | Soft‑deactivate user (rejection on login) |
@@ -66,86 +65,81 @@ In accordance with **NFR-015**, PII (Personally Identifiable Information) maskin
 ### 3.3 Tenant Management
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/tenants` | All | FR-011 | List tenants (paginated) with occupancy context and outstanding balance fields |
+| `GET` | `/api/tenants` | All | FR-011 | List tenants with occupancy context and balances |
 | `GET` | `/api/tenants/search` | All | FR-011 | Wildcard search (LIKE) by name/contact |
-| `GET` | `/api/tenants/summary` | All | FR-011a | KPI-optimized tenant listing |
 | `POST` | `/api/tenants` | Staff | FR-008 | Register new tenant profile |
 | `GET` | `/api/tenants/{id}` | All | FR-008 | View tenant profile and history |
 | `PUT` | `/api/tenants/{id}` | Staff | FR-008 | Update tenant contact/profile |
-| `POST` | `/api/tenants/{id}/deactivate` | Staff | FR-009 | Mark tenant as moved_out (blocked when active contract exists) |
-| `POST` | `/api/tenants/{id}/reactivate` | Staff | FR-009 | Return moved_out tenant to active operational state |
-| `POST` | `/api/tenants/{id}/archive` | Staff | FR-009 | Archive tenant (soft-delete) |
-| `POST` | `/api/tenants/{id}/restore` | Staff | FR-009 | Restore archived tenant record from soft-delete |
+| `PATCH` | `/api/tenants/{id}/archive` | Staff | BR-TEN-005 | Change operational status to `archived` |
+| `DELETE`| `/api/tenants/{id}` | Staff | FR-009 | Archive tenant profile (forensic soft-delete) |
 
 ### 3.4 Room and Bed Inventory
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/rooms` | All | FR-015 | List rooms with aggregated bed capacity |
-| `GET` | `/api/rooms/stats` | All | FR-015a | Occupancy-optimized room metrics |
-| `GET` | `/api/rooms/availability`| All | FR-015 | Filter beds by vacant status |
-| `POST` | `/api/rooms` | Staff | FR-012 | Create new room entity |
-| `GET` | `/api/rooms/{id}` | All | FR-012 | Room detail with nested bed spaces |
-| `POST` | `/api/rooms/{id}/bed-spaces`| Staff| FR-014 | Add a bed space to an existing room |
-| `POST` | `/api/rooms/{id}/archive`| Staff | FR-013 | Archive room (denied if beds are occupied) |
-
----
+| `GET` | `/api/rooms` | All | FR-016 | List rooms with aggregated bed capacity |
+| `GET` | `/api/rooms/availability`| All | FR-016 | Filter beds by vacant status |
+| `POST` | `/api/rooms` | Staff | FR-013 | Create new room entity |
+| `GET` | `/api/rooms/{id}` | All | FR-013 | Room detail with nested bed spaces |
+| `POST` | `/api/rooms/{id}/bed-spaces`| Staff| FR-015 | Add a bed space to an existing room |
+| `POST` | `/api/rooms/{id}/archive`| Staff | FR-017 | Archive room (denied if beds are occupied) |
 
 ### 3.5 Operational Lifecycle (Contracts)
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/contracts` | All | FR-016 | Query operational contracts (by tenant/status) |
-| `POST` | `/api/contracts` | Staff | FR-016 | Execute new contract (Check‑in) |
-| `GET` | `/api/contracts/{id}` | All | FR-016 | Retrieve specific contract and row context |
-| `PUT` | `/api/contracts/{id}` | Staff | FR-018 | Update contract metadata (e.g. deposit, notes) |
-| `POST` | `/api/contracts/{id}/move-out`| Staff | FR-019 | Finalize move‑out (Move‑out timestamp) |
+| `GET` | `/api/contracts` | All | FR-021 | Query operational contracts (by tenant/status) |
+| `POST` | `/api/contracts` | Staff | FR-018 | Execute new contract (Check‑in) |
+| `GET` | `/api/contracts/{id}` | All | FR-021 | Retrieve specific contract and row context |
+| `PUT` | `/api/contracts/{id}` | Staff | FR-021 | Update contract metadata (e.g. deposit, notes) |
+| `POST` | `/api/contracts/{id}/deposit` | Staff | BR-CON-006 | Record direct deposit/bond payment |
+| `POST` | `/api/contracts/{id}/refund` | Admin | BR-PAY-008 | Record security deposit refund disbursement |
+| `POST` | `/api/contracts/{id}/rollover`| Staff | BR-PAY-009 | Record security deposit rollover for renewal |
+| `POST` | `/api/contracts/{id}/move-out`| Staff | FR-022 | Finalize move‑out processing |
 
-### 3.6 Financial Management (Billing)
+### 3.6 Meter and Utility Asset Management
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/billing` | All | FR-023 | List bill cycles with status and aging meta |
-| `POST` | `/api/billing` | Staff | FR-020 | Bulk or manual bill cycle generation |
-| `GET` | `/api/billing/{id}` | All | FR-021 | Detail view of billing and itemized charges |
-| `PATCH` | `/api/billing/{id}/status` | Staff | FR-025a | Manually override cycle status |
+| `GET` | `/api/utilities` | All | FR-024 | List all supported utilities (Electricity, Water, etc.) |
+| `POST` | `/api/utilities` | Admin | FR-024 | Register a new billable utility service type |
+| `GET` | `/api/meters` | All | FR-024 | Query physical meter registry |
+| `POST` | `/api/meters` | Admin | FR-024 | Register new physical meter |
+| `GET` | `/api/utility-rates` | All | FR-028 | List current and historical utility rates |
+| `POST` | `/api/utility-rates` | Admin | FR-028 | Create a new utility rate (effective-from) |
+| `POST` | `/api/meters/{id}/assignments` | Staff | FR-025 | Map a meter to a specific room |
+| `POST` | `/api/meters/{id}/readings` | Staff | FR-026 | Record point-in-time consumption |
+| `POST` | `/api/meters/{id}/decommission` | Admin | FR-031 | Transition meter to `replaced` status |
 
-### 3.7 Transaction Processing (Payments)
+### 3.7 Financial Management (Billing)
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/payments` | All | FR-027 | Global payment ledger (filter by void status) |
-| `POST` | `/api/payments` | Staff | FR-024 | Post individual payment to a bill cycle |
-| `GET` | `/api/payments/{id}` | All | FR-024 | View posted payment details |
-| `DELETE` | `/api/payments/{id}` | Staff | FR-026 | Soft‑void payment and trigger recalculation |
+| `GET` | `/api/billing` | All | FR-032 | List bill cycles with status and aging meta |
+| `POST` | `/api/billing` | Staff | FR-032 | Billing generation (itemized line items) |
+| `GET` | `/api/billing/{id}` | All | FR-033 | Detail view of billing and itemized charges |
+| `GET` | `/api/billing/{id}/forecast` | Staff | FR-029 | Preview utility charge apportionment for rooms |
 
----
-
-### 3.8 Utilities and Compliance (New)
+### 3.8 Transaction Processing (Payments)
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/add-ons` | All | FR-023b | List master appliance registry items |
-| `POST` | `/api/add-ons` | Admin | FR-023b | Register a new allowable appliance/add-on |
-| `POST`   | `/api/contracts/{id}/add-ons` | Staff, Admin | FR-023c | Attach an appliance to an active contract |
-| `DELETE` | `/api/contracts/{id}/add-ons/{add_on_id}` | Staff, Admin | FR-023c | Detach an appliance from an active contract |
-| `PATCH`  | `/api/add-ons/{id}/status` | Admin | FR-023b | Toggle appliance active/inactive status |
-| `POST` | `/api/rooms/{id}/meter-readings` | Staff, Admin | FR-023a | Record sub-meter (electric/water) data |
+| `GET` | `/api/payments` | All | FR-044 | Global payment ledger (filter by void status) |
+| `POST` | `/api/payments` | Staff | FR-039 | Post individual payment to a bill cycle |
+| `GET` | `/api/payments/{id}` | All | FR-039 | View posted payment details |
+| `POST` | `/api/payments/{id}/void` | Staff | FR-043 | Soft‑void payment (requires `void_reason`) |
 
-### 3.9 Analytical Reports
-All operational reports query standardized database views (CCR-005) and support optional pagination for large datasets. In accordance with **NFR-015**, PII (Personally Identifiable Information) data is masked/redacted for the Viewer role.
-
+### 3.9 Analytical Reports (Admin Only)
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/reports/occupancy` | All | FR-028 | Aggregated room-level metrics |
-| `GET` | `/api/reports/occupancy-status`| All | FR-028 | Bed‑level availability matrix |
-| `GET` | `/api/reports/billing-summary` | All | FR-029 | Financial overview by date range |
-| `GET` | `/api/reports/outstanding-balances`| All| FR-030 | Receivables aging and balance report |
-| `GET` | `/api/reports/tenant-ledger` | All | FR-031 | Detailed transactional profile for one tenant |
-| `GET` | `/api/reports/collections-performance`| All| FR-032 | Payment volume by method and period |
-| `GET` | `/api/reports/*/export` | All | FR-028–032 | Streamed CSV datasets for all reports |
+| `GET` | `/api/reports/occupancy` | Admin | FR-045 | Aggregated room-level metrics |
+| `GET` | `/api/reports/occupancy-status`| Admin | FR-045 | Bed‑level availability matrix |
+| `GET` | `/api/reports/billing-summary` | Admin | FR-046 | Financial overview by date range |
+| `GET` | `/api/reports/outstanding-balances`| Admin | FR-047 | Receivables aging and balance report |
+| `GET` | `/api/reports/tenant-ledger` | Admin | FR-051 | Detailed transactional profile for one tenant |
+| `GET` | `/api/reports/collections-performance`| Admin | FR-048 | Payment volume by method and period |
+| `GET` | `/api/reports/*/export` | Admin | FR-053 | Streamed CSV datasets for all reports |
 
 ### 3.10 Forensic Auditing
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/audit-logs` | Admin | FR-034 | Row‑level change logs (trigger‑written) |
-| `GET` | `/api/audit-logs/export` | Admin | FR-034 | Full forensic change log in CSV format |
-| `GET` | `/api/transaction-logs` | Admin | FR-035 | Workflow outcome logs (started/committed) |
+| `GET` | `/api/audit-logs` | Admin | FR-054 | Row‑level change logs (trigger‑written) |
+| `GET` | `/api/audit-logs/export` | Admin | FR-053 | Export audit dataset to CSV for forensic review |
 
 ---
 
@@ -156,45 +150,25 @@ All operational reports query standardized database views (CCR-005) and support 
 | **401** | `Unauthenticated.` | Missing or expired Sanctum token |
 | **403** | `User does not have the right roles.` | Role‑based permission violation |
 | **404** | `Not Found.` | Resource (ID) does not exist |
-| **409** | `Conflict.` | State machine violation (e.g. archiving occupied room) |
+| **409** | `Conflict.` | State machine violation (e.g. archiving occupied room) or Unique Constraint violation (Active records only) |
 | **422** | `The given data was invalid.` | Payload validation failure (includes `errors` map) |
 
 ---
 
-## 5. Payload Definitions (Compliance & Utilities)
+## 5. Standard Payloads
 
-### 5.1 Register a New Appliance (Master Registry)
-`POST /api/add-ons`
+### 5.1 Record a Meter Reading
+`POST /api/meters/{id}/readings`
 ```json
 {
-  "item_name": "Desktop PC",
-  "default_monthly_rate": 300.00,
-  "is_active": true
-}
-```
-
-### 5.2 Attach Appliance to Contract
-`POST /api/contracts/{id}/add-ons`
-```json
-{
-  "add_on_id": 2,
-  "actual_rate": 300.00
-}
-```
-*Note: `actual_rate` is explicitly required to allow staff to offer discounted add-ons without changing the master registry.*
-
-### 5.3 Record a Room Sub-Meter Reading
-`POST /api/rooms/{id}/meter-readings`
-```json
-{
-  "utility_type": "electric", 
   "reading_date": "2026-04-18",
-  "reading_value": 145.67
+  "reading_value": 145.67,
+  "is_rollover": false
 }
 ```
-*Note: `utility_type` must be strictly "electric" or "water". The backend will automatically infer `recorded_by` from the Sanctum authentication token.*
+*Note: `is_rollover` is required to explicitly flag dial resets per BR-MET-005. The backend will automatically infer `recorded_by` from the Sanctum token.*
 
-### 5.4 Create a New Bill Cycle (Itemized)
+### 5.2 Create a New Bill Cycle (Itemized)
 `POST /api/billing`
 ```json
 {
@@ -205,13 +179,33 @@ All operational reports query standardized database views (CCR-005) and support 
   "reading_ids": [45, 46],
   "line_items": [
     { "item_type": "base_rent", "amount": 5500.00 },
-    { "item_type": "utility", "item_description": "Water (145.67 - 140.23)", "amount": 150.00 }
+    { "item_type": "utility", "item_description": "Water (145.67 - 140.23) - Shared 50%", "amount": 75.00 }
   ]
 }
 ```
-*Note: `reading_ids` are used for forensic linkage only; the financial value must still be calculated and passed via `line_items` to maintain independent accounting/billing control.*
+*Note: `reading_ids` are for forensic linkage; amounts are calculated per BR-MET-008 and BR-MET-011.*
+
+### 5.3 Configure a Utility Rate
+`POST /api/utility-rates`
+```json
+{
+  "utility_id": 1,
+  "base_rate": 15.50,
+  "effective_from": "2026-05-01"
+}
+```
+*Note: Utility rates are temporal. The system applies the most recent rate whose `effective_from` date is on or before the billing period start.*
+
+### 5.4 Void a Payment
+`POST /api/payments/{id}/void`
+```json
+{
+  "void_reason": "Incorrect amount entered; resident actually paid ₱500.00 via GCash."
+}
+```
+*Note: Voiding is a forensic operation. The system retains the original record but excludes it from balance computations per BR-PAY-007.*
 
 ---
 
-*Aligned to: SRS.md v5.2 · SDD.md v3.5 · routes/api.php*  
-*Last Updated: April 18, 2026 (v2.4 — compliance hardening pass)*
+*Aligned to: SRS.md v4.6 · SDD.md v4.6 · DATABASE.md v4.8*  
+*Last Updated: April 20, 2026 (v3.8 — 44-trigger forensic hardening pass)*

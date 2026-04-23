@@ -1,7 +1,7 @@
 import { DM_Sans, DM_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import AppFrame from "./_components/layout/AppFrame";
-import { AuthProvider } from "./_context/AuthContext";
+import AppFrame from "@/components/layout/AppFrame";
+import { AuthProvider } from "@/context/AuthContext";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta-sans",
@@ -28,7 +28,8 @@ export const metadata = {
   },
 };
 
-import { SWRProvider } from "./_context/SWRConfig";
+import { SWRProvider } from "@/context/SWRConfig";
+import { ToastProvider } from "@/context/ToastContext";
 
 export default function RootLayout({ children }) {
   return (
@@ -40,7 +41,9 @@ export default function RootLayout({ children }) {
       <body className="min-h-full" suppressHydrationWarning>
         <SWRProvider>
           <AuthProvider>
-            <AppFrame>{children}</AppFrame>
+            <ToastProvider>
+              <AppFrame>{children}</AppFrame>
+            </ToastProvider>
           </AuthProvider>
         </SWRProvider>
       </body>

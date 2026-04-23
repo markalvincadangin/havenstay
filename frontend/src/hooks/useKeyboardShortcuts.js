@@ -2,11 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { G_KEY_ROUTES } from "../lib/keyboardNav";
+import { G_KEY_ROUTES } from "@/lib/keyboardNav";
 
 /**
  * useKeyboardShortcuts — G+letter navigation, help (?), and app shortcuts.
- * Avoids Ctrl+P (print) and Ctrl+R (browser reload); see `appKeyboardShortcuts.js`.
+ * Avoids Ctrl+P (print) and Ctrl+R (browser reload); see `keyboardNav.js`.
  *
  * @param {Function} onHelp - Callback triggered when '?' is pressed.
  */

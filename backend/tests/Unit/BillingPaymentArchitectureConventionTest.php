@@ -17,7 +17,7 @@ class BillingPaymentArchitectureConventionTest extends TestCase
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('use App\Services\Identity\AuthorizationService;', $content);
+        $this->assertStringContainsString('use App\Services\Core\AuthorizationService;', $content);
         $this->assertStringContainsString('AuthorizationService::ensureCan', $content);
     }
 
@@ -27,7 +27,7 @@ class BillingPaymentArchitectureConventionTest extends TestCase
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('use App\Services\Identity\AuthorizationService;', $content);
+        $this->assertStringContainsString('use App\Services\Core\AuthorizationService;', $content);
         $this->assertStringContainsString('AuthorizationService::ensureCan', $content);
     }
 }

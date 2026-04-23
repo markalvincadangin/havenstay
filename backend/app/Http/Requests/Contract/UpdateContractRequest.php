@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Contract;
 
-use App\Services\Identity\AuthorizationService;
+use App\Services\Core\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use App\Enums\ContractStatus;
 
 /**
  * Validates data for updating an existing tenant lease.
@@ -15,6 +17,7 @@ class UpdateContractRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        AuthorizationService::ensureCanManageContracts($this->user());
         return true;
     }
 
@@ -25,7 +28,7 @@ class UpdateContractRequest extends FormRequest
             'actual_move_out_date' => ['sometimes', 'nullable', 'date'],
             'deposit_amount' => ['sometimes', 'numeric', 'min:0'],
             'monthly_rate_override' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'status' => ['sometimes', 'string', 'in:active,completed,pending_payment,terminated'],
+            'status' => ['sometimes', Rule::enum(ContractStatus::class)],
             'notes' => ['sometimes', 'nullable', 'string'],
         ];
     }

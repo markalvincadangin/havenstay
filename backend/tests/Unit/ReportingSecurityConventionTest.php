@@ -17,28 +17,26 @@ class ReportingSecurityConventionTest extends TestCase
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('use HandlesAuthorization;', $content);
-        $this->assertStringContainsString('$this->forbidden(', $content);
-        $this->assertStringContainsString('$this->forbiddenExport(', $content);
+        $this->assertStringContainsString('AuthorizationService::ensureCanViewReports(', $content);
+        $this->assertStringNotContainsString('$this->forbidden(', $content);
+        $this->assertStringNotContainsString('$this->forbiddenExport(', $content);
     }
 
     public function test_admin_log_controllers_use_shared_authorization_trait(): void
     {
         $auditPath = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'AuditLogController.php');
-        $txPath = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'TransactionController.php');
 
         $this->assertFileExists($auditPath);
-        $this->assertFileExists($txPath);
 
         $audit = (string) file_get_contents($auditPath);
-        $tx = (string) file_get_contents($txPath);
 
-        $this->assertStringContainsString('use HandlesAuthorization;', $audit);
-        $this->assertStringContainsString('$this->forbidden(', $audit);
-        $this->assertStringContainsString('$this->forbiddenExport(', $audit);
-
-        $this->assertStringContainsString('use HandlesAuthorization;', $tx);
-        $this->assertStringContainsString('$this->forbidden(', $tx);
+        $this->assertTrue(
+            str_contains($audit, 'AuthorizationService::ensureCanViewReports(') || 
+            str_contains($audit, 'AuthorizationService::ensureCanManageUsers(') ||
+            str_contains($audit, 'AuthorizationService::ensureCanViewAuditLogs(')
+        );
+        $this->assertStringNotContainsString('$this->forbidden(', $audit);
+        $this->assertStringNotContainsString('$this->forbiddenExport(', $audit);
     }
 }
 

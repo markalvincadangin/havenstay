@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Contract;
 
-use App\Services\Identity\AuthorizationService;
+use App\Services\Core\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -15,6 +15,7 @@ class MoveOutRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        AuthorizationService::ensureCanManageContracts($this->user());
         return true;
     }
 

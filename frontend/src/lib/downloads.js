@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./config";
 import { ApiError } from "./api";
+import { buildPaginationQuery } from "./pagination";
 
 function getToken() {
   if (typeof window === "undefined") {
@@ -36,4 +37,19 @@ export async function downloadCsvWithAuth(path, fileName) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(href);
+}
+
+/**
+ * High-level helper for generating a CSV report download with authentication.
+ * 
+ * @param {object} options
+ * @param {string} options.endpoint - The API path (e.g. /api/reports/collections)
+ * @param {object} [options.filters] - Key/value pairs for query parameters
+ * @param {string} options.filenamePrefix - Base name for the generated file
+ */
+export async function exportReportCsv({ endpoint, filters = {}, filenamePrefix }) {
+  // Use buildPaginationQuery to handle param mapping (null/undefined removal)
+  const query = buildPaginationQuery(null, null, filters);
+  const stamp = new Date().toISOString().slice(0, 10);
+  await downloadCsvWithAuth(`${endpoint}${query}`, `${filenamePrefix}-${stamp}.csv`);
 }

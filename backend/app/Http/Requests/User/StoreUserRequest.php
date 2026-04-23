@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\User;
 
-use App\Services\Identity\AuthorizationService;
+use App\Services\Core\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -16,6 +16,7 @@ class StoreUserRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        AuthorizationService::ensureCanManageUsers($this->user());
         return true;
     }
 

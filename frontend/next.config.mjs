@@ -4,12 +4,32 @@ const backendOrigin =
 
 const nextConfig = {
   output: "standalone",
+  turbopack: {},
   allowedDevOrigins: ["localhost", "127.0.0.1", "book-street-maggot.ngrok-free.dev"],
   async rewrites() {
     return [
       {
         source: "/api/:path*",
         destination: `${backendOrigin}/api/:path*`,
+      },
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: "/reports/:path*",
+        destination: "/admin/reports/:path*",
+        permanent: true,
+      },
+      {
+        source: "/audit-logs/:path*",
+        destination: "/admin/audit-logs/:path*",
+        permanent: true,
+      },
+      {
+        source: "/users/:path*",
+        destination: "/admin/users/:path*",
+        permanent: true,
       },
     ];
   },

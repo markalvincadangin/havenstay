@@ -3,169 +3,121 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Tenant\IndexTenantRequest;
+use App\Http\Requests\Tenant\ManageTenantRequest;
 use App\Http\Requests\Tenant\StoreTenantRequest;
 use App\Http\Requests\Tenant\UpdateTenantRequest;
+use App\Http\Resources\TenantResource;
 use App\Models\Tenant;
-use App\Services\Analytics\PiiMaskingService;
-use App\Services\Identity\AuthorizationService;
 use App\Services\Operations\TenantService;
 use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * TenantController
+ * 
+ * Manages tenant profiles and state reconciliation.
+ * Optimized for HavenStay Forensic v5.0 with API Resource serialization.
+ */
 class TenantController extends Controller
 {
-
     /**
-     * Get all tenants
-     *
-     * @param Request $request
-     * @return JsonResponse
+     * FR-011: List all tenants with filtering and masking.
      */
-    public function index(Request $request): JsonResponse
+    public function index(IndexTenantRequest $request): JsonResponse
     {
-        return $this->listTenants($request);
+        $validated = $request->validated();
+        $pageParams = Pagination::normalizePageParams($validated);
+
+        $paginator = TenantService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
+
+        return $this->paginated($paginator, [], 'Tenants retrieved successfully.');
     }
 
     /**
-     * Get tenant summary
+     * FR-011b: Retrieve summary statistics for tenant distribution.
      */
     public function summary(Request $request): JsonResponse
     {
-        AuthorizationService::ensureCanViewTenants($request->user());
-
         $summary = TenantService::summary();
 
-        return response()->json([
-            'message' => 'Tenant summary retrieved successfully.',
-            'data' => $summary,
-        ]);
+        return $this->success('Tenant summary retrieved successfully.', $summary);
     }
 
     /**
-     * Create a new tenant
-     */
-    public function store(StoreTenantRequest $request): JsonResponse
-    {
-        AuthorizationService::ensureCanManageTenants($request->user());
-
-        $validated = $request->validated();
-
-        $tenant = TenantService::create($request->user(), $validated);
-
-        return response()->json([
-            'message' => 'Tenant created successfully.',
-            'data' => $tenant,
-        ], 201);
-    }
-
-    /**
-     * Get a tenant by ID
-     */
-    public function show(Request $request, int $id): JsonResponse
-    {
-        AuthorizationService::ensureCanViewTenants($request->user());
-
-        $tenant = TenantService::findByIdWithTrashedOrFail($id);
-        $payload = PiiMaskingService::maybeMaskTenantArray($request->user(), $tenant->toArray());
-
-        return response()->json([
-            'message' => 'Tenant retrieved successfully.',
-            'data' => $payload,
-        ]);
-    }
-
-    /**
-     * Update a tenant
-     */
-    public function update(UpdateTenantRequest $request, Tenant $tenant): JsonResponse
-    {
-        AuthorizationService::ensureCanManageTenants($request->user());
-
-        $validated = $request->validated();
-
-        $tenant = TenantService::update($request->user(), $tenant, $validated);
-
-        return response()->json([
-            'message' => 'Tenant updated successfully.',
-            'data' => $tenant,
-        ]);
-    }
-
-    /**
-     * Reactivate a tenant
-     */
-    public function reactivate(Request $request, Tenant $tenant): JsonResponse
-    {
-        AuthorizationService::ensureCanManageTenants($request->user());
-
-        $tenant = TenantService::reactivate($request->user(), $tenant);
-
-        return response()->json([
-            'message' => 'Tenant reactivated successfully.',
-            'data' => $tenant,
-        ]);
-    }
-
-    /**
-     * Search tenants
+     * FR-011c: Lightweight tenant search for autocompletes.
      */
     public function search(Request $request): JsonResponse
     {
-        return $this->listTenants($request);
+        $query = $request->query('q', '');
+        $status = $request->query('status', '');
+        
+        $results = TenantService::searchRichBuilder($query, $status)->limit(20)->get();
+
+        return $this->success('Search results retrieved.', TenantResource::collection($results));
     }
 
     /**
-     * Archive a tenant
+     * FR-011a: Retrieve detailed tenant forensic record.
      */
-    public function archive(Request $request, Tenant $tenant): JsonResponse
+    public function show(ManageTenantRequest $request, Tenant $tenant): JsonResponse
     {
-        AuthorizationService::ensureCanManageTenants($request->user());
+        $loaded = TenantService::getById((int) $tenant->tenant_id);
+        if (!$loaded) {
+            return $this->error('Tenant not found.', 404);
+        }
 
-        $tenant = TenantService::archive($request->user(), $tenant);
-
-        return response()->json([
-            'message' => 'Tenant profile archived for forensic retention.',
-            'data' => $tenant,
-        ]);
+        return $this->success('Tenant retrieved successfully.', new TenantResource($loaded));
     }
 
     /**
-     * Restore a tenant
+     * FR-012: Register a new tenant.
      */
-    public function restore(Request $request, int $id): JsonResponse
+    public function store(StoreTenantRequest $request): JsonResponse
     {
-        AuthorizationService::ensureCanManageTenants($request->user());
+        $tenant = TenantService::create($request->user(), $request->validated());
 
-        $tenant = TenantService::restore($request->user(), $id);
-
-        return response()->json([
-            'message' => 'Tenant profile restored to active operations.',
-            'data' => $tenant,
-        ]);
+        return $this->created('Tenant created successfully.', new TenantResource($tenant));
     }
 
-    public function listTenants(Request $request): JsonResponse
+    /**
+     * FR-013: Update tenant contact information.
+     */
+    public function update(UpdateTenantRequest $request, Tenant $tenant): JsonResponse
     {
-        AuthorizationService::ensureCanViewTenants($request->user());
+        $updated = TenantService::update($request->user(), $tenant, $request->validated());
 
-        $validated = $request->validate(array_merge([
-            'q' => ['nullable', 'string', 'max:200'],
-            'status' => ['nullable', 'string', 'in:active,moved_out,archived'],
-        ], Pagination::queryRules()));
-
-        $pageParams = Pagination::normalizePageParams($validated);
-        $q = $validated['q'] ?? '';
-        $status = $validated['status'] ?? '';
-
-        $paginator = TenantService::searchRichBuilder($q, $status)
-            ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
-
-        $paginator->through(function ($tenant) use ($request) {
-            return PiiMaskingService::maybeMaskTenantArray($request->user(), $tenant->toArray());
-        });
-
-        return Pagination::fromPaginator($paginator);
+        return $this->success('Tenant updated successfully.', new TenantResource($updated));
     }
 
+    /**
+     * FR-014: Archive tenant record (Soft Delete).
+     */
+    public function archive(ManageTenantRequest $request, Tenant $tenant): JsonResponse
+    {
+        $archived = TenantService::archive($request->user(), $tenant);
+
+        return $this->success('Tenant archived successfully.', new TenantResource($archived));
+    }
+
+    /**
+     * Reactivate a moved-out or inactive tenant.
+     */
+    public function reactivate(ManageTenantRequest $request, Tenant $tenant): JsonResponse
+    {
+        $reactivated = TenantService::reactivate($request->user(), $tenant);
+
+        return $this->success('Tenant reactivated successfully.', new TenantResource($reactivated));
+    }
+
+    /**
+     * Restore an archived tenant record.
+     */
+    public function restore(ManageTenantRequest $request, int $id): JsonResponse
+    {
+        $restored = TenantService::restore($request->user(), $id);
+
+        return $this->success('Tenant restored successfully.', new TenantResource($restored));
+    }
 }

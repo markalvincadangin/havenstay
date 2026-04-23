@@ -1,105 +1,71 @@
 <?php
-
-namespace App\Http\Controllers\Api;
-
-use App\Http\Controllers\Controller;
-use App\Http\Requests\Payment\StorePaymentRequest;
-use App\Http\Requests\Payment\VoidPaymentRequest;
-use App\Models\Payment;
-use App\Services\Identity\AuthorizationService;
-use App\Services\Operations\PaymentService;
-use App\Services\Analytics\PiiMaskingService;
-use App\Support\Pagination;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-
-class PaymentController extends Controller
-{
-
-    /**
-     */
-    public function index(Request $request): JsonResponse
-    {
-        AuthorizationService::ensureCanViewBilling($request->user());
-
-        $validated = $request->validate(array_merge([
-            'tenant_id' => ['nullable', 'integer'],
-            'contract_id' => ['nullable', 'integer'],
-            'billing_id' => ['nullable', 'integer'],
-            'q' => ['nullable', 'string', 'max:200'],
-            'payment_from' => ['nullable', 'date'],
-            'payment_to' => ['nullable', 'date'],
-            'posting_status' => ['nullable', 'string', 'in:posted,voided'],
-        ], Pagination::queryRules()));
-
-        $pageParams = Pagination::normalizePageParams($validated);
-
-        $filters = array_filter(
-            [
-                'tenant_id' => $validated['tenant_id'] ?? null,
-                'contract_id' => $validated['contract_id'] ?? null,
-                'billing_id' => $validated['billing_id'] ?? null,
-                'q' => isset($validated['q']) ? trim((string) $validated['q']) : '',
-                'payment_from' => $validated['payment_from'] ?? '',
-                'payment_to' => $validated['payment_to'] ?? '',
-                'posting_status' => $validated['posting_status'] ?? '',
-            ],
-            fn ($v) => $v !== null && $v !== ''
-        );
-
-        $paginator = PaymentService::listHistoryQuery($filters)
-            ->paginate($pageParams['per_page'], ['*'], 'page', $pageParams['page']);
-
-        return Pagination::fromPaginator($paginator);
-    }
-
-    /**
-     */
-    public function show(Request $request, Payment $payment): JsonResponse
-    {
-        AuthorizationService::ensureCanViewBilling($request->user());
-
-        $loadedPayment = PaymentService::getById((int) $payment->payment_id);
-        if (! $loadedPayment) {
-            return response()->json(['message' => 'Payment not found.'], 404);
-        }
-
-        $payload = PiiMaskingService::maskPaymentNestedTenant($request->user(), $loadedPayment->toArray());
-
-        return response()->json([
-            'message' => 'Payment retrieved successfully.',
-            'data' => $payload,
-        ]);
-    }
-
-    /**
-     */
-    public function store(StorePaymentRequest $request): JsonResponse
-    {
-        AuthorizationService::ensureCanManagePayments($request->user());
-
-        $validated = $request->validated();
-
-        $billing = PaymentService::record($request->user(), $validated);
-
-        return response()->json([
-            'message' => 'Payment recorded successfully.',
-            'data' => $billing,
-        ], 201);
-    }
-
-    /**
-     */
-    public function destroy(VoidPaymentRequest $request, Payment $payment): JsonResponse
-    {
-        AuthorizationService::ensureCanManagePayments($request->user());
-
-        $reason = $request->validated()['void_reason'] ?? null;
-        PaymentService::void($request->user(), $payment, $reason);
-
-        return response()->json([
-            'message' => 'Payment voided successfully.',
-            'data' => null,
-        ]);
-    }
-}
+ 
+ namespace App\Http\Controllers\Api;
+ 
+ use App\Http\Controllers\Controller;
+ use App\Http\Requests\Payment\IndexPaymentRequest;
+ use App\Http\Requests\Payment\ManagePaymentRequest;
+ use App\Http\Requests\Payment\StorePaymentRequest;
+ use App\Http\Requests\Payment\VoidPaymentRequest;
+ use App\Http\Resources\PaymentResource;
+ use App\Models\Payment;
+ use App\Services\Operations\PaymentService;
+ use App\Support\Pagination;
+ use Illuminate\Http\JsonResponse;
+ use Illuminate\Http\Request;
+ 
+ /**
+  * PaymentController
+  * 
+  * Orchestrates financial transactions, XOR targeting, and void workflows.
+  * Optimized for HavenStay Forensic v5.0 with API Resource serialization.
+  */
+ class PaymentController extends Controller
+ {
+     /**
+      * FR-042: List payment history with forensic filters.
+      */
+     public function index(IndexPaymentRequest $request): JsonResponse
+     {
+         $validated = $request->validated();
+         $pageParams = Pagination::normalizePageParams($validated);
+ 
+         $paginator = PaymentService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
+ 
+         return $this->paginated($paginator, [], 'Payment history retrieved successfully.');
+     }
+ 
+     /**
+      * FR-042a: Retrieve detailed payment forensic trace.
+      */
+     public function show(ManagePaymentRequest $request, Payment $payment): JsonResponse
+     {
+         $loadedPayment = PaymentService::getById((int) $payment->payment_id);
+         if (!$loadedPayment) {
+             return $this->error('Payment not found.', 404);
+         }
+ 
+         return $this->success('Payment retrieved successfully.', new PaymentResource($loadedPayment));
+     }
+ 
+     /**
+      * FR-041: Record a new payment (Atomic XOR targeting).
+      */
+     public function store(StorePaymentRequest $request): JsonResponse
+     {
+         $payment = PaymentService::record($request->user(), $request->validated());
+ 
+         return $this->created('Payment recorded successfully.', new PaymentResource($payment));
+     }
+ 
+     /**
+      * FR-043: Void a payment and reverse impacts.
+      */
+     public function void(VoidPaymentRequest $request, Payment $payment): JsonResponse
+     {
+         $reason = $request->validated()['void_reason'];
+         $voided = PaymentService::void($request->user(), $payment, $reason);
+ 
+         return $this->success('Payment voided successfully.', new PaymentResource($voided));
+     }
+ }

@@ -32,7 +32,7 @@ SHOW REPLICA STATUS\G
 ```
 
 ### Forensic Auditing
-To trace a specific workflow outcome to its database changes, use the `correlation_id` found in the **Transaction Logs** and filter the **Audit Logs** by that ID (BR-012).
+To trace a specific workflow outcome to its database changes, filter the **Audit Logs** by the `correlation_id` returned in the API response header or found in the audit entry details.
 
 ---
 *Last Updated: April 2026*

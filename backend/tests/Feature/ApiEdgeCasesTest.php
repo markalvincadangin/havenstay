@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
+use App\Models\AuditLog;
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -68,7 +70,7 @@ class ApiEdgeCasesTest extends TestCase
     public function test_login_unknown_username_returns_validation_error(): void
     {
         $this->postJson('/api/auth/login', [
-            'username' => 'no_such_user_'.uniqid(),
+            'username' => 'no_such_user_' . uniqid(),
             'password' => 'any-password-123',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['username']);
@@ -77,16 +79,16 @@ class ApiEdgeCasesTest extends TestCase
     public function test_contract_create_rejects_unknown_tenant(): void
     {
         $room = Room::create([
-            'room_code' => 'EC-'.uniqid(),
-            'room_type' => 'solo',
+            'room_code' => 'EC-' . uniqid(),
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'B1',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         $this->actingAs($this->adminUser)->postJson('/api/contracts', [
@@ -105,20 +107,20 @@ class ApiEdgeCasesTest extends TestCase
             'first_name' => 'Archived',
             'last_name' => 'Person',
             'contact_number' => '+639100000001',
-            'status' => 'archived',
+            'status' => \App\Enums\TenantStatus::ARCHIVED->value,
         ]));
 
         $room = Room::create([
-            'room_code' => 'EC-'.uniqid(),
-            'room_type' => 'solo',
+            'room_code' => 'EC-' . uniqid(),
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'B1',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         $this->actingAs($this->adminUser)->postJson('/api/contracts', [
@@ -141,24 +143,24 @@ class ApiEdgeCasesTest extends TestCase
         ]));
 
         $roomA = Room::create([
-            'room_code' => 'ECA-'.uniqid(),
-            'room_type' => 'shared',
+            'room_code' => 'ECA-' . uniqid(),
+            'room_type' => \App\Enums\RoomType::SHARED->value,
             'capacity' => 2,
             'monthly_rate' => 3000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
         $roomB = Room::create([
-            'room_code' => 'ECB-'.uniqid(),
-            'room_type' => 'shared',
+            'room_code' => 'ECB-' . uniqid(),
+            'room_type' => \App\Enums\RoomType::SHARED->value,
             'capacity' => 2,
             'monthly_rate' => 3000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $bedInRoomB = BedSpace::create([
             'room_id' => $roomB->room_id,
             'bed_label' => 'X',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         $this->actingAs($this->adminUser)->postJson('/api/contracts', [
@@ -184,7 +186,7 @@ class ApiEdgeCasesTest extends TestCase
     public function test_contract_move_out_rejects_non_active_contract(): void
     {
         $contract = $this->makeActiveContractFixture();
-        $contract->update(['status' => 'completed']);
+        $contract->update(['status' => \App\Enums\ContractStatus::COMPLETED->value]);
 
         $this->actingAs($this->adminUser)->postJson("/api/contracts/{$contract->contract_id}/move-out", [
             'actual_move_out' => '2026-12-01',
@@ -198,19 +200,19 @@ class ApiEdgeCasesTest extends TestCase
             'first_name' => 'V',
             'last_name' => 'Viewer',
             'contact_number' => '+639100000003',
-            'status' => 'active',
+            'status' => \App\Enums\TenantStatus::ACTIVE->value,
         ]));
         $room = Room::create([
-            'room_code' => 'ECV-'.uniqid(),
-            'room_type' => 'solo',
+            'room_code' => 'ECV-' . uniqid(),
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'B1',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
         $this->actingAs($this->viewerUser)->postJson('/api/contracts', [
@@ -232,7 +234,7 @@ class ApiEdgeCasesTest extends TestCase
             'billing_period_to' => '2026-06-01',
             'due_date' => '2026-07-05',
             'line_items' => [
-                ['item_type' => 'base_rent', 'item_description' => 'Rent', 'amount' => 3000],
+                ['item_type' => 'base_rent', 'description' => 'Rent', 'amount' => 3000],
             ],
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['billing_period_to']);
@@ -248,7 +250,7 @@ class ApiEdgeCasesTest extends TestCase
             'billing_period_to' => '2026-07-31',
             'due_date' => '2026-08-05',
             'line_items' => [
-                ['item_type' => 'base_rent', 'item_description' => 'Rent', 'amount' => 4000],
+                ['item_type' => 'base_rent', 'description' => 'Rent', 'amount' => 4000],
             ],
         ];
 
@@ -267,11 +269,11 @@ class ApiEdgeCasesTest extends TestCase
             'billing_period_to' => '2026-08-31',
             'due_date' => '2026-09-05',
             'line_items' => [
-                ['item_type' => 'base_rent', 'item_description' => 'Rent', 'amount' => 1000],
-                ['item_type' => 'adjustment', 'item_description' => 'Adj', 'amount' => -5000],
+                ['item_type' => 'base_rent', 'description' => 'Rent', 'amount' => 1000],
+                ['item_type' => 'adjustment', 'description' => 'Adj', 'amount' => -5000],
             ],
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['line_items']);
+            ->assertJsonValidationErrors(['line_items.1.amount']);
     }
 
     public function test_billing_create_requires_active_contract(): void
@@ -285,7 +287,7 @@ class ApiEdgeCasesTest extends TestCase
             'billing_period_to' => '2026-09-30',
             'due_date' => '2026-10-05',
             'line_items' => [
-                ['item_type' => 'base_rent', 'item_description' => 'Rent', 'amount' => 2000],
+                ['item_type' => 'base_rent', 'description' => 'Rent', 'amount' => 2000],
             ],
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['contract_id']);
@@ -324,8 +326,8 @@ class ApiEdgeCasesTest extends TestCase
             'processed_by' => $this->adminUser->user_id,
             'amount_paid' => 50,
             'payment_date' => now(),
-            'payment_method' => Payment::METHOD_CASH,
-            'reference_number' => 'REF-'.uniqid(),
+            'payment_method' => PaymentMethod::CASH->value,
+            'reference_number' => 'REF-' . uniqid(),
         ]);
 
         $this->actingAs($this->viewerUser)
@@ -335,14 +337,14 @@ class ApiEdgeCasesTest extends TestCase
 
     public function test_tenant_ledger_requires_tenant_id(): void
     {
-        $this->actingAs($this->viewerUser)->getJson('/api/reports/tenant-ledger')
+        $this->actingAs($this->adminUser)->getJson('/api/reports/tenant-ledger')
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['tenant_id']);
     }
 
     public function test_tenant_ledger_rejects_nonexistent_tenant_id(): void
     {
-        $this->actingAs($this->staffUser)->getJson('/api/reports/tenant-ledger?tenant_id=999999')
+        $this->actingAs($this->adminUser)->getJson('/api/reports/tenant-ledger?tenant_id=999999')
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['tenant_id']);
     }
@@ -350,7 +352,7 @@ class ApiEdgeCasesTest extends TestCase
     public function test_room_create_rejects_invalid_room_type(): void
     {
         $this->actingAs($this->adminUser)->postJson('/api/rooms', [
-            'room_code' => 'BAD-'.uniqid(),
+            'room_code' => 'BAD-' . uniqid(),
             'room_type' => 'suite',
             'capacity' => 1,
             'monthly_rate' => 5000,
@@ -365,7 +367,7 @@ class ApiEdgeCasesTest extends TestCase
 
     public function test_staff_cannot_view_transaction_logs(): void
     {
-        $this->actingAs($this->staffUser)->getJson('/api/transaction-logs')->assertForbidden();
+        $this->actingAs($this->staffUser)->getJson('/api/audit-logs/export')->assertForbidden();
     }
 
     public function test_tenant_search_accepts_empty_query(): void
@@ -394,10 +396,10 @@ class ApiEdgeCasesTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_collections_performance_report_is_readable_by_viewer(): void
+    public function test_collections_performance_report_restricted_by_viewer(): void
     {
         $this->actingAs($this->viewerUser)->getJson('/api/reports/collections-performance')
-            ->assertOk();
+            ->assertForbidden();
     }
 
     private function makeActiveContractFixture(): Contract
@@ -406,20 +408,20 @@ class ApiEdgeCasesTest extends TestCase
             'first_name' => 'Fixture',
             'last_name' => 'Tenant',
             'contact_number' => '+639199900001',
-            'status' => 'active',
+            'status' => \App\Enums\TenantStatus::ACTIVE->value,
         ]));
 
         $room = Room::create([
-            'room_code' => 'FX-'.uniqid(),
-            'room_type' => 'solo',
+            'room_code' => 'FX-' . uniqid(),
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4500,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'F1',
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         return Contract::create([
@@ -429,7 +431,9 @@ class ApiEdgeCasesTest extends TestCase
             'move_in_date' => '2026-04-01',
             'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 500,
-            'status' => 'active',
+            'monthly_rate' => 4500,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'status' => \App\Enums\ContractStatus::ACTIVE->value,
         ]);
     }
 
@@ -442,7 +446,7 @@ class ApiEdgeCasesTest extends TestCase
             'billing_period_from' => '2026-05-01',
             'billing_period_to' => '2026-05-31',
             'due_date' => '2026-06-05',
-            'status' => 'unpaid',
+            'status' => \App\Enums\BillingStatus::UNPAID->value,
         ]);
 
         BillingLineItem::create([
@@ -453,5 +457,19 @@ class ApiEdgeCasesTest extends TestCase
         ]);
 
         return $billing;
+    }
+
+    protected function tenantAttributes(array $overrides = []): array
+    {
+        return array_merge([
+            'first_name' => 'John',
+            'last_name' => 'Doe',
+            'email' => 'john' . uniqid() . '@example.com',
+            'contact_number' => '+639170000000',
+            'emergency_contact_name' => 'Jane Doe',
+            'emergency_contact_number' => '+639170000001',
+            'address' => '123 Main St, City',
+            'status' => 'active',
+        ], $overrides);
     }
 }

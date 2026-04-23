@@ -27,9 +27,9 @@ class ControllerAuthorizationConsistencyTest extends TestCase
             }
 
             $this->assertStringContainsString(
-                'use HandlesAuthorization;',
+                'AuthorizationService::',
                 $content,
-                basename($path).' should use shared authorization trait.'
+                basename($path).' should use centralized AuthorizationService.'
             );
 
             $this->assertStringNotContainsString(

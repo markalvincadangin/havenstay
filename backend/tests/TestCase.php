@@ -3,6 +3,15 @@
 namespace Tests;
 
 use App\Models\Role;
+use App\Models\Room;
+use App\Models\Tenant;
+use App\Models\BedSpace;
+use App\Models\Contract;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
+use App\Enums\BedSpaceStatus;
+use App\Enums\ContractStatus;
+use App\Enums\TenantStatus;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\DB;
 
@@ -34,6 +43,7 @@ abstract class TestCase extends BaseTestCase
             'emergency_contact_name' => 'Test Emergency Contact',
             'emergency_contact_number' => '+639000000001',
             'address' => '123 Test Street, Quezon City',
+            'status' => TenantStatus::ACTIVE->value,
         ], $overrides);
     }
 
@@ -41,9 +51,9 @@ abstract class TestCase extends BaseTestCase
     {
         return array_merge([
             'room_code' => 'R101',
-            'room_type' => 'shared',
+            'room_type' => RoomType::SHARED->value,
             'monthly_rate' => 5000,
-            'status' => 'active',
+            'status' => RoomStatus::AVAILABLE->value,
         ], $overrides);
     }
 
@@ -51,7 +61,7 @@ abstract class TestCase extends BaseTestCase
     {
         return array_merge([
             'bed_label' => 'B1',
-            'status' => 'vacant',
+            'status' => BedSpaceStatus::VACANT->value,
         ], $overrides);
     }
 
@@ -61,7 +71,7 @@ abstract class TestCase extends BaseTestCase
             'move_in_date' => now()->toDateString(),
             'monthly_rate_override' => null,
             'deposit_amount' => 5000,
-            'status' => 'pending_payment',
+            'status' => ContractStatus::PENDING_PAYMENT->value,
         ], $overrides);
     }
 

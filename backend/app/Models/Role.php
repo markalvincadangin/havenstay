@@ -25,12 +25,6 @@ class Role extends Model
         'description',
     ];
 
-    const ADMIN = 'admin';
-
-    const STAFF = 'staff';
-
-    const VIEWER = 'viewer';
-
     protected function casts(): array
     {
         return [

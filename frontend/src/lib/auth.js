@@ -11,6 +11,11 @@ export function canManageContracts(user) {
   return role === "admin" || role === "staff";
 }
 
+export function canManageUtilityRates(user) {
+  const role = getRole(user);
+  return role === "admin" || role === "staff";
+}
+
 export function canManageTenants(user) {
   const role = getRole(user);
   return role === "admin" || role === "staff";
@@ -38,7 +43,17 @@ export function canViewBilling(user) {
 
 export function canViewReports(user) {
   const role = getRole(user);
-  return ["admin", "staff", "viewer"].includes(role);
+  return role === "admin";
+}
+
+export function canViewAuditLogs(user) {
+  const role = getRole(user);
+  return role === "admin";
+}
+
+export function canManageMeters(user) {
+  const role = getRole(user);
+  return role === "admin" || role === "staff";
 }
 
 export async function fetchCurrentUser() {

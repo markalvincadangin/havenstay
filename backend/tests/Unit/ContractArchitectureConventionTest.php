@@ -17,17 +17,17 @@ class ContractArchitectureConventionTest extends TestCase
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('use HandlesAuthorization;', $content);
-        $this->assertStringContainsString('$this->forbidden(', $content);
+        $this->assertStringContainsString('use App\Services\Core\AuthorizationService;', $content);
+        $this->assertStringContainsString('AuthorizationService::ensureCan', $content);
     }
 
     public function test_contract_service_uses_actor_for_bed_occupancy_transition(): void
     {
-        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'ContractService.php');
+        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'Operations'.DIRECTORY_SEPARATOR.'ContractService.php');
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('RoomService::occupyBedSpace($actor, $bed);', $content);
+        $this->assertStringContainsString('RoomService::occupyBedSpace($actor, $bedSpace);', $content);
     }
 }
 

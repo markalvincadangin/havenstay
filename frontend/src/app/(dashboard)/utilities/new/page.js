@@ -1,0 +1,175 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { Zap, Ruler,  } from "lucide-react";
+import { apiRequest } from "@/lib/api";
+import { canManageUsers } from "@/lib/auth";
+import { applyServerFieldErrors } from "@/lib/forms";
+import Alert from "@/components/ui/Alert";
+import Breadcrumbs from "@/components/ui/Breadcrumbs";
+import Button from "@/components/ui/Button";
+import { Field, Input } from "@/components/ui/Fields";
+import Link from "next/link";
+import { primaryLinkCtaClass, secondaryOutlineLinkClass } from "@/components/ui/LinkTokens";
+import StandardPage from "@/components/ui/StandardPage";
+import { FormSection } from "@/components/ui/FormSection";
+import PageHeaderActions from "@/components/ui/PageHeaderActions";
+import { useAuth } from "@/context/AuthContext";
+import { useToasts } from "@/context/ToastContext";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
+export default function RegisterUtilityPage() {
+  const router = useRouter();
+  const { user: currentUser } = useAuth();
+  const { showToast } = useToasts();
+  const [apiError, setApiError] = useState("");
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors, isSubmitting, isDirty },
+  } = useForm({
+    defaultValues: {
+      name: "",
+      unit_of_measurement: "",
+      initial_base_rate: "",
+      effective_from: new Date().toISOString().split("T")[0],
+    },
+  });
+  useUnsavedChangesWarning(isDirty && !isSubmitting);
+  const onSubmit = async (values) => {
+    setApiError("");
+    if (!canManageUsers(currentUser)) return;
+    try {
+      const response = await apiRequest("/api/utilities", {
+        method: "POST",
+        body: JSON.stringify({
+          name: values.name,
+          unit_of_measurement: values.unit_of_measurement,
+          initial_base_rate: parseFloat(values.initial_base_rate),
+          effective_from: values.effective_from,
+        }),
+      });
+      const utilityId = response?.utility_id || response?.id;
+      showToast(`${values.name} utility registered successfully.`, "success");
+      if (utilityId) {
+        router.push(`/utilities/${utilityId}`);
+      } else {
+        router.push("/utilities");
+      }
+    } catch (error) {
+       applyServerFieldErrors(error, setError, { setApiError });
+    }
+  };
+  const readOnly = !canManageUsers(currentUser);
+  return (
+    <StandardPage
+      title="Register Utility Service"
+      subtitle="Define a new metrology category and its baseline scheduling."
+      breadcrumbs={
+        <Breadcrumbs items={[{ label: "Utilities", href: "/utilities" }, { label: "Register Service" }]} />
+      }
+      actions={
+        <PageHeaderActions
+          backHref="/utilities"
+          backLabel="Back to Catalog"
+          user={currentUser}
+        />
+      }
+    >
+      <form onSubmit={handleSubmit(onSubmit)} className="mx-auto w-full max-w-4xl space-y-6" noValidate>
+        {readOnly && (
+          <Alert variant="warning" title="Access restricted" data-testid="access-denied-register-utility">
+            Modifying the central utility catalog is restricted to Administrators to maintain financial integrity.
+          </Alert>
+        )}
+        <FormSection
+          title="Service Identity"
+          icon={Zap}
+          rightElement={<span className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Required</span>}
+        >
+          <div className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <Field 
+                label="System Label" 
+                required 
+                error={errors.name?.message}
+                helpText="Common identifier (e.g., Internet, Power, Cleaning)."
+              >
+                <Input
+                  autoFocus
+                  placeholder="e.g. Internet"
+                  className="!h-11 border-stone-200 focus:border-teal-500/50"
+                  disabled={readOnly}
+                  {...register("name", { required: "Service name is required." })}
+                />
+              </Field>
+              <Field 
+                label="Unit of Measurement" 
+                required 
+                error={errors.unit_of_measurement?.message}
+                helpText="The base metric calculated on the ledger (e.g. kWh, m3, Month)."
+              >
+                <Input
+                  placeholder="e.g. Month"
+                  className="!h-11 border-stone-200 focus:border-teal-500/50"
+                  disabled={readOnly}
+                  {...register("unit_of_measurement", { required: "Unit is required." })}
+                />
+              </Field>
+            </div>
+          </div>
+        </FormSection>
+        <FormSection
+          title="Initial Rate Schedule"
+          icon={Ruler}
+          rightElement={<span className="text-[10px] font-bold uppercase tracking-widest text-stone-300">Composite Validation</span>}
+        >
+          <div className="space-y-6">
+            <p className="text-xs text-stone-500 max-w-2xl">
+              To prevent un-billable gaps in the financial ledger, all newly registered utilities require a baseline financial rate from day one. You can adjust this later through scheduled changes.
+            </p>
+            <div className="grid gap-6 sm:grid-cols-2 border-t border-dashed border-stone-200 pt-6">
+                <Field label="Base Rate (PHP)" required error={errors.initial_base_rate?.message}>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="!h-11 border-stone-200 font-mono focus:border-teal-500/50 tabular-nums"
+                    disabled={readOnly}
+                    {...register("initial_base_rate", { required: "Initial rate is required." })}
+                  />
+                </Field>
+                <Field label="Effective Start Date" required error={errors.effective_from?.message}>
+                  <Input
+                    type="date"
+                    className="!h-11 border-stone-200 font-bold focus:border-teal-500/50"
+                    disabled={readOnly}
+                    {...register("effective_from", { required: "Start date is required." })}
+                  />
+                </Field>
+            </div>
+          </div>
+        </FormSection>
+        {apiError && <Alert variant="error" title="Could not complete registration">{apiError}</Alert>}
+        <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:justify-end">
+          <Link
+            href="/utilities"
+            className={secondaryOutlineLinkClass + " px-10"}
+          >
+            Cancel
+          </Link>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={isSubmitting}
+            disabled={readOnly || isSubmitting}
+            className={primaryLinkCtaClass + " px-12 border-0 bg-teal-600 hover:bg-teal-700"}
+          >
+             Commit Service Registration
+          </Button>
+        </div>
+      </form>
+    </StandardPage>
+  );
+}

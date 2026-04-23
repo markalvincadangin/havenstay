@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Card } from "./_components/ui/Card";
-import Button from "./_components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import Button from "@/components/ui/Button";
 
 export default function NotFound() {
   return (

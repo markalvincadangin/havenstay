@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { buildPaginationQuery, readStoredPerPage, writeStoredPerPage } from "../lib/pagination";
+import { buildPaginationQuery, readStoredPerPage, writeStoredPerPage } from "@/lib/pagination";
 
 export function usePaginatedFilters({
   initialFilters,

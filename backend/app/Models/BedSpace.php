@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Enums\BedSpaceStatus;
+use App\Enums\ContractStatus;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -16,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $bed_space_id
  * @property int $room_id
  * @property string $bed_label
- * @property string $status
+ * @property \App\Enums\BedSpaceStatus $status
  */
 class BedSpace extends Model
 {
@@ -32,16 +34,11 @@ class BedSpace extends Model
         'status',
     ];
 
-    const STATUS_VACANT = 'vacant';
-
-    const STATUS_OCCUPIED = 'occupied';
-
-    const STATUS_MAINTENANCE = 'maintenance';
 
     protected function casts(): array
     {
         return [
-            'status' => 'string',
+            'status' => BedSpaceStatus::class,
         ];
     }
 
@@ -67,7 +64,7 @@ class BedSpace extends Model
     public function activeContract(): HasOne
     {
         return $this->hasOne(Contract::class, 'bed_space_id', 'bed_space_id')
-            ->where('status', Contract::STATUS_ACTIVE)
+            ->where('status', ContractStatus::ACTIVE)
             ->whereNull('deleted_at');
     }
 }

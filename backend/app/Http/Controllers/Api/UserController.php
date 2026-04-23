@@ -1,218 +1,137 @@
 <?php
-
-namespace App\Http\Controllers\Api;
-
-use App\Http\Controllers\Controller;
-use App\Http\Requests\User\StoreUserRequest;
-use App\Http\Requests\User\UpdateUserRequest;
-use App\Models\Role;
-use App\Models\User;
-use App\Services\Identity\AuthorizationService;
-use App\Services\Identity\UserService;
-use App\Support\Pagination;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-
-class UserController extends Controller
-{
-
-    /**
-     * Create a new user.
-     *
-     * @param StoreUserRequest $request
-     * @return JsonResponse
-     */
-    public function store(StoreUserRequest $request): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        $validated = $request->validated();
-
-        $user = UserService::create($request->user(), $validated);
-
-        return response()->json([
-            'message' => 'User created successfully.',
-            'data' => $user->load('role'),
-        ], 201);
-    }
-
-    /**
-     * Retrieve a specific user.
-     *
-     * @param Request $request
-     * @param User $user
-     * @return JsonResponse
-     */
-    public function show(Request $request, User $user): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        return response()->json([
-            'message' => 'User retrieved successfully.',
-            'data' => $user->load('role'),
-        ]);
-    }
-
-    /**
-     * Update an existing user.
-     *
-     * @param UpdateUserRequest $request
-     * @param User $user
-     * @return JsonResponse
-     */
-    public function update(UpdateUserRequest $request, User $user): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        $validated = $request->validated();
-
-        $user = UserService::update($request->user(), $user, $validated);
-
-        return response()->json([
-            'message' => 'User updated successfully.',
-            'data' => $user->load('role'),
-        ]);
-    }
-
-    /**
-     * Deactivate a user account.
-     *
-     * @param Request $request
-     * @param User $user
-     * @return JsonResponse
-     */
-    public function deactivate(Request $request, User $user): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        // Safety: Prevent self-deactivation (Admin cannot lock themselves out)
-        if ($user->user_id === $request->user()->user_id) {
-            return response()->json([
-                'message' => 'Conflict: You cannot deactivate your own account.',
-            ], 400);
-        }
-
-        $user = UserService::deactivate($request->user(), $user);
-
-        return response()->json([
-            'message' => 'User deactivated successfully.',
-            'data' => $user->load('role'),
-        ]);
-    }
-
-    /**
-     * Reactivate a user account.
-     *
-     * @param Request $request
-     * @param User $user
-     * @return JsonResponse
-     */
-    public function reactivate(Request $request, User $user): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        $user = UserService::reactivate($request->user(), $user);
-
-        return response()->json([
-            'message' => 'User reactivated successfully.',
-            'data' => $user->load('role'),
-        ]);
-    }
-
-    /**
-     * Assign a role to a user.
-     *
-     * @param Request $request
-     * @param User $user
-     * @return JsonResponse
-     */
-    public function assignRole(Request $request, User $user): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        $validated = $request->validate([
-            'role_id' => ['required', 'exists:roles,role_id'],
-        ]);
-
-        $user = UserService::assignRole($request->user(), $user, (int) $validated['role_id']);
-
-        return response()->json([
-            'message' => 'User role updated successfully.',
-            'data' => $user->load('role'),
-        ]);
-    }
-
-    /**
-     * List users with pagination.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function index(Request $request): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        $validated = $request->validate(array_merge([
-            'q' => ['nullable', 'string', 'max:200'],
-            'role' => ['nullable', 'string', 'max:32'],
-            'account_status' => ['nullable', 'string', 'in:active,inactive'],
-        ], Pagination::queryRules()));
-
-        $pageParams = Pagination::normalizePageParams($validated);
-
-        $paginator = UserService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
-
-        return Pagination::fromPaginator($paginator);
-    }
-
-    /**
-     * List all available roles (Admin only).
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function roles(Request $request): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        return response()->json([
-            'message' => 'Roles retrieved successfully.',
-            'data' => Role::all(),
-        ]);
-    }
-
-    /**
-     * Archive a user (Soft Delete)
-     */
-    public function archive(Request $request, User $user): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        // Safety: Prevent self-archival
-        if ($user->user_id === $request->user()->user_id) {
-            return response()->json(['message' => 'You cannot archive your own account.'], 400);
-        }
-
-        $user = UserService::archive($request->user(), $user);
-
-        return response()->json([
-            'message' => 'User archived successfully.',
-            'data' => $user,
-        ]);
-    }
-
-    /**
-     * Restore an archived user
-     */
-    public function restore(Request $request, int $id): JsonResponse
-    {
-        AuthorizationService::ensureCanManageUsers($request->user());
-
-        $user = UserService::restore($request->user(), $id);
-
-        return response()->json([
-            'message' => 'User restored successfully.',
-            'data' => $user,
-        ]);
-    }
-}
+ 
+ namespace App\Http\Controllers\Api;
+ 
+ use App\Http\Controllers\Controller;
+ use App\Http\Requests\User\AssignUserRoleRequest;
+ use App\Http\Requests\User\IndexUserRequest;
+ use App\Http\Requests\User\ManageUserRequest;
+ use App\Http\Requests\User\StoreUserRequest;
+ use App\Http\Requests\User\UpdateUserRequest;
+ use App\Http\Resources\RoleResource;
+ use App\Http\Resources\UserResource;
+ use App\Models\Role;
+ use App\Models\User;
+ use App\Services\Identity\UserService;
+ use App\Support\Pagination;
+ use Illuminate\Http\JsonResponse;
+ 
+ /**
+  * UserController
+  * 
+  * Administrative controller for system identity management.
+  * Optimized for HavenStay Forensic v5.0.
+  */
+ class UserController extends Controller
+ {
+     /**
+      * Create a new user.
+      */
+     public function store(StoreUserRequest $request): JsonResponse
+     {
+         $user = UserService::create($request->user(), $request->validated());
+ 
+         return $this->created('User created successfully.', new UserResource($user->load('role')));
+     }
+ 
+     /**
+      * Retrieve a specific user.
+      */
+     public function show(ManageUserRequest $request, User $user): JsonResponse
+     {
+         return $this->success('User retrieved successfully.', new UserResource($user->load('role')));
+     }
+ 
+     /**
+      * Update an existing user.
+      */
+     public function update(UpdateUserRequest $request, User $user): JsonResponse
+     {
+         $user = UserService::update($request->user(), $user, $request->validated());
+ 
+         return $this->success('User updated successfully.', new UserResource($user->load('role')));
+     }
+ 
+     /**
+      * Deactivate a user account.
+      */
+     public function deactivate(ManageUserRequest $request, User $user): JsonResponse
+     {
+         // Safety: Prevent self-deactivation
+         if ($user->user_id === $request->user()->user_id) {
+             return $this->error('Conflict: You cannot deactivate your own account.', 400);
+         }
+ 
+         $user = UserService::deactivate($request->user(), $user);
+ 
+         return $this->success('User deactivated successfully.', new UserResource($user->load('role')));
+     }
+ 
+     /**
+      * Reactivate a user account.
+      */
+     public function reactivate(ManageUserRequest $request, User $user): JsonResponse
+     {
+         $user = UserService::reactivate($request->user(), $user);
+ 
+         return $this->success('User reactivated successfully.', new UserResource($user->load('role')));
+     }
+ 
+     /**
+      * Assign a role to a user.
+      */
+     public function assignRole(AssignUserRoleRequest $request, User $user): JsonResponse
+     {
+         $validated = $request->validated();
+ 
+         $user = UserService::assignRole($request->user(), $user, (int) $validated['role_id']);
+ 
+         return $this->success('User role updated successfully.', new UserResource($user->load('role')));
+     }
+ 
+     /**
+      * List users with pagination.
+      */
+     public function index(IndexUserRequest $request): JsonResponse
+     {
+         $validated = $request->validated();
+         $pageParams = Pagination::normalizePageParams($validated);
+ 
+         $paginator = UserService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
+ 
+         return $this->paginated($paginator, [], 'Users retrieved successfully.');
+     }
+ 
+     /**
+      * List all available roles (Admin only).
+      */
+     public function roles(ManageUserRequest $request): JsonResponse
+     {
+         return $this->success('Roles retrieved successfully.', RoleResource::collection(Role::all()));
+     }
+ 
+     /**
+      * Archive a user (Soft Delete)
+      */
+     public function archive(ManageUserRequest $request, User $user): JsonResponse
+     {
+         // Safety: Prevent self-archival
+         if ($user->user_id === $request->user()->user_id) {
+             return $this->error('You cannot archive your own account.', 400);
+         }
+ 
+         $user = UserService::archive($request->user(), $user);
+ 
+         return $this->success('User archived successfully.', new UserResource($user));
+     }
+ 
+     /**
+      * Restore an archived user
+      */
+     public function restore(ManageUserRequest $request, int $id): JsonResponse
+     {
+         $user = UserService::restore($request->user(), $id);
+ 
+         return $this->success('User restored successfully.', new UserResource($user));
+     }
+ }

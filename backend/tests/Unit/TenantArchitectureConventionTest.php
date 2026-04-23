@@ -23,7 +23,7 @@ class TenantArchitectureConventionTest extends TestCase
 
     public function test_tenant_service_write_methods_use_actor_first_signature(): void
     {
-        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'TenantService.php');
+        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'Operations'.DIRECTORY_SEPARATOR.'TenantService.php');
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
@@ -36,7 +36,7 @@ class TenantArchitectureConventionTest extends TestCase
 
     public function test_tenant_service_does_not_depend_on_auth_facade(): void
     {
-        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'TenantService.php');
+        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'Operations'.DIRECTORY_SEPARATOR.'TenantService.php');
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 

@@ -13,7 +13,7 @@ class RoomArchitectureConventionTest extends TestCase
 
     public function test_room_service_does_not_depend_on_auth_facade(): void
     {
-        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'RoomService.php');
+        $path = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Services'.DIRECTORY_SEPARATOR.'Operations'.DIRECTORY_SEPARATOR.'RoomService.php');
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
@@ -28,8 +28,9 @@ class RoomArchitectureConventionTest extends TestCase
         $this->assertFileExists($path);
         $content = (string) file_get_contents($path);
 
-        $this->assertStringContainsString('use HandlesAuthorization;', $content);
-        $this->assertStringContainsString('$this->forbidden(', $content);
+        $this->assertStringContainsString('AuthorizationService::ensureCanViewReports(', $content);
+        $this->assertStringContainsString('AuthorizationService::ensureCanManageRooms(', $content);
+        $this->assertStringNotContainsString('$this->forbidden(', $content);
     }
 }
 

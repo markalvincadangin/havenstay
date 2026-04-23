@@ -1,6 +1,12 @@
 export function formatDateString(dateStr) {
   if (!dateStr) return "-";
-  const date = new Date(dateStr);
+  
+  // Normalize naked timestamps to UTC for correct local interpretation.
+  const normalized = typeof dateStr === 'string' && dateStr.includes(' ') && !dateStr.includes('T') && !dateStr.includes('Z')
+    ? dateStr.replace(' ', 'T') + 'Z'
+    : dateStr;
+
+  const date = new Date(normalized);
   if (isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("en-PH", {
     month: "short",
@@ -108,7 +114,13 @@ export function compareTenantDirectoryName(a, b) {
 
 export function formatTimestamp(ts) {
   if (!ts) return "—";
-  const d = new Date(ts);
+  
+  // Normalize naked timestamps to UTC for correct local interpretation.
+  const normalized = typeof ts === 'string' && ts.includes(' ') && !ts.includes('T') && !ts.includes('Z')
+    ? ts.replace(' ', 'T') + 'Z'
+    : ts;
+
+  const d = new Date(normalized);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-PH", {
     month: "short",
@@ -121,6 +133,18 @@ export function formatTimestamp(ts) {
   });
 }
 
+/**
+ * Normalise a date to the very beginning of the day (00:00:00.000).
+ * Critical for date comparison logic (e.g. isPastDue).
+ */
+export function startOfDay(d) {
+  if (!d) return null;
+  const x = new Date(d);
+  if (isNaN(x.getTime())) return null;
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
 export function safeParseJson(value) {
   if (value == null) return null;
   if (typeof value === "object") return value;
@@ -129,6 +153,46 @@ export function safeParseJson(value) {
     return JSON.parse(value);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Returns the RFC3339 date range for the current month start to today.
+ * Standardizes MTD (Month-to-Date) reporting filters.
+ */
+export function getCurrentMonthRange() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const start = `${year}-${month}-01`;
+  const end = d.toISOString().slice(0, 10);
+  return { start, end };
+}
+
+/**
+ * Returns today's date in YYYY-MM-DD format (ISO 8601).
+ * Standardizes daily filter parameters.
+ */
+export function getTodayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Parse user-entered money for PHP peso amounts.
+ * Strips commas, trims, and rounds to centavos.
+ */
+export function parseMoneyInput(value) {
+  if (value === "" || value == null) return NaN;
+  const normalized = String(value).trim().replace(/,/g, "");
+  const n = Number(normalized);
+  if (Number.isNaN(n)) return NaN;
+  return Math.round(n * 100) / 100;
+}
+
+/** Stop event propagation (useful for table row clicks). */
+export function stopRowClick(event) {
+  if (event && typeof event.stopPropagation === "function") {
+    event.stopPropagation();
   }
 }
 

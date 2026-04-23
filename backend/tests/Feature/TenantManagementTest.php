@@ -8,6 +8,11 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Enums\TenantStatus;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
+use App\Enums\ContractStatus;
+use App\Enums\BedSpaceStatus;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -73,7 +78,7 @@ class TenantManagementTest extends TestCase
             'first_name' => 'John',
             'last_name' => 'Doe',
             'email' => 'john.doe@example.com',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]);
 
         // Verify audit log entry (Trigger handles INSERT)
@@ -93,6 +98,10 @@ class TenantManagementTest extends TestCase
             'first_name' => 'Bob',
             'last_name' => 'Johnson',
             'contact_number' => '+639876543210',
+            'email' => 'bob@example.com',
+            'emergency_contact_name' => 'Mary Johnson',
+            'emergency_contact_number' => '+639112223333',
+            'address' => '123 Street, City',
         ]);
 
         $response->assertForbidden();
@@ -113,7 +122,7 @@ class TenantManagementTest extends TestCase
             'first_name' => 'John',
             'last_name' => 'Doe',
             'contact_number' => '+63912345678',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]));
 
         $response = $this->actingAs($this->adminUser)->putJson("/api/tenants/{$tenant->tenant_id}", [
@@ -149,11 +158,11 @@ class TenantManagementTest extends TestCase
     public function test_manual_status_change_to_moved_out_is_blocked(): void
     {
         $tenant = Tenant::create($this->tenantAttributes([
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]));
 
         $response = $this->actingAs($this->adminUser)->putJson("/api/tenants/{$tenant->tenant_id}", $this->tenantAttributes([
-            'status' => 'moved_out',
+            'status' => TenantStatus::MOVED_OUT->value,
         ]));
 
         $response->assertStatus(422);
@@ -161,7 +170,7 @@ class TenantManagementTest extends TestCase
 
         $this->assertDatabaseHas('tenants', [
             'tenant_id' => $tenant->tenant_id,
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]);
     }
 
@@ -171,7 +180,7 @@ class TenantManagementTest extends TestCase
             'first_name' => 'Guard',
             'last_name' => 'Status',
             'contact_number' => '+639171111111',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]));
         $this->createActiveContractForTenant($tenant);
 
@@ -183,14 +192,14 @@ class TenantManagementTest extends TestCase
             'emergency_contact_name' => $tenant->emergency_contact_name,
             'emergency_contact_number' => $tenant->emergency_contact_number,
             'address' => $tenant->address,
-            'status' => 'archived',
+            'status' => TenantStatus::ARCHIVED->value,
         ]);
 
         $response->assertStatus(422);
         $response->assertJsonValidationErrors(['status']);
         $this->assertDatabaseHas('tenants', [
             'tenant_id' => $tenant->tenant_id,
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]);
     }
 
@@ -200,7 +209,7 @@ class TenantManagementTest extends TestCase
             'first_name' => 'Archive',
             'last_name' => 'Blocked',
             'contact_number' => '+639172222222',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]));
         $this->createActiveContractForTenant($tenant);
 
@@ -219,7 +228,7 @@ class TenantManagementTest extends TestCase
             'first_name' => 'Archive',
             'last_name' => 'Allowed',
             'contact_number' => '+639173333333',
-            'status' => 'archived',
+            'status' => TenantStatus::ARCHIVED->value,
         ]));
 
         $response = $this->actingAs($this->adminUser)->postJson("/api/tenants/{$tenant->tenant_id}/archive");
@@ -228,7 +237,7 @@ class TenantManagementTest extends TestCase
         $this->assertSoftDeleted('tenants', ['tenant_id' => $tenant->tenant_id]);
         $this->assertDatabaseHas('tenants', [
             'tenant_id' => $tenant->tenant_id,
-            'status' => Tenant::STATUS_ARCHIVED,
+            'status' => TenantStatus::ARCHIVED->value,
         ]);
     }
 
@@ -237,7 +246,7 @@ class TenantManagementTest extends TestCase
         $tenant = Tenant::create($this->tenantAttributes([
             'first_name' => 'Restore',
             'last_name' => 'Lifecycle',
-            'status' => Tenant::STATUS_ARCHIVED,
+            'status' => TenantStatus::ARCHIVED->value,
         ]));
         $tenant->delete();
 
@@ -247,14 +256,14 @@ class TenantManagementTest extends TestCase
         $this->assertDatabaseHas('tenants', [
             'tenant_id' => $tenant->tenant_id,
             'deleted_at' => null,
-            'status' => Tenant::STATUS_MOVED_OUT,
+            'status' => TenantStatus::MOVED_OUT->value,
         ]);
     }
 
     public function test_restore_sets_tenant_to_active_if_has_active_contract(): void
     {
         $tenant = Tenant::create($this->tenantAttributes([
-            'status' => Tenant::STATUS_ARCHIVED,
+            'status' => TenantStatus::ARCHIVED->value,
         ]));
         $this->createActiveContractForTenant($tenant);
         $tenant->delete();
@@ -265,7 +274,7 @@ class TenantManagementTest extends TestCase
         $this->assertDatabaseHas('tenants', [
             'tenant_id' => $tenant->tenant_id,
             'deleted_at' => null,
-            'status' => Tenant::STATUS_ACTIVE,
+            'status' => TenantStatus::ACTIVE->value,
         ]);
     }
 
@@ -275,21 +284,21 @@ class TenantManagementTest extends TestCase
             'first_name' => 'Pending',
             'last_name' => 'Tenant',
             'contact_number' => '+639174444444',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
             'email' => 'pending@example.com',
         ]));
         $tenantWithoutPending = Tenant::create($this->tenantAttributes([
             'first_name' => 'Stable',
             'last_name' => 'Tenant',
             'contact_number' => '+639175555555',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
             'email' => 'stable@example.com',
         ]));
         Tenant::create($this->tenantAttributes([
             'first_name' => 'Moved',
             'last_name' => 'Tenant',
             'contact_number' => '+639176666666',
-            'status' => 'moved_out',
+            'status' => TenantStatus::MOVED_OUT->value,
             'email' => 'moved@example.com',
         ]));
 
@@ -318,7 +327,7 @@ class TenantManagementTest extends TestCase
             'last_name' => 'Row',
             'contact_number' => '+639178888888',
             'email' => 'directory.row@example.com',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ]));
         $this->createActiveContractForTenant($tenant);
 
@@ -343,7 +352,7 @@ class TenantManagementTest extends TestCase
             'last_name' => 'SoftDelete',
             'contact_number' => '+6391888999011',
             'email' => 'pending.softdelete@example.com',
-            'status' => Tenant::STATUS_ACTIVE,
+            'status' => TenantStatus::ACTIVE->value,
         ]));
         $contract = $this->createActiveContractForTenant(
             $tenant,
@@ -471,16 +480,16 @@ class TenantManagementTest extends TestCase
     ): Contract {
         $room = Room::create([
             'room_code' => 'UT-'.mt_rand(1000, 9999),
-            'room_type' => Room::TYPE_SHARED,
+            'room_type' => RoomType::SHARED->value,
             'capacity' => 2,
             'monthly_rate' => 5000.00,
-            'status' => Room::STATUS_VACANT,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Bed A',
-            'status' => BedSpace::STATUS_OCCUPIED,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         return Contract::create([
@@ -490,8 +499,10 @@ class TenantManagementTest extends TestCase
             'move_in_date' => ($moveInDate ?? Carbon::now()->subMonths(1))->toDateString(),
             'expected_move_out_date' => ($expectedMoveOutDate ?? Carbon::now()->addMonths(1))->toDateString(),
             'deposit_amount' => 5000.00,
+            'monthly_rate' => 5000.00,
             'monthly_rate_override' => 5000.00,
-            'status' => Contract::STATUS_ACTIVE,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
     }
 
@@ -505,7 +516,7 @@ class TenantManagementTest extends TestCase
             'emergency_contact_name' => 'Test Emergency Contact',
             'emergency_contact_number' => '+639000000001',
             'address' => '123 Test Street, Quezon City',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE->value,
         ], $overrides);
     }
 }

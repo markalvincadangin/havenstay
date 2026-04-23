@@ -1,7 +1,3 @@
-<?php
-
-namespace Tests\Unit\Services;
-
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -11,7 +7,8 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Services\BillingService;
+use App\Enums\BillingStatus;
+use App\Services\Operations\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -48,7 +45,7 @@ class BillingServiceTest extends TestCase
         $billing = Billing::create([
             'contract_id' => $contract->contract_id,
             'due_date' => now()->subDays(5)->toDateString(),
-            'status' => Billing::STATUS_UNPAID,
+            'status' => BillingStatus::UNPAID->value,
             'billing_period_from' => now()->subMonth()->toDateString(),
             'billing_period_to' => now()->toDateString(),
         ]);
@@ -62,7 +59,7 @@ class BillingServiceTest extends TestCase
         ]);
         
         BillingService::syncBillingStatus($billing);
-        $this->assertEquals(Billing::STATUS_PAID, $billing->status);
+        $this->assertEquals(BillingStatus::PAID->value, $billing->status);
     }
 
     public function test_it_reconciles_status_as_overdue_if_past_due_and_not_fully_paid()
@@ -88,7 +85,7 @@ class BillingServiceTest extends TestCase
         $billing = Billing::create([
             'contract_id' => $contract->contract_id,
             'due_date' => now()->subDays(5)->toDateString(),
-            'status' => Billing::STATUS_UNPAID,
+            'status' => BillingStatus::UNPAID->value,
             'billing_period_from' => now()->subMonth()->toDateString(),
             'billing_period_to' => now()->toDateString(),
         ]);
@@ -102,7 +99,7 @@ class BillingServiceTest extends TestCase
         ]);
         
         BillingService::syncBillingStatus($billing);
-        $this->assertEquals(Billing::STATUS_OVERDUE, $billing->status);
+        $this->assertEquals(BillingStatus::OVERDUE->value, $billing->status);
     }
 
     public function test_it_reconciles_status_as_partial_if_paid_but_not_due_yet()
@@ -128,7 +125,7 @@ class BillingServiceTest extends TestCase
         $billing = Billing::create([
             'contract_id' => $contract->contract_id,
             'due_date' => now()->addDays(5)->toDateString(),
-            'status' => Billing::STATUS_UNPAID,
+            'status' => BillingStatus::UNPAID->value,
             'billing_period_from' => now()->toDateString(),
             'billing_period_to' => now()->addMonth()->toDateString(),
         ]);
@@ -142,7 +139,7 @@ class BillingServiceTest extends TestCase
         ]);
         
         BillingService::syncBillingStatus($billing);
-        $this->assertEquals(Billing::STATUS_PARTIAL, $billing->status);
+        $this->assertEquals(BillingStatus::PARTIAL->value, $billing->status);
     }
 
     public function test_it_reconciles_status_as_unpaid_if_no_payments_and_not_due_yet()
@@ -168,7 +165,7 @@ class BillingServiceTest extends TestCase
         $billing = Billing::create([
             'contract_id' => $contract->contract_id,
             'due_date' => now()->addDays(5)->toDateString(),
-            'status' => Billing::STATUS_PARTIAL, // start from different status
+            'status' => BillingStatus::PARTIAL->value, // start from different status
             'billing_period_from' => now()->toDateString(),
             'billing_period_to' => now()->addMonth()->toDateString(),
         ]);
@@ -176,6 +173,6 @@ class BillingServiceTest extends TestCase
         BillingLineItem::create(['billing_id' => $billing->billing_id, 'amount' => 1000, 'item_description' => 'Rent', 'item_type' => 'base_rent']);
         
         BillingService::syncBillingStatus($billing);
-        $this->assertEquals(Billing::STATUS_UNPAID, $billing->status);
+        $this->assertEquals(BillingStatus::UNPAID->value, $billing->status);
     }
 }

@@ -62,18 +62,18 @@ class ReportsExportTest extends TestCase
     {
         $occupiedSoloRoom = Room::create([
             'room_code' => 'R801',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => 'vacant', // status updated via bed space usually but we set here
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value, // status updated via bed space usually but we set here
         ]);
 
         Room::create([
             'room_code' => 'R802',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4800,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $sharedRoom = Room::create([
@@ -81,22 +81,22 @@ class ReportsExportTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3200,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         BedSpace::create([
             'room_id' => $sharedRoom->room_id,
             'bed_label' => 'A',
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         BedSpace::create([
             'room_id' => $sharedRoom->room_id,
             'bed_label' => 'B',
-            'status' => 'vacant',
+            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
         ]);
 
-        $response = $this->actingAs($this->viewerUser)->getJson('/api/reports/occupancy');
+        $response = $this->actingAs($this->adminUser)->getJson('/api/reports/occupancy');
 
         $response->assertOk();
     }
@@ -105,10 +105,10 @@ class ReportsExportTest extends TestCase
     {
         Room::create([
             'room_code' => 'RT_SOLO',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         Room::create([
@@ -116,22 +116,22 @@ class ReportsExportTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
-        $soloOnly = $this->actingAs($this->viewerUser)
-            ->getJson('/api/reports/occupancy?room_type=solo&page=1&per_page=25')
+        $soloOnly = $this->actingAs($this->adminUser)
+            ->getJson('/api/reports/occupancy?room_type='.\App\Enums\RoomType::PRIVATE->value.'&page=1&per_page=25')
             ->assertOk();
 
-        foreach ($soloOnly->json()['rows'] as $row) {
-            $this->assertSame('solo', $row['room_type']);
+        foreach ($soloOnly->json()['data']['rows'] as $row) {
+            $this->assertSame(\App\Enums\RoomType::PRIVATE->value, $row['room_type']);
         }
 
-        $sharedOnly = $this->actingAs($this->viewerUser)
-            ->getJson('/api/reports/occupancy?room_type=shared&page=1&per_page=25')
+        $sharedOnly = $this->actingAs($this->adminUser)
+            ->getJson('/api/reports/occupancy?room_type='.\App\Enums\RoomType::SHARED->value.'&page=1&per_page=25')
             ->assertOk();
 
-        foreach ($sharedOnly->json()['rows'] as $row) {
+        foreach ($sharedOnly->json()['data']['rows'] as $row) {
             $this->assertSame('shared', $row['room_type']);
         }
     }
@@ -147,16 +147,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'R900',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -166,25 +166,29 @@ class ReportsExportTest extends TestCase
             'move_in_date' => '2026-01-01',
             'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 0,
-            'status' => 'active',
+            'monthly_rate' => 4000,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'status' => \App\Enums\ContractStatus::ACTIVE->value,
         ]);
 
         $this->createBillingRecord($contract->contract_id, '2026-01-01', '2026-01-31', '2020-01-15', 5000, 'unpaid');
 
-        $response = $this->actingAs($this->viewerUser)->getJson('/api/reports/outstanding-balances');
+        $response = $this->actingAs($this->adminUser)->getJson('/api/reports/outstanding-balances');
 
         $response->assertOk()
             ->assertJsonStructure([
-                'summary' => [
-                    'account_count',
-                    'total_outstanding',
-                    'past_due_count',
-                    'past_due_amount',
-                    'oldest_past_due_days',
+                'data' => [
+                    'summary' => [
+                        'account_count',
+                        'total_outstanding',
+                        'past_due_count',
+                        'past_due_amount',
+                        'oldest_past_due_days',
+                    ],
                 ],
             ]);
 
-        $summary = $response->json('summary');
+        $summary = $response->json('data.summary');
         $this->assertGreaterThanOrEqual(1, (int) $summary['past_due_count']);
         $this->assertGreaterThan(0, (float) $summary['past_due_amount']);
         $this->assertGreaterThan(0, (int) $summary['oldest_past_due_days']);
@@ -204,16 +208,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'R804',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5500,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -223,12 +227,14 @@ class ReportsExportTest extends TestCase
             'move_in_date' => '2026-04-01',
             'expected_move_out_date' => '2026-10-31',
             'deposit_amount' => 1000,
-            'status' => 'active',
+            'monthly_rate' => 5500,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'status' => \App\Enums\ContractStatus::ACTIVE->value,
         ]);
 
         $this->createBillingRecord($contract->contract_id, '2026-06-01', '2026-06-30', '2026-07-05', 5200, 'unpaid');
 
-        $this->actingAs($this->viewerUser)
+        $this->actingAs($this->adminUser)
             ->getJson('/api/reports/billing-summary?start_date=2026-05-01&end_date=2026-06-30')
             ->assertOk();
     }
@@ -253,16 +259,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'TH-100',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => 'fully_occupied',
+            'status' => \App\Enums\RoomStatus::UNAVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         Contract::create([
@@ -272,15 +278,17 @@ class ReportsExportTest extends TestCase
             'move_in_date' => '2026-03-01',
             'expected_move_out_date' => '2027-02-28',
             'deposit_amount' => 0,
+            'monthly_rate' => 4000,
             'monthly_rate_override' => 4000,
-            'status' => 'active',
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'status' => \App\Enums\ContractStatus::ACTIVE->value,
         ]);
 
         $this->actingAs($this->adminUser)
             ->getJson('/api/reports/tenant-history?status=active')
             ->assertOk()
-            ->assertJsonPath('summary.contract_count', 1)
-            ->assertJsonPath('rows.0.tenant_name', 'Smith, Jane');
+            ->assertJsonPath('data.summary.contract_count', 1)
+            ->assertJsonPath('data.rows.0.tenant_name', 'Smith, Jane');
 
         $this->actingAs($this->adminUser)
             ->get('/api/reports/tenant-history/export')
@@ -298,16 +306,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'COL-101',
-            'room_type' => 'solo',
+            'room_type' => \App\Enums\RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4500,
-            'status' => 'vacant',
+            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => 'occupied',
+            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -317,7 +325,9 @@ class ReportsExportTest extends TestCase
             'move_in_date' => '2026-04-01',
             'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 0,
-            'status' => 'active',
+            'monthly_rate' => 4500,
+            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'status' => \App\Enums\ContractStatus::ACTIVE->value,
         ]);
 
         $billing = $this->createBillingRecord($contract->contract_id, '2026-04-01', '2026-04-30', '2026-05-05', 4500, 'unpaid');
@@ -335,9 +345,11 @@ class ReportsExportTest extends TestCase
             ->assertOk();
 
         $json->assertJsonStructure([
-            'summary',
-            'rows' => [
-                '*' => ['payment_id', 'billing_id', 'tenant_name', 'payment_date', 'payment_method', 'amount_paid'],
+            'data' => [
+                'summary',
+                'rows' => [
+                    '*' => ['payment_id', 'billing_id', 'tenant_name', 'payment_date', 'payment_method', 'amount_paid'],
+                ],
             ],
         ]);
 

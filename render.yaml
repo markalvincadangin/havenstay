@@ -1,0 +1,49 @@
+services:
+  # HavenStay Backend (Laravel)
+  - type: web
+    name: havenstay-backend
+    env: docker
+    region: singapore # Change to your preferred region
+    plan: free
+    dockerContext: ./backend
+    dockerfilePath: Dockerfile
+    dockerTarget: production
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        generateValue: true
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        sync: false # Set this to your production DB host
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_WRITE_HOST
+        sync: false
+      - key: DB_READ_HOST
+        sync: false
+      - key: DB_STICKY
+        value: "true"
+      - key: FRONTEND_URL
+        sync: false # Set to your Vercel URL
+      - key: DB_SEED
+        value: "true" # Set to 'true' for FIRST deploy only, then change to 'false'
+      - key: LOG_CHANNEL
+        value: errorlog
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+
+  # Note: Render Free MySQL is only available for 90 days.
+  # For permanent free hosting, consider connecting to an external DB like Aiven.io

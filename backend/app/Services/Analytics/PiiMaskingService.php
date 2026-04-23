@@ -3,6 +3,7 @@
 namespace App\Services\Analytics;
 
 use App\Models\User;
+use App\Enums\RoleEnum;
 
 /**
  * Data privacy service. Handles masking of PII (names, emails, phones)
@@ -16,10 +17,9 @@ class PiiMaskingService
             return false;
         }
 
-        $user->loadMissing('role');
-        $role = strtolower((string) ($user->role?->role_name ?? ''));
+        $role = $user->role?->role_name;
 
-        return $role === 'viewer';
+        return $role === RoleEnum::VIEWER->value;
     }
 
     /**
