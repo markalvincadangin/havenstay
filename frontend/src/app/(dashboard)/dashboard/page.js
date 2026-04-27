@@ -125,7 +125,7 @@ export default function PlatformDashboardPage() {
   return (
     <StandardPage
       title="Overview"
-      subtitle="OPERATIONAL INTELLIGENCE AND DAILY ADMINISTRATIVE WORKFLOWS"
+      subtitle="Welcome to HavenStay Platform! Here's what's happening with your boarding house business."
       breadcrumbs={<Breadcrumbs items={[{ label: "Overview" }]} />}
       loading={loading}
       skeleton={<DashboardSkeleton />}

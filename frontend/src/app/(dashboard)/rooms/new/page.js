@@ -40,7 +40,6 @@ export default function NewRoomPage() {
       room_type: "private",
       capacity: "1",
       monthly_rate: "",
-      status: "vacant",
       amenities: "",
       description: "",
       bed_spaces: [{ bed_label: "Bed 1", status: "vacant" }],
@@ -80,7 +79,6 @@ export default function NewRoomPage() {
         room_type: values.room_type,
         capacity: Number(values.capacity),
         monthly_rate: rate,
-        status: values.status || "vacant",
         amenities: values.amenities || null,
         description: values.description || null,
       };

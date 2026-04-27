@@ -24,14 +24,14 @@ constraints — neither overrides the other.
 
 ## 2. Tech Stack
 
-| Layer        | Technology          | Version  |
-|--------------|---------------------|----------|
+| Layer        | Technology          | Version   |
+|--------------|---------------------|-----------|
 | Backend      | Laravel (PHP)       | 14 / 8.3+ |
-| Auth         | Laravel Sanctum     | 4.3      |
-| Frontend     | Next.js, React      | 16 / 19  |
-| Styling      | Tailwind CSS        | v4       |
-| Database     | MySQL InnoDB        | 8.4+     |
-| Infrastructure | Docker Compose    | 3.8+     |
+| Auth         | Laravel Sanctum     | 4.3       |
+| Frontend     | Next.js, React      | 16 / 19   |
+| Styling      | Tailwind CSS        | v4        |
+| Database     | MySQL InnoDB        | 8.4+      |
+| Infrastructure | Docker Compose    | 3.8+      |
 
 Stack is locked. Do not introduce new frameworks or ORMs.
 
@@ -173,6 +173,15 @@ Authentication token is stored in `localStorage` under `havenstay_token`.
 - All timestamps use locale formatting with `en-PH` locale.
 - Table row IDs use the mono prefix format: `#TX-{id}`, `#AUDIT-{id}`,
   `#TENANT-{id}`, etc. Never display bare integers in ID columns.
+
+### Tunnel / Port-Forwarding (Dev)
+
+When testing with remote browsers (Vercel previews, TestSprite):
+1. Expose backend (8000) via ngrok: `ngrok http 8000`.
+2. Update `backend/.env`: `SANCTUM_STATEFUL_DOMAINS=your-tunnel.ngrok-free.app`.
+3. Update `frontend/.env.local`: `BACKEND_INTERNAL_URL=https://your-tunnel.ngrok-free.app`.
+4. If exposing frontend (3000): Add tunnel host to `ALLOWED_DEV_ORIGINS` in `.env.local`.
+5. Restart both services. Full guide in `docs/DEV_SETUP.md`.
 
 ---
 

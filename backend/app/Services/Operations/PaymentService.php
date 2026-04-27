@@ -51,7 +51,7 @@
          $category = $data['payment_category'] ?? 'billing';
          $billingId = $data['billing_id'] ?? null;
          $contractId = $data['contract_id'] ?? null;
-         $amount = (float)($data['amount_paid'] ?? 0);
+         $amount = round((float)($data['amount_paid'] ?? 0), 2);
          $method = $data['payment_method'] ?? 'cash';
  
          // XOR Validation (BR-PAY-001)

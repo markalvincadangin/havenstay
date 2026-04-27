@@ -89,7 +89,7 @@ export default function UtilitiesPage() {
   return (
     <StandardPage
       title="Utility Services"
-      subtitle="Manage utility categories, service rates, and metrology configurations."
+      subtitle="Manage utility services and rates."
       loading={authLoading || loading}
       skeleton={<SkeletonGridPage cards={3} />}
       actions={

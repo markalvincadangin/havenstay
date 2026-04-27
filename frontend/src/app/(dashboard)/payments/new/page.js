@@ -109,7 +109,7 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-stone-900/50 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-payment-title"
@@ -130,7 +130,7 @@ function ConfirmPaymentModal({ selectedBilling, values, onConfirm, onCancel, loa
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-stone-100 bg-stone-50/50 p-6">
+        <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
           <div className="grid grid-cols-2 gap-y-4 text-xs">
             <div className="col-span-2">
               <p className="font-bold uppercase tracking-widest text-stone-400">Record</p>
@@ -332,6 +332,7 @@ export default function RecordPaymentPage() {
           amount_paid: Number(pendingValues.amount_paid),
           payment_date: pendingValues.payment_date,
           payment_method: pendingValues.payment_method,
+          payment_category: "billing",
           reference_number: isPaymentMethodCash(pendingValues.payment_method) ? null : pendingValues.reference_number || null,
           remarks: pendingValues.remarks || null,
         }),

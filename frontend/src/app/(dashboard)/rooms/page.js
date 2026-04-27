@@ -19,7 +19,7 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { QuickEditRowAction } from "@/components/ui/QuickEditRowAction";
 import { RoomQuickEditForm } from '@/features/rooms/components/RoomQuickEditForm';
-import { ROOM_STATUS_LABELS, ROOM_TYPE_LABELS,  } from "@/lib/constants";
+import { ROOM_STATUS_LABELS, ROOM_TYPE_LABELS, } from "@/lib/constants";
 import {
   normalizePaginatedList,
 } from "@/lib/pagination";
@@ -75,7 +75,7 @@ export default function RoomsPage() {
   }, [roomsData]);
   const loading = !roomsData && !roomsError;
   const pageTitle = "Room Inventory";
-  const pageSubtitle = "ROOM CAPACITY LIMITS AND RATE CONFIGURATIONS";
+  const pageSubtitle = "Manage room configurations, rates, and availability.";
   return (
     <StandardPage
       title={pageTitle}

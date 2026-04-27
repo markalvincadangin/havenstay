@@ -88,7 +88,7 @@ services:
       - DB_PASSWORD=root
       - DB_WRITE_HOST=db-primary
       - DB_WRITE_PORT=3306
-      - DB_READ_HOST=db-primary
+      - DB_READ_HOST=db-replica
       - DB_READ_PORT=3306
       - DB_STICKY=true
     depends_on:

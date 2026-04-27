@@ -2,10 +2,16 @@
 const backendOrigin =
   process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:8000";
 
+// Support comma-separated tunnel URLs for port-forwarding dev (ngrok, cloudflare, etc.)
+// Set ALLOWED_DEV_ORIGINS=your-tunnel.ngrok-free.app in .env.local — do NOT hardcode here.
+const extraOrigins = process.env.ALLOWED_DEV_ORIGINS
+  ? process.env.ALLOWED_DEV_ORIGINS.split(",").map((o) => o.trim())
+  : [];
+
 const nextConfig = {
   output: "standalone",
   turbopack: {},
-  allowedDevOrigins: ["localhost", "127.0.0.1", "book-street-maggot.ngrok-free.dev"],
+  allowedDevOrigins: ["localhost", "127.0.0.1", ...extraOrigins],
   async rewrites() {
     return [
       {

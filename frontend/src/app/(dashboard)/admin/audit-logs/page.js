@@ -15,7 +15,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import useSWR from "swr";
-import { 
+import {
   Download, Lock, Zap, User, Activity, ShieldAlert, Search, Eye
 } from "lucide-react";
 import { fetcher } from "@/lib/api";
@@ -112,7 +112,7 @@ export default function AuditLogsPage() {
   return (
     <StandardPage
       title="Audit History"
-      subtitle="Investigation trail for system changes (Admin only)."
+      subtitle="Track activity and changes in HavenStay."
       breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "Audit History" }]} />}
       loading={loading}
       skeleton={<SkeletonListPage rows={10} />}

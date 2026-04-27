@@ -1,101 +1,56 @@
-# HavenStay Docker Setup Guide 🐳
+# HavenStay Docker Guide 🐳
 
-This guide helps you set up the full HavenStay development environment (Backend, Frontend, and Distributed Databases) using Docker. This setup perfectly mirrors the production environment on Render and Aiven, satisfying **CCR-002**.
-
----
-
-## 1. Prerequisites
-*   Install **Docker Desktop** (Required)
-*   Ensure **Docker Desktop is running** (the icon in the tray should be Green)
-*   (Windows only) Ensure **WSL2** is enabled and Docker is configured to use the WSL2 backend.
+This guide focuses on the containerized development environment for HavenStay. For a comparison with manual or tunnel-based setups, see the **[Development Setup Guide](./docs/DEV_SETUP.md)**.
 
 ---
 
-## 2. Hardened Architecture (Release 1.3)
-HavenStay now uses a **Primary-Replica** distributed database stack with automatic health checks and automated synchronization:
-*   **Primary DB**: Authoritative source for all writes/transactions.
-*   **Replica DB**: Read-only instance for reporting and dashboards.
-*   **Auto-Healing**: If any container crashes, Docker automatically restarts it.
-*   **Auto-Sync**: Replication is automatically configured on first boot via `docker-entrypoint-initdb.d` scripts.
-*   **Traffic Splitting**: The backend automatically routes `SELECT` queries to the replica and `INSERT/UPDATE/DELETE` to the primary.
+## 1. Hardened Architecture (CCR-002)
+
+HavenStay uses a **Primary-Replica** database stack to satisfy academic and performance requirements:
+
+- **`havenstay-db-primary`**: Authoritative source for all writes.
+- **`havenstay-db-replica`**: Read-only instance for reporting.
+- **Auto-Sync**: Replication is configured on first boot via `docker/primary-init.sql` and `docker/replica-init.sql`.
 
 ---
 
-## 3. Initial Setup
-Open your terminal in the project root folder and run:
+## 2. Quick Start
 
 ```bash
-# Start all containers in the background
+# 1. Start containers
 docker compose up --build -d
-```
 
-This will spin up 4 specialized containers:
-1.  **`havenstay-db-primary`**: Main Database (Internal: 3306 | External: 3306)
-2.  **`havenstay-db-replica`**: Read-only Replica (Internal: 3306 | External: 3307)
-3.  **`havenstay-backend`**: Laravel API (Port 8000)
-4.  **`havenstay-frontend`**: Next.js App (Port 3000)
-
----
-
-## 4. Database Initialization (CCR-008 & CCR-003)
-The backend container is configured to run pending migrations automatically on startup without wiping data. For the **first-time setup**, you must manually seed the database:
-
-```bash
-# Run this once to build tables and populate demo data
+# 2. Initialize database (First time only)
 docker compose exec backend php artisan migrate:fresh --seed
 ```
 
-> [!WARNING]
-> Only run `migrate:fresh` if you want to wipe all data. Subsequent restarts of the container will safely run `php artisan migrate` to apply new changes without data loss.
+---
+
+## 3. Service Map
+
+| Service | Host URL | Port | Internal |
+| :--- | :--- | :--- | :--- |
+| **Frontend** | [localhost:3000](http://localhost:3000) | 3000 | 3000 |
+| **Backend API** | [localhost:8000](http://localhost:8000) | 8000 | 80 |
+| **Primary DB** | `localhost:3306` | 3306 | 3306 |
+| **Replica DB** | `localhost:3307` | 3307 | 3306 |
 
 ---
 
-## 5. Replication Verification (CCR-002)
-Replication is now **fully automated** during the first container boot. To verify the link:
+## 4. Port Forwarding / Tunneling
 
-1.  **Access the Replica**:
-    ```bash
-    docker exec -it havenstay-db-replica mysql -u root -proot
-    ```
+If you need to test HavenStay with **TestSprite** or **Vercel Previews**, you must expose your local Docker environment.
 
-2.  **Check Status**:
-    ```sql
-    SHOW REPLICA STATUS\G;
-    ```
-    *`Replica_IO_Running` and `Replica_SQL_Running` should both be **Yes**.*
+1. **Expose Backend**: `ngrok http 8000`.
+2. **Expose Frontend**: `ngrok http 3000`.
+3. Follow the **[Profile C: Port-Forwarding Guide](./docs/DEV_SETUP.md#profile-c--port-forwarding--tunnel)** to update your `.env` files.
 
 ---
 
-## 6. Accessing the Applications
-The UI calls **same-origin** `/api/*` on port 3000; Next.js proxies those requests to the `backend` container. Set **`BACKEND_INTERNAL_URL`** in `docker-compose.yml` (frontend service) or at **image build** time (`frontend/Dockerfile` `ARG`) so rewrites target `http://backend`, not `127.0.0.1` (which would be wrong inside a container). You can still hit Laravel directly on port 8000 for health checks or debugging.
+## 5. Troubleshooting
 
-| Service | URL | Credentials |
-| :--- | :--- | :--- |
-| **Frontend** | [http://localhost:3000](http://localhost:3000) | `admin@havenstay.ph` / `HavenStay123!` |
-| **Backend API** | [http://localhost:8000/api/health](http://localhost:8000/api/health) | - |
-| **Primary DB** | `localhost:3306` | root / root |
-| **Replica DB** | `localhost:3307` | root / root (Read-Only) |
+- **Database Connection Refused**: Ensure `db-primary` is healthy (`docker compose ps`).
+- **Replica Lag**: Check status with `docker exec -it havenstay-db-replica mysql -u root -proot -e "SHOW REPLICA STATUS\G"`.
+- **Hot-Reload not working**: Ensure `WATCHPACK_POLLING=true` is set in `docker-compose.yml` (required for Windows/WSL2).
 
----
-
-## 7. Development Flow & Hot-Reloading
-The environment is now optimized for professional development with **Hot-Reloading** enabled by default:
-- **Frontend Changes**: Modifying files in `./frontend` will trigger an immediate update in the browser thanks to Next.js `dev` mode and Docker bind mounts.
-- **Backend Changes**: Logic changes in `./backend` reflect on the next request.
-- **Node Modules**: The container uses its own `node_modules` (cached in an anonymous volume) to ensure compatibility with the Alpine Linux environment.
-
-### Production Build Simulation
-To test the production behavior locally (where code is baked into the image and minified):
-```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
-```
-
----
-
-## 8. Common Commands
-*   **Standard Dev Start**: `docker compose up -d`
-*   **Rebuild after package.json changes**: `docker compose up --build -d`
-*   **Stop everything**: `docker compose stop`
-*   **Destroy everything (Reset)**: `docker compose down -v`
-*   **View Logs**: `docker compose logs -f frontend`
-*   **Reset Application Cache**: `docker exec havenstay-backend php artisan config:clear`
+Detailed troubleshooting and manual setup can be found in **[docs/DEV_SETUP.md](./docs/DEV_SETUP.md)**.

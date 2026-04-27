@@ -6,6 +6,7 @@ import { Zap, Ruler,  } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { canManageUsers } from "@/lib/auth";
 import { applyServerFieldErrors } from "@/lib/forms";
+import { parseMoneyInput } from "@/lib/formatters";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
@@ -46,7 +47,7 @@ export default function RegisterUtilityPage() {
         body: JSON.stringify({
           name: values.name,
           unit_of_measurement: values.unit_of_measurement,
-          initial_base_rate: parseFloat(values.initial_base_rate),
+          initial_base_rate: parseMoneyInput(values.initial_base_rate),
           effective_from: values.effective_from,
         }),
       });

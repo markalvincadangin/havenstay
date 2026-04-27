@@ -125,7 +125,7 @@ export default function UsersPage() {
   return (
     <StandardPage
       title="Users"
-      subtitle="Manage staff accounts and role permissions (Admin only)."
+      subtitle="Manage staff and admin accounts."
       breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "Users" }]} />}
       loading={authLoading || loading}
       skeleton={<SkeletonGridPage cards={8} />}
@@ -281,7 +281,7 @@ export default function UsersPage() {
                       href={`/admin/users/${row.user_id}`}
                       className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
                     >
-                    <Card className="relative h-full flex flex-col !p-0 overflow-hidden rounded-2xl border-stone-200 bg-white transition-all duration-300 group-hover:border-teal-200 group-hover:shadow-xl group-hover:shadow-teal-900/5 group-hover:-translate-y-1 hs-glass-effect">
+                      <Card className="relative h-full flex flex-col !p-0 overflow-hidden rounded-2xl border-stone-200 bg-white transition-all duration-300 group-hover:border-teal-200 group-hover:shadow-xl group-hover:shadow-teal-900/5 group-hover:-translate-y-1 hs-glass-effect">
                         {/* Card Header Strip */}
                         <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-5 py-3.5">
                           <ResourceIdCell id={row.user_id} type="user" />
