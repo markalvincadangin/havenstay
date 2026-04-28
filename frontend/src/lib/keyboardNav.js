@@ -11,6 +11,7 @@ const G_KEY_TO_HREF = {
   c: "/contracts",
   b: "/billing",
   p: "/payments",
+  m: "/utilities",
   o: "/admin/reports",
   l: "/admin/audit-logs",
   u: "/admin/users",

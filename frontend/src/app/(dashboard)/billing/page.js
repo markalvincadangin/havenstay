@@ -10,10 +10,10 @@ import { sortClientRows } from "@/lib/tableSort";
 import {
   compareTenantDirectoryName,
   formatDateString,
-  formatPHP,
   formatTenantDirectoryName,
   getCurrentMonthRange,
 } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import Alert from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
 import FilterPanelCard from "@/components/ui/FilterPanelCard";
@@ -41,6 +41,7 @@ import { CorrelationIdCell } from "@/components/ui/CorrelationIdCell";
 import RowOpenIndicator from "@/components/ui/RowOpenIndicator";
 import { ExpandableTableRow } from "@/components/ui/ExpandableTableRow";
 import Button from "@/components/ui/Button";
+import CurrencyCell from "@/components/ui/CurrencyCell";
 import { interactiveTableRowClass } from "@/lib/tableRows";
 export default function BillingListPage() {
   const router = useRouter();
@@ -142,7 +143,7 @@ export default function BillingListPage() {
       actions={
         <PageHeaderActions
           ctaHref={canGenerateBilling ? "/billing/new" : null}
-          ctaLabel="New Billing"
+          ctaLabel="GENERATE BILLS"
           ctaIcon={PlusCircle}
           user={currentUser}
         />
@@ -157,33 +158,36 @@ export default function BillingListPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               label="Total Billed"
-              value={formatPHP(totalBilled)}
+              value={totalBilled}
               sub="Total billed this month"
               icon={Receipt}
               isLoading={!billingSummaryData}
               isSyncing={summaryValidating}
+              currency={true}
               className="hs-glass-effect"
             />
             <KpiCard
               label="Outstanding Balance"
-              value={formatPHP(totalOutstanding)}
-              sub="Unpaid rent balances"
+              value={totalOutstanding}
+              sub="UNPAID BALANCES"
               icon={Wallet}
               isWarning={totalOutstanding > 0}
               isLoading={!outstandingData}
               isSyncing={outstandingValidating}
               href="/billing?status=unpaid"
+              currency={true}
               className="hs-glass-effect"
             />
             <KpiCard
               label="Overdue Volume"
-              value={formatPHP(overdueVolume)}
+              value={overdueVolume}
               sub={`${overdueCount} overdue accounts`}
               icon={AlertCircle}
               isDanger={overdueVolume > 0}
               isLoading={!outstandingData}
               isSyncing={outstandingValidating}
               href="/billing?status=overdue"
+              currency={true}
               className="hs-glass-effect"
             />
             <KpiCard
@@ -259,7 +263,7 @@ export default function BillingListPage() {
           >
             <Card className="overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-sm hs-glass-effect">
               <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Invoice Directory</h2>
+                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">BILLING DIRECTORY</h2>
                 <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
                   {listMeta?.total ?? sortedFiltered.length} records matching
                 </div>
@@ -268,9 +272,9 @@ export default function BillingListPage() {
                 embedded
                 columns={[
                   { key: "billing_id", label: "BILL ID", sortable: true, sortKey: "billing_id", className: "pl-8" },
-                  { key: "tenant", label: "TENANT NAME", sortable: true, sortKey: "tenant" },
-                  { key: "period", label: "BILLING CYCLES", sortable: true, sortKey: "period", className: "text-center" },
-                  { key: "balance", label: "OUTSTANDING", sortable: true, sortKey: "balance", className: "text-right" },
+                  { key: "tenant", label: "TENANT", sortable: true, sortKey: "tenant" },
+                  { key: "period", label: "BILLING PERIOD", sortable: true, sortKey: "period", className: "text-center" },
+                  { key: "balance", label: "BALANCE", sortable: true, sortKey: "balance", className: "text-right" },
                   { key: "status", label: "STATUS", sortable: true, sortKey: "status", className: "text-center" },
                   { key: "actions", label: "", className: "text-right w-16 px-8" },
                 ]}
@@ -293,17 +297,17 @@ export default function BillingListPage() {
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border border-stone-200 bg-white rounded-xl p-6 shadow-sm">
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black uppercase text-stone-400 tracking-widest">Financial Summary</span>
-                            <div className="mt-2 text-sm text-stone-900 font-mono font-bold">
-                              Total Billed: {formatPHP(amountDue)} <span className="text-stone-300 mx-3">|</span>
-                              Collected: {formatPHP(amountPaid)}
+                            <div className="mt-2 text-sm text-stone-900 flex items-center gap-1 font-bold">
+                              Total Billed: <CurrencyDisplay amount={amountDue} /> <span className="text-stone-300 mx-3 font-normal">|</span>
+                              Collected: <CurrencyDisplay amount={amountPaid} />
                             </div>
                           </div>
-                          <Button 
-                            onClick={() => router.push(`/billing/${billing.billing_id}`)} 
-                            variant="primary" 
-                            className="!h-10 px-8 text-[10px] font-black tracking-widest uppercase shadow-md active:scale-95 transition-transform bg-stone-900 hover:bg-stone-800"
+                          <Button
+                            onClick={() => router.push(`/billing/${billing.billing_id}`)}
+                            variant="secondary"
+                            className="!h-10 px-8 text-[10px] font-black tracking-widest uppercase shadow-md active:scale-95 transition-transform"
                           >
-                            Access Details
+                            View Details
                           </Button>
                         </div>
                       }
@@ -341,27 +345,7 @@ export default function BillingListPage() {
                       </td>
                       <td className="py-5 text-right">
                         <div className="flex flex-col items-end">
-                          {balance < 0 ? (
-                            <span className="inline-flex items-center gap-1.5 font-mono text-xs font-black tabular-nums text-emerald-700">
-                              {formatPHP(Math.abs(balance))}
-                              <span className="rounded-full border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-700">
-                                Credit
-                              </span>
-                            </span>
-                          ) : balance === 0 ? (
-                            <span className="font-mono text-xs font-bold tabular-nums text-emerald-700">
-                              {formatPHP(0)}
-                            </span>
-                          ) : (
-                            <span className="font-mono text-sm font-black tabular-nums text-rose-600">
-                              {formatPHP(balance)}
-                            </span>
-                          )}
-                          <div className="mt-1.5 flex items-center justify-end gap-1 font-mono text-[9px] font-bold uppercase tracking-tighter text-stone-400 tabular-nums">
-                            <span>{formatPHP(amountPaid)}</span>
-                            <span className="opacity-40">/</span>
-                            <span>{formatPHP(amountDue)}</span>
-                          </div>
+                          <CurrencyCell amount={balance} className="!text-sm !font-black" />
                         </div>
                       </td>
                       <td className="py-5 text-center">

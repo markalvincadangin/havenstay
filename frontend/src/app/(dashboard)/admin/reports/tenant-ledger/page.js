@@ -6,7 +6,10 @@ import useSWR from "swr";
 import { canViewReports } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { flattenApiErrors } from "@/lib/errors";
-import { formatDateString, formatPHP } from "@/lib/formatters";
+import { formatDateString } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
+import CurrencyCell from "@/components/ui/CurrencyCell";
+import { useToasts } from "@/context/ToastContext";
 import { exportReportCsv } from "@/lib/downloads";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
@@ -31,6 +34,7 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 
 export default function TenantLedgerReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [tenants, setTenants] = useState([]);
@@ -70,7 +74,7 @@ export default function TenantLedgerReportPage() {
     if (reportError) {
       setApiError(flattenApiErrors(reportError));
     } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
-      setApiError("Unauthorized: you do not have permission to access financial records.");
+      setApiError("Access restricted. You don’t have permission to access financial records.");
     }
   }, [reportError, authLoading, currentUser]);
 
@@ -102,7 +106,7 @@ export default function TenantLedgerReportPage() {
         filenamePrefix: `ledger-${tenantName}`,
       });
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      showToast(flattenApiErrors(error), "error");
     } finally {
       setExporting(false);
     }
@@ -115,13 +119,21 @@ export default function TenantLedgerReportPage() {
   return (
     <StandardPage
       title="Tenant Ledger"
-      subtitle="Filter and export system data."
+      subtitle={
+        <div className="flex flex-col gap-2">
+          <p>Filter and export system data.</p>
+          <div className="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-stone-400/70">
+            <span>Generated {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-stone-200">|</span>
+            <span>{tableMeta?.total ?? 0} Records</span>
+          </div>
+        </div>
+      }
       loading={authLoading || loading}
       skeleton={<SkeletonListPage rows={8} />}
       breadcrumbs={
         <Breadcrumbs
           items={[
-            { label: "Administration" },
             { label: "Reports", href: "/admin/reports" },
             { label: "Tenant Ledger" },
           ]}
@@ -142,25 +154,28 @@ export default function TenantLedgerReportPage() {
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
             <KpiCard 
                 label="Total Billed" 
-                value={formatPHP(report.summary.total_billed)} 
+                value={report.summary.total_billed} 
                 icon={Activity}
                 isSyncing={isValidating}
+                currency={true}
                 className="hs-glass-effect"
             />
             <KpiCard 
                 label="Total Paid" 
-                value={formatPHP(report.summary.total_paid)} 
+                value={report.summary.total_paid} 
                 icon={DollarSign}
                 isSyncing={isValidating}
+                currency={true}
                 className="hs-glass-effect"
             />
             <KpiCard 
                 label="Current Balance" 
-                value={formatPHP(report.summary.current_balance)} 
+                value={report.summary.current_balance} 
                 isDanger={report.summary.current_balance > 0}
                 icon={Landmark}
                 sub={report.summary.current_balance > 0 ? "Amount Outstanding" : "Settled Balance"}
                 isSyncing={isValidating}
+                currency={true}
                 className="hs-glass-effect"
             />
         </div>
@@ -222,7 +237,7 @@ export default function TenantLedgerReportPage() {
                 caption={`Financial statement for ${report.tenant?.name}`}
                 ariaLabel="Tenant financial ledger"
                 columns={[
-                  { key: "date", label: "Date", className: "text-center w-24" },
+                  { key: "date", label: "Date", className: "text-center w-24", headerClassName: "whitespace-nowrap" },
                   { key: "ref", label: "Entry ID", className: "w-28 text-center" },
                   { key: "desc", label: "Description" },
                   { key: "debit", label: "Charges", className: "text-right" },
@@ -244,29 +259,25 @@ export default function TenantLedgerReportPage() {
                     <td className="px-6 py-4 text-xs font-bold text-stone-700">{entry.description}</td>
                     <td className="px-6 py-4 text-right">
                         {entry.type === 'debit' ? (
-                            Number(entry.amount) === 0 ? (
-                                <span className="font-mono text-xs tabular-nums text-stone-300 opacity-40">{formatPHP(0)}</span>
-                            ) : (
-                                <span className="font-mono text-xs tabular-nums text-rose-800 font-black">{formatPHP(entry.amount)}</span>
-                            )
+                          <CurrencyDisplay 
+                            amount={entry.amount} 
+                            className={Number(entry.amount) === 0 ? "text-stone-300 opacity-40 text-xs font-bold" : "text-rose-800 font-bold text-xs"} 
+                          />
                         ) : <span className="text-stone-300">—</span>}
                     </td>
                     <td className="px-6 py-4 text-right">
                         {entry.type === 'credit' ? (
-                            Number(entry.amount) === 0 ? (
-                                <span className="font-mono text-xs tabular-nums text-stone-300 opacity-40">{formatPHP(0)}</span>
-                            ) : (
-                                <span className="font-mono text-xs tabular-nums text-teal-700 font-bold">{formatPHP(entry.amount)}</span>
-                            )
+                          <CurrencyDisplay 
+                            amount={entry.amount} 
+                            className={Number(entry.amount) === 0 ? "text-stone-300 opacity-40 text-xs font-bold" : "text-teal-700 font-bold text-xs"} 
+                          />
                         ) : <span className="text-stone-300">—</span>}
                     </td>
                     <td className="px-6 py-4 text-right">
-                        <span className={[
-                            "font-mono text-xs tabular-nums font-black",
-                            entry.running_balance > 0 ? "text-stone-900" : "text-emerald-800"
-                        ].join(" ")}>
-                            {formatPHP(entry.running_balance)}
-                        </span>
+                      <CurrencyDisplay 
+                        amount={entry.running_balance} 
+                        className={`text-xs font-bold ${entry.running_balance > 0 ? "text-stone-900" : "text-emerald-800"}`}
+                      />
                     </td>
                   </tr>
                 ))}

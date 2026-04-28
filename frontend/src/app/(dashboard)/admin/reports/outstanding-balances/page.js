@@ -16,7 +16,9 @@ import {
   normalizeReportRows,
   readStoredPerPage,
 } from "@/lib/pagination";
-import { formatDateString, formatPHP } from "@/lib/formatters";
+import { formatDateString } from "@/lib/formatters";
+import { useToasts } from "@/context/ToastContext";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
@@ -34,6 +36,7 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { AlertCircle, Users, Calendar, Clock, AlertTriangle } from "lucide-react";
 export default function OutstandingBalancesReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
@@ -77,7 +80,7 @@ export default function OutstandingBalancesReportPage() {
         setApiError(flattenApiErrors(reportError));
       }
     } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
-      setApiError("Unauthorized: you do not have permission to view reports.");
+      setApiError("Access restricted. You don’t have permission to view this report.");
     }
   }, [reportError, authLoading, currentUser]);
   useEffect(() => {
@@ -105,7 +108,7 @@ export default function OutstandingBalancesReportPage() {
         filenamePrefix: "outstanding-balances-report",
       });
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      showToast(flattenApiErrors(error), "error");
     } finally {
       setExporting(false);
     }
@@ -121,13 +124,21 @@ export default function OutstandingBalancesReportPage() {
   return (
     <StandardPage
       title="Outstanding Balances"
-      subtitle="Filter and export system data."
+      subtitle={
+        <div className="flex flex-col gap-2">
+          <p>Filter and export system data.</p>
+          <div className="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-stone-400/70">
+            <span>Generated {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-stone-200">|</span>
+            <span>{tableMeta?.total ?? 0} Records</span>
+          </div>
+        </div>
+      }
       loading={authLoading || loading}
       skeleton={<SkeletonListPage rows={10} />}
       breadcrumbs={
         <Breadcrumbs
           items={[
-            { label: "Administration" },
             { label: "Reports", href: "/admin/reports" },
             { label: "Outstanding Balances" },
           ]}
@@ -145,18 +156,20 @@ export default function OutstandingBalancesReportPage() {
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           label="Total Outstanding"
-          value={formatPHP(report.summary?.total_outstanding)}
+          value={report.summary?.total_outstanding}
           icon={AlertCircle}
           isSyncing={isValidating}
+          currency={true}
           className="hs-glass-effect"
         />
         <KpiCard
           label="Past-Due Balance"
-          value={formatPHP(pastDueAmount)}
+          value={pastDueAmount}
           isDanger={pastDueAmount > 0}
           icon={AlertTriangle}
           sub="Immediate action required"
           isSyncing={isValidating}
+          currency={true}
           className="hs-glass-effect"
         />
         <KpiCard
@@ -314,41 +327,41 @@ export default function OutstandingBalancesReportPage() {
               { key: "tenant", label: "Tenant", sortable: true },
               { key: "room", label: "Room", className: "text-center", sortable: true },
               { key: "period", label: "Period", className: "text-center" },
-              { key: "dueDate", label: "Due Date", className: "text-center", sortable: true },
+              { key: "dueDate", label: "Due Date", className: "text-center", sortable: true, headerClassName: "whitespace-nowrap" },
               { key: "daysOverdue", label: "Aging", className: "text-center", sortable: true },
               { key: "balance", label: "Balance", className: "text-right", sortable: true },
               { key: "status", label: "Status", className: "text-center", sortable: true },
               { key: "actions", label: "", className: "text-right w-16" },
             ]}
             onSortChange={(key) => {
-                setSortConfig(prev => ({
-                    key,
-                    dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc"
-                }));
+              setSortConfig(prev => ({
+                key,
+                dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc"
+              }));
             }}
             sortColumn={sortConfig.key}
             sortDirection={sortConfig.dir}
             rows={[...rows].sort((a, b) => {
-                let valA, valB;
-                if (sortConfig.key === "daysOverdue") {
-                    valA = daysPastDue(a.due_date);
-                    valB = daysPastDue(b.due_date);
-                } else if (sortConfig.key === "balance") {
-                    valA = a.outstanding_balance;
-                    valB = b.outstanding_balance;
-                } else if (sortConfig.key === "billing_id") {
-                    valA = a.billing_id;
-                    valB = b.billing_id;
-                } else if (sortConfig.key === "dueDate") {
-                    valA = new Date(a.due_date).getTime();
-                    valB = new Date(b.due_date).getTime();
-                } else {
-                    valA = String(a[sortConfig.key] || "").toLowerCase();
-                    valB = String(b[sortConfig.key] || "").toLowerCase();
-                }
-                if (valA < valB) return sortConfig.dir === "asc" ? -1 : 1;
-                if (valA > valB) return sortConfig.dir === "asc" ? 1 : -1;
-                return 0;
+              let valA, valB;
+              if (sortConfig.key === "daysOverdue") {
+                valA = daysPastDue(a.due_date);
+                valB = daysPastDue(b.due_date);
+              } else if (sortConfig.key === "balance") {
+                valA = a.outstanding_balance;
+                valB = b.outstanding_balance;
+              } else if (sortConfig.key === "billing_id") {
+                valA = a.billing_id;
+                valB = b.billing_id;
+              } else if (sortConfig.key === "dueDate") {
+                valA = new Date(a.due_date).getTime();
+                valB = new Date(b.due_date).getTime();
+              } else {
+                valA = String(a[sortConfig.key] || "").toLowerCase();
+                valB = String(b[sortConfig.key] || "").toLowerCase();
+              }
+              if (valA < valB) return sortConfig.dir === "asc" ? -1 : 1;
+              if (valA > valB) return sortConfig.dir === "asc" ? 1 : -1;
+              return 0;
             }).map((row) => {
               const daysOverdue = daysPastDue(row.due_date);
               const isPastDue = isPastDueReceivable(row);
@@ -379,16 +392,18 @@ export default function OutstandingBalancesReportPage() {
                   </td>
                   <td className="px-6 py-3 text-right">
                     {row.outstanding_balance < 0 ? (
-                      <span className="font-mono text-xs tabular-nums font-bold text-emerald-700">
-                        {formatPHP(Math.abs(row.outstanding_balance))} CR
-                      </span>
+                      <div className="flex justify-end items-baseline gap-1">
+                        <CurrencyDisplay 
+                          amount={Math.abs(row.outstanding_balance)} 
+                          className="text-xs font-bold text-emerald-700"
+                        />
+                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter">CR</span>
+                      </div>
                     ) : (
-                      <span className={[
-                        "font-mono text-xs tabular-nums font-black",
-                        row.outstanding_balance > 0 ? "text-rose-800" : "text-stone-400"
-                      ].join(" ")}>
-                        {formatPHP(row.outstanding_balance)}
-                      </span>
+                      <CurrencyDisplay 
+                        amount={row.outstanding_balance} 
+                        className={`text-xs font-bold ${row.outstanding_balance > 0 ? "text-rose-800" : "text-stone-400"}`}
+                      />
                     )}
                   </td>
                   <td className="px-6 py-3 text-center"><StatusBadge>{row.status}</StatusBadge></td>

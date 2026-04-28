@@ -59,12 +59,11 @@ export default function UserDetailPage() {
     }
     return (
         <StandardPage
-            title={uData ? `User Profile: ${uData.first_name} ${uData.last_name}` : "User Profile"}
-            subtitle="Manage staff accounts and role permissions (Admin only)."
+            title={uData ? `${uData.first_name} ${uData.last_name}` : "User Profile"}
+            subtitle="User account details and recent activity."
             breadcrumbs={
                 <Breadcrumbs
                     items={[
-                        { label: "Administration", href: "/admin/users" },
                         { label: "Users", href: "/admin/users" },
                         { label: uData?.username || "Detail" }
                     ]}
@@ -83,10 +82,10 @@ export default function UserDetailPage() {
                         variant="primary"
                         onClick={() => setEditingUser(uData)}
                         disabled={isSelf} // Self-management restricted as per security audit
-                        className="!h-11 px-8 text-[10px] font-black uppercase tracking-widest bg-stone-900 shadow-lg shadow-teal-900/10 border-0 hover:bg-stone-800"
+                        className="!h-11 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 border-0"
                     >
                         <Edit2 size={14} className="mr-2" />
-                        Update Credentials
+                        Edit User
                     </Button>
                 </div>
             }
@@ -142,20 +141,16 @@ export default function UserDetailPage() {
                     </div>
                     <div className="space-y-6">
                         <Card className="bg-stone-50 border-stone-200 p-6 hs-glass-effect">
-                            <h3 className="hs-strip-title text-stone-400 uppercase tracking-widest font-black text-[9px] mb-4">Account Integrity</h3>
+                            <h3 className="hs-strip-title text-stone-400 uppercase tracking-widest font-black text-[9px] mb-4">Activity Summary</h3>
                             <div className="space-y-4">
                                 <div className="flex items-start gap-3">
-                                    <ShieldCheck size={16} className="text-emerald-600 mt-0.5" />
+                                    <Activity size={16} className="text-teal-600 mt-0.5" />
                                     <div>
-                                        <span className="block text-xs font-bold text-stone-900">RBAC Verified</span>
-                                        <span className="block text-[10px] text-stone-500 leading-tight mt-0.5">Permissions are managed via centralized role policies.</span>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3 pt-4 border-t border-stone-200/60">
-                                    <Activity size={16} className="text-blue-600 mt-0.5" />
-                                    <div>
-                                        <span className="block text-xs font-bold text-stone-900">Audit Enabled</span>
-                                        <span className="block text-[10px] text-stone-500 leading-tight mt-0.5">Every lifecycle event is captured in the activity log.</span>
+                                        <span className="block text-xs font-black text-stone-900">Total Actions</span>
+                                        <span className="block text-xl font-mono font-black text-stone-900 tabular-nums mt-0.5">
+                                            {auditMeta?.total || 0}
+                                        </span>
+                                        <span className="block text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-1">Logged Events</span>
                                     </div>
                                 </div>
                             </div>
@@ -205,10 +200,10 @@ export default function UserDetailPage() {
                                 <tr key={log.id} className="border-t border-stone-100/80 hover:bg-stone-50/50 transition-colors">
                                     <td className="pl-8 py-5">
                                         <div className="flex flex-col">
-                                            <span className="font-mono text-[10px] font-bold text-stone-900 tabular-nums leading-none">
+                                            <span className="font-mono text-[10px] font-black text-stone-900 tabular-nums leading-none">
                                                 {formatDateString(log.changed_at)}
                                             </span>
-                                            <span className="text-[9px] font-medium text-stone-400 uppercase tracking-tighter mt-1">
+                                            <span className="font-mono text-[9px] font-bold text-stone-400 uppercase tracking-tight tabular-nums mt-1.5">
                                                 {new Date(log.changed_at).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", second: "2-digit" })}
                                             </span>
                                         </div>
@@ -217,9 +212,21 @@ export default function UserDetailPage() {
                                         <StatusBadge size="sm">{log.action}</StatusBadge>
                                     </td>
                                     <td className="pr-8 py-5">
-                                        <div className="flex flex-col items-center gap-1">
-                                            <span className="text-[10px] font-black text-stone-700 uppercase tracking-tight leading-none">{log.target_table}</span>
-                                            <ResourceIdCell id={log.record_id} prefix={log.target_table === 'users' ? 'USER' : log.target_table.slice(0, 4).toUpperCase()} />
+                                        <div className="flex flex-col items-center gap-1.5">
+                                            <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest leading-none">{log.target_table}</span>
+                                            <ResourceIdCell
+                                                id={log.record_id}
+                                                type={
+                                                    log.target_table === 'users' ? 'user' :
+                                                        log.target_table === 'tenants' ? 'tenant' :
+                                                            log.target_table === 'contracts' ? 'contract' :
+                                                                log.target_table === 'bills' ? 'bill' :
+                                                                    log.target_table === 'bill_line_items' ? 'bill' :
+                                                                        log.target_table === 'payments' ? 'payment' :
+                                                                            log.target_table === 'rooms' ? 'room' :
+                                                                                log.target_table === 'bed_spaces' ? 'bed_space' : 'user'
+                                                }
+                                            />
                                         </div>
                                     </td>
                                 </tr>
@@ -243,7 +250,7 @@ export default function UserDetailPage() {
             <SideSheetOverlay
                 isOpen={!!editingUser}
                 onClose={() => setEditingUser(null)}
-                title="Administer Account"
+                title="USER DETAILS"
             >
                 {editingUser && (
                     <UserQuickEditForm

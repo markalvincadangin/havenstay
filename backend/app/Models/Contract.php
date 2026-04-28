@@ -51,6 +51,7 @@ class Contract extends Model
         'is_cleared',
         'status',
         'notes',
+        'idempotency_key',
     ];
 
     protected function casts(): array

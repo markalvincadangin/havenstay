@@ -32,7 +32,7 @@
  
          $paginator = PaymentService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
  
-         return $this->paginated($paginator, [], 'Payment history retrieved successfully.');
+         return $this->paginated($paginator, [], 'Payment history retrieved successfully.', PaymentResource::class);
      }
  
      /**
@@ -48,15 +48,17 @@
          return $this->success('Payment retrieved successfully.', new PaymentResource($loadedPayment));
      }
  
-     /**
-      * FR-041: Record a new payment (Atomic XOR targeting).
-      */
      public function store(StorePaymentRequest $request): JsonResponse
-     {
-         $payment = PaymentService::record($request->user(), $request->validated());
- 
-         return $this->created('Payment recorded successfully.', new PaymentResource($payment));
-     }
+    {
+        $data = $request->validated();
+        
+        // The HandleIdempotency middleware manages the lock and replay.
+        // We just pass the key to the service for DB record-keeping.
+        $data['idempotency_key'] = $request->header('Idempotency-Key');
+        
+        $payment = PaymentService::record($request->user(), $data);
+        return $this->created('Payment recorded successfully.', new PaymentResource($payment));
+    }
  
      /**
       * FR-043: Void a payment and reverse impacts.

@@ -33,7 +33,7 @@
          return [
              'first_name' => ['required', 'string', 'max:100'],
              'last_name' => ['required', 'string', 'max:100'],
-             'contact_number' => ['required', 'string', 'max:20'],
+             'contact_number' => ['required', 'string', 'max:20', 'regex:/^(09\d{9}|(\+639)\d{9})$/'],
              
              // BR-TEN-002: Email must be unique.
              // BR-GEN-003: Uniqueness only enforced among non-deleted records.
@@ -45,7 +45,7 @@
              ],
              
              'emergency_contact_name' => ['required', 'string', 'max:200'],
-             'emergency_contact_number' => ['required', 'string', 'max:20'],
+             'emergency_contact_number' => ['required', 'string', 'max:20', 'regex:/^(09\d{9}|(\+639)\d{9})$/'],
              'address' => ['required', 'string'],
          ];
      }

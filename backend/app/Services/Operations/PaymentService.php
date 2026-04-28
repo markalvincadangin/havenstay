@@ -31,7 +31,7 @@
       */
      public static function getById(int $paymentId): ?Payment
      {
-         return Payment::with(['billing.contract.tenant', 'contract.tenant', 'processor'])->find($paymentId);
+         return Payment::with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'processor'])->find($paymentId);
      }
  
      /**
@@ -82,7 +82,7 @@
  
                  $payment = Payment::create([
                      'billing_id' => $billingId,
-                     'contract_id' => $contractId,
+                     'contract_id' => $billingId ? null : $contractId,
                      'payment_category' => $category,
                      'processed_by' => $actor->user_id,
                      'amount_paid' => $amount,
@@ -90,6 +90,7 @@
                      'payment_method' => $method,
                      'reference_number' => $data['reference_number'] ?? null,
                      'remarks' => $data['remarks'] ?? null,
+                     'idempotency_key' => $data['idempotency_key'] ?? null,
                  ]);
  
                  // 1. Reconcile Billing Status if applicable
@@ -178,7 +179,7 @@
      public static function listHistoryQuery(array $filters = []): Builder
      {
          $query = Payment::query()
-             ->with(['billing.contract.tenant', 'contract.tenant', 'processor'])
+             ->with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'processor'])
              ->orderByDesc('payment_date')
              ->orderByDesc('payment_id');
  

@@ -10,9 +10,9 @@ import { sortClientRows } from "@/lib/tableSort";
 import {
   compareTenantDirectoryName,
   formatDateString,
-  formatPHP,
   formatTenantDirectoryName,
 } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import { Card } from "@/components/ui/Card";
 import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import TablePagination from "@/components/ui/TablePagination";
@@ -118,14 +118,14 @@ export default function ContractsListPage() {
   return (
     <StandardPage
       title="Contract Ledger"
-      subtitle="History of leases, agreement history, and rental ledgers."
+      subtitle="History of leases and agreements."
       breadcrumbs={<Breadcrumbs items={[{ label: "Contracts" }]} />}
       loading={loading}
       error={contractError}
       actions={
         <PageHeaderActions
           ctaHref={canWrite ? "/contracts/new" : null}
-          ctaLabel="New Lease"
+          ctaLabel="REGISTER CONTRACT"
           ctaIcon={PlusCircle}
           user={currentUser}
         />
@@ -156,20 +156,22 @@ export default function ContractsListPage() {
           />
           <KpiCard
             label="Security Deposits"
-            value={formatPHP(stats.totalDeposits)}
+            value={stats.totalDeposits}
             sub="Total security deposits"
             icon={Landmark}
             isLoading={!reportData}
             isSyncing={reportValidating}
+            currency={true}
             className="hs-glass-effect"
           />
           <KpiCard
             label="Expected Income"
-            value={formatPHP(stats.potentialRevenue)}
+            value={stats.potentialRevenue}
             sub="Projected monthly revenue"
             icon={TrendingUp}
             isLoading={!reportData}
             isSyncing={reportValidating}
+            currency={true}
             className="hs-glass-effect"
           />
         </div>
@@ -255,7 +257,7 @@ export default function ContractsListPage() {
                     className={primaryLinkCtaClass}
                     onClick={() => router.push("/contracts/new")}
                   >
-                    New Lease
+                    REGISTER CONTRACT
                   </Button>
                 )
               ) : null
@@ -272,10 +274,10 @@ export default function ContractsListPage() {
                 embedded
                 columns={[
                   { key: "contract_id", label: "CONTRACT ID", sortable: true, sortKey: "contract_id", className: "pl-8" },
-                  { key: "tenant", label: "TENANT NAME", sortable: true, sortKey: "tenant" },
-                  { key: "move_in_date", label: "MOVE-IN DATE", sortable: true, sortKey: "move_in_date", className: "text-center" },
-                  { key: "room", label: "ASSIGNED UNIT", sortable: true, sortKey: "room", className: "text-center" },
-                  { key: "monthly_rate", label: "RENTAL RATE", sortable: true, sortKey: "monthly_rate", className: "text-right" },
+                  { key: "tenant", label: "TENANT", sortable: true, sortKey: "tenant" },
+                  { key: "move_in_date", label: "MOVE-IN", sortable: true, sortKey: "move_in_date", className: "text-center" },
+                  { key: "room", label: "ROOM / BED", sortable: true, sortKey: "room", className: "text-center" },
+                  { key: "monthly_rate", label: "MONTHLY RATE", sortable: true, sortKey: "monthly_rate", className: "text-right" },
                   { key: "status", label: "STATUS", sortable: true, sortKey: "status", className: "text-center" },
                   { key: "actions", label: "", className: "text-right w-16 px-8" },
                 ]}
@@ -295,13 +297,13 @@ export default function ContractsListPage() {
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border border-stone-200 bg-white rounded-xl p-6 shadow-sm">
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black uppercase text-stone-400 tracking-widest">Financial Snapshot</span>
-                            <div className="mt-2 text-sm text-stone-900 font-mono font-bold">
-                              Security Deposit: {c.deposit_amount ? formatPHP(c.deposit_amount) : "—"} <span className="text-stone-300 mx-3">|</span>
-                              Base Rate: {c.monthly_rate ? formatPHP(c.monthly_rate) : "—"}
+                            <div className="mt-2 text-sm text-stone-900 flex items-center gap-1 font-bold">
+                              Security Deposit: {c.deposit_amount ? <CurrencyDisplay amount={c.deposit_amount} /> : "—"} <span className="text-stone-300 mx-3 font-normal">|</span>
+                              Base Rate: {c.monthly_rate ? <CurrencyDisplay amount={c.monthly_rate} /> : "—"}
                             </div>
                           </div>
-                          <Button onClick={() => router.push(`/contracts/${c.contract_id}`)} variant="primary" className="!h-10 px-8 text-[10px] font-black tracking-widest uppercase shadow-md active:scale-95 transition-transform bg-stone-900 hover:bg-stone-800">
-                            Access Ledger
+                          <Button onClick={() => router.push(`/contracts/${c.contract_id}`)} variant="secondary" className="!h-10 px-8 text-[10px] font-black tracking-widest uppercase shadow-md active:scale-95 transition-transform">
+                            View Details
                           </Button>
                         </div>
                       }
@@ -349,20 +351,21 @@ export default function ContractsListPage() {
                         <div className="flex flex-col items-end">
                           {c.monthly_rate_override ? (
                             <>
-                              <span className="font-mono text-[10px] tabular-nums text-stone-400 line-through decoration-stone-300">
-                                {formatPHP(c.monthly_rate)}
+                              <span className="text-[10px] font-bold text-stone-400 line-through decoration-stone-300">
+                                <CurrencyDisplay amount={c.monthly_rate} />
                               </span>
                               <div className="flex items-center gap-1.5">
-                                <span className="font-mono text-sm font-black tabular-nums text-teal-700">
-                                  {formatPHP(c.monthly_rate_override)}
-                                </span>
-                                <span className="text-[8px] font-black bg-teal-100 text-teal-700 px-1 py-0.5 rounded uppercase tracking-tighter">Custom</span>
+                                <CurrencyDisplay 
+                                  amount={c.monthly_rate_override} 
+                                  className="text-sm font-bold text-teal-700" 
+                                />
+                                <span className="text-[8px] font-black bg-teal-100 text-teal-700 px-1 py-0.5 rounded uppercase tracking-tighter">Custom Rate</span>
                               </div>
                             </>
                           ) : (
-                            <span className="font-mono text-sm font-black tabular-nums text-stone-900">
-                              {c.monthly_rate != null ? formatPHP(c.monthly_rate) : "—"}
-                            </span>
+                            <div className="text-sm font-bold text-stone-900">
+                              {c.monthly_rate != null ? <CurrencyDisplay amount={c.monthly_rate} /> : "—"}
+                            </div>
                           )}
                         </div>
                       </td>

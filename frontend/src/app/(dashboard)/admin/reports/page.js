@@ -49,7 +49,7 @@ const REPORT_GROUPS = [
       },
       {
         title: "Tenant History",
-        description: "View resident stay history and move-in/move-out records.",
+        description: "View tenant stay history and move-in/move-out records.",
         href: "/admin/reports/tenant-history",
         icon: Users,
         color: "text-indigo-600 bg-indigo-50"
@@ -68,14 +68,14 @@ const REPORT_GROUPS = [
       },
       {
         title: "Outstanding Balances",
-        description: "See unpaid and past-due balances by resident.",
+        description: "See unpaid and past-due balances by tenant.",
         href: "/admin/reports/outstanding-balances",
         icon: AlertCircle,
         color: "text-amber-600 bg-amber-50"
       },
       {
         title: "Tenant Ledger",
-        description: "Detailed payment and billing history for each resident.",
+        description: "Detailed payment and billing history for each tenant.",
         href: "/admin/reports/tenant-ledger",
         icon: BookMarked,
         color: "text-teal-600 bg-teal-50"
@@ -98,15 +98,10 @@ export default function ReportsIndexPage() {
   return (
     <StandardPage
       title="Reports"
-      subtitle="Data exports and operational summaries (Admin only)."
+      subtitle="Data exports and operational summaries."
       skeleton={<SkeletonGridPage cards={6} />}
-      breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "Reports" }]} />}
       actions={
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl">
-            <ShieldCheck size={14} className="text-teal-600" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Verified Access</span>
-          </div>
           <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
         </div>
       }

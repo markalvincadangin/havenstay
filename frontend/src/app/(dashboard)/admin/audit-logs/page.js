@@ -111,9 +111,9 @@ export default function AuditLogsPage() {
   if (isUnauthorized) return null;
   return (
     <StandardPage
-      title="Audit History"
+      title="Audit Logs"
       subtitle="Track activity and changes in HavenStay."
-      breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "Audit History" }]} />}
+      breadcrumbs={<Breadcrumbs items={[{ label: "Audit Logs" }]} />}
       loading={loading}
       skeleton={<SkeletonListPage rows={10} />}
       actions={canAccess && (
@@ -143,11 +143,11 @@ export default function AuditLogsPage() {
             onRetry={() => refetchLogs()}
             emptyProps={{
               title: "No audit events found",
-              message: "The system mutability tracker found no records matching your filters."
+              message: "No activity logs match your current filters."
             }}
           >
             <div className="space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <KpiCard
                   label="System Events"
                   value={pulseData?.total_events_24h ?? 0}
@@ -160,7 +160,7 @@ export default function AuditLogsPage() {
                 <KpiCard
                   label="Sensitive Changes"
                   value={pulseData?.sensitive_mutations_24h ?? 0}
-                  sub="SECURITY PROTECTED TABLES"
+                  sub="PROTECTED RECORDS"
                   icon={ShieldAlert}
                   isWarning={(pulseData?.sensitive_mutations_24h ?? 0) > 0}
                   isLoading={!pulseData}
@@ -174,16 +174,6 @@ export default function AuditLogsPage() {
                   icon={Lock}
                   isDanger={(pulseData?.access_denied_24h ?? 0) > 0}
                   isActiveDecision={(pulseData?.access_denied_24h ?? 0) > 0}
-                  isLoading={!pulseData}
-                  isSyncing={pulseValidating}
-                  className="hs-glass-effect"
-                />
-                <KpiCard
-                  label="Audit Pulse"
-                  value="Active"
-                  sub="CONTINUITY VERIFIED"
-                  icon={Zap}
-                  isSuccess={true}
                   isLoading={!pulseData}
                   isSyncing={pulseValidating}
                   className="hs-glass-effect"
@@ -211,7 +201,7 @@ export default function AuditLogsPage() {
                         onChange={(e) => updateFilter("action", e.target.value)}
                         className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                       >
-                        <option value="all">All actions</option>
+                        <option value="all">All Actions</option>
                         <option value="INSERT">INSERT</option>
                         <option value="UPDATE">UPDATE</option>
                         <option value="DELETE">DELETE</option>
@@ -262,8 +252,8 @@ export default function AuditLogsPage() {
               </FilterPanelCard>
               <Card className="overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
                 <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-                  <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Audit History</h2>
-                  <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+                  <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-bold text-stone-400">Audit Logs</h2>
+                  <div className="text-[10px] font-mono font-bold tabular-nums text-stone-400 uppercase tracking-widest leading-none">
                     {listMeta?.total ?? sortedRows.length} events logged
                   </div>
                 </div>
@@ -294,10 +284,10 @@ export default function AuditLogsPage() {
                       </td>
                       <td className="py-6">
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-stone-900">
+                          <span className="text-xs font-bold tabular-nums text-stone-900">
                             {formatDateString(log.changed_at)}
                           </span>
-                          <span className="mt-1 font-mono text-[10px] font-black uppercase tracking-widest text-stone-400">
+                          <span className="mt-1 font-mono text-[10px] font-bold tabular-nums uppercase tracking-widest text-stone-400">
                             {log.changed_at ? (
                               (() => {
                                 const normalized = typeof log.changed_at === 'string' && log.changed_at.includes(' ') && !log.changed_at.includes('T') && !log.changed_at.includes('Z')
@@ -315,7 +305,7 @@ export default function AuditLogsPage() {
                             <User size={14} />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-black text-stone-900 truncate">
+                            <p className="text-sm font-bold text-stone-900 truncate">
                               {log.user ? `${log.user.first_name} ${log.user.last_name}` : "System Trace"}
                             </p>
                             {log.user?.username && (
@@ -333,7 +323,7 @@ export default function AuditLogsPage() {
                       </td>
                       <td className="py-6">
                         <div className="flex flex-col">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-stone-900">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-stone-900">
                             {formatAuditEntityOrResource(log.target_table)}
                           </span>
                           <span className="mt-1 font-mono text-[10px] font-bold text-stone-400 uppercase tracking-widest leading-none">
@@ -353,8 +343,8 @@ export default function AuditLogsPage() {
                       </td>
                     </tr>
                   ))}
-                  emptyTitle="No audit triggers matches filters"
-                  emptyDescription="The system mutability tracker found no records."
+                  emptyTitle="No activity found"
+                  emptyDescription="No activity logs found."
                 />
                 <TablePagination
                   meta={listMeta}

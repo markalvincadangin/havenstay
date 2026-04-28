@@ -43,6 +43,16 @@
                      ->orderByDesc('created_at')
                      ->first();
  
+                 // Forensic Check: Duplicate Prevention
+                 $duplicate = MeterReading::where('meter_id', $meterId)
+                     ->where('reading_date', $data['reading_date'])
+                     ->where('reading_value', $data['reading_value'])
+                     ->first();
+                 
+                 if ($duplicate) {
+                     return $duplicate; // Idempotent return
+                 }
+ 
                  // BR-MET-005 Monotonicity Check
                  if (!($data['is_rollover'] ?? false) && $lastReading && $data['reading_value'] < $lastReading->reading_value) {
                      throw ValidationException::withMessages([
@@ -105,7 +115,7 @@
       */
      public static function getById(int $id): ?Meter
      {
-         return Meter::query()->with(['utility', 'assignments.room', 'readings.recorder'])->find($id);
+         return Meter::query()->with(['utility', 'assignments.room', 'readings.recorder', 'readings.billing'])->find($id);
      }
  
      /**
@@ -186,6 +196,8 @@
      {
          return Meter::query()->whereHas('assignments', function ($q) use ($roomId) {
              $q->where('room_id', $roomId)->whereNull('valid_to');
-         })->with('utility')->get();
+         })->with(['utility', 'readings' => function ($q) {
+             $q->with(['recorder', 'billing'])->orderByDesc('reading_date')->orderByDesc('created_at');
+         }])->get();
      }
  }

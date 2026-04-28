@@ -7,18 +7,18 @@ import { Calendar, Wallet, FileText } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { canManageContracts } from "@/lib/auth";
 import { applyServerFieldErrors } from "@/lib/forms";
-import { parseMoneyInput } from "@/lib/formatters";
+import { formatTenantDirectoryName, parseMoneyInput } from "@/lib/formatters";
 import { isContractActive, isContractEditable, isContractFinanciallyLocked } from "@/lib/constants";
 import { Field, Input, Textarea } from "@/components/ui/Fields";
 import { QuickEditFormShell } from "@/components/ui/QuickEditFormShell";
 import RecordStateAlert from '@/components/ui/RecordStateAlert';
 import { useToasts } from "@/context/ToastContext";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { formatPHP } from "@/lib/formatters";
+import ResourceIdCell from "@/components/ui/ResourceIdCell";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 
 export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCancel }) {
   const { showToast } = useToasts();
-  const [apiError, setApiError] = useState("");
   const readOnly = !canManageContracts(currentUser);
 
   const {
@@ -42,7 +42,6 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
   const watchMonthlyRent = watch("monthly_rent");
 
   const onSubmit = async (values) => {
-    setApiError("");
     if (readOnly) return;
 
     try {
@@ -50,7 +49,7 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
       const rentParsed = parseMoneyInput(values.monthly_rent);
 
       if (Number.isNaN(depositParsed) || Number.isNaN(rentParsed)) {
-        setApiError("Enter valid amounts.");
+        showToast("Enter valid amounts.", "error");
         return;
       }
 
@@ -78,7 +77,7 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
       showToast(`Contract #${contract.contract_id} updated.`, "success");
       onSuccess();
     } catch (error) {
-      applyServerFieldErrors(error, setError, { setApiError });
+      applyServerFieldErrors(error, setError, { showToast });
     }
   };
 
@@ -91,19 +90,23 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
     <QuickEditFormShell
       onSubmit={handleSubmit(onSubmit)}
       isSubmitting={isSubmitting}
-      apiError={apiError}
       onCancel={onCancel}
       submitLabel="Update Contract"
     >
       {/* Forensic Header: Establishes Global Context (HCI Primacy Principle) */}
       <div className="mb-6 pb-4 border-b border-stone-100 flex items-center justify-between">
-        <div>
-          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block mb-1">Status</span>
-          <StatusBadge>{contract.status}</StatusBadge>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block mb-1">Tenant & Status</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-stone-900">
+              {contract.tenant?.last_name}, {contract.tenant?.first_name}
+            </span>
+            <StatusBadge>{contract.status}</StatusBadge>
+          </div>
         </div>
         <div className="text-right">
           <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block mb-1">Contract ID</span>
-          <span className="font-mono text-xs font-bold text-stone-600">#{String(contract.contract_id).padStart(6, '0')}</span>
+          <ResourceIdCell id={contract.contract_id} type="contract" />
         </div>
       </div>
 
@@ -150,7 +153,7 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
             error={errors.monthly_rent?.message}
             hint={
               <div className="flex items-center justify-between mt-1 px-0.5">
-                <span className="text-[10px] font-medium text-stone-500">Standard: {formatPHP(contract.monthly_rate)}</span>
+                <span className="text-[10px] font-medium text-stone-500">Standard: <CurrencyDisplay amount={contract.monthly_rate} /></span>
                 {isCustomRate && !isFinanciallyLocked && (
                   <button
                     type="button"
@@ -167,6 +170,7 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
               <Input
                 type="number"
                 step="0.01"
+                prefix="₱"
                 disabled={readOnly || isFinanciallyLocked || isLocked}
                 className={`!h-10 border-stone-200 font-mono font-bold transition-all ${isCustomRate ? "text-teal-700 bg-teal-50/30 pr-16" : ""}`}
                 {...register("monthly_rent", { required: "Required" })}
@@ -179,7 +183,7 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
             </div>
           </Field>
           <Field label="Security Deposit" required error={errors.deposit_amount?.message}>
-            <Input type="number" step="0.01" disabled={readOnly || isFinanciallyLocked || isLocked} className="!h-10 border-stone-200 font-mono font-bold" {...register("deposit_amount", { required: "Required" })} />
+            <Input type="number" step="0.01" prefix="₱" disabled={readOnly || isFinanciallyLocked || isLocked} className="!h-10 border-stone-200 font-mono font-bold" {...register("deposit_amount", { required: "Required" })} />
           </Field>
         </div>
       </div>

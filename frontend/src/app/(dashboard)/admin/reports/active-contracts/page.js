@@ -7,7 +7,9 @@ import useSWR from "swr";
 import { canViewReports } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { flattenApiErrors } from "@/lib/errors";
-import { formatDateString, formatPHP } from "@/lib/formatters";
+import { formatDateString } from "@/lib/formatters";
+import { useToasts } from "@/context/ToastContext";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import { exportReportCsv } from "@/lib/downloads";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
@@ -35,6 +37,7 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 
 export default function ActiveContractsReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
@@ -75,7 +78,7 @@ export default function ActiveContractsReportPage() {
     if (reportError) {
       setApiError(flattenApiErrors(reportError));
     } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
-      setApiError("Unauthorized: you do not have permission to view reports.");
+      setApiError("Access restricted. You don’t have permission to view this report.");
     }
   }, [reportError, authLoading, currentUser]);
 
@@ -103,7 +106,7 @@ export default function ActiveContractsReportPage() {
         filenamePrefix: "active-contracts",
       });
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      showToast(flattenApiErrors(error), "error");
     } finally {
       setExporting(false);
     }
@@ -120,11 +123,20 @@ export default function ActiveContractsReportPage() {
   return (
     <StandardPage
       title="Active Contracts"
-      subtitle="Filter and export system data."
+      subtitle={
+        <div className="flex flex-col gap-2">
+          <p>Filter and export system data.</p>
+          <div className="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-stone-400/70">
+            <span>Generated {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-stone-200">|</span>
+            <span>{report.meta?.total ?? 0} Records</span>
+          </div>
+        </div>
+      }
       loading={authLoading || (loading && !reportData)}
       skeleton={<SkeletonListPage rows={10} />}
       breadcrumbs={
-        <Breadcrumbs items={[{ label: "Administration" }, { label: "Reports", href: "/admin/reports" }, { label: "Active Contracts" }]} />
+        <Breadcrumbs items={[{ label: "Reports", href: "/admin/reports" }, { label: "Active Contracts" }]} />
       }
       actions={
         <ReportHeaderActions
@@ -136,72 +148,67 @@ export default function ActiveContractsReportPage() {
       }
     >
 
-      <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-stone-500">
-        Live snapshot of <strong className="font-medium text-stone-600">active</strong> leases with room, bed, and rate.
-        Complements the room occupancy summary and the per-bed status report.
-      </p>
-
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <KpiCard 
-          label="Active Leases" 
-          value={report.summary?.contract_count ?? "—"} 
-          icon={FileText} 
+        <KpiCard
+          label="Active Leases"
+          value={report.summary?.contract_count ?? "—"}
+          icon={FileText}
           isSyncing={isValidating}
           className="hs-glass-effect"
         />
       </div>
 
       <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={isValidating}>
-          <form className="grid gap-6 sm:grid-cols-3" onSubmit={onApplyFilters}>
-            <Field label="Room">
-              <Select
-                className="!h-11 border-stone-200"
-                value={filters.room_id}
-                onChange={(e) => setFilters((prev) => ({ ...prev, room_id: e.target.value }))}
-              >
-                <option value="">All rooms</option>
-                {rooms.map((r) => (
-                  <option key={r.room_id} value={String(r.room_id)}>
-                    {r.room_code}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="flex items-end">
-              <Button type="submit" variant="secondary" className="w-full !h-11 shadow-sm">
-                Apply filters
-              </Button>
-            </div>
-          </form>
-          <FilterChips
-            className="mt-6"
-            items={[
-              {
-                key: "room",
-                label: "Room",
-                value: appliedFilters.room_id
-                  ? selectedRoom
-                    ? selectedRoom.room_code
-                    : `#${appliedFilters.room_id}`
-                  : "",
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, room_id: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, room_id: "" }));
-                  setPage(1);
-                },
+        <form className="grid gap-6 sm:grid-cols-3" onSubmit={onApplyFilters}>
+          <Field label="Room">
+            <Select
+              className="!h-11 border-stone-200"
+              value={filters.room_id}
+              onChange={(e) => setFilters((prev) => ({ ...prev, room_id: e.target.value }))}
+            >
+              <option value="">All rooms</option>
+              {rooms.map((r) => (
+                <option key={r.room_id} value={String(r.room_id)}>
+                  {r.room_code}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex items-end">
+            <Button type="submit" variant="secondary" className="w-full !h-11 shadow-sm">
+              Apply filters
+            </Button>
+          </div>
+        </form>
+        <FilterChips
+          className="mt-6"
+          items={[
+            {
+              key: "room",
+              label: "Room",
+              value: appliedFilters.room_id
+                ? selectedRoom
+                  ? selectedRoom.room_code
+                  : `#${appliedFilters.room_id}`
+                : "",
+              onClear: () => {
+                setFilters((prev) => ({ ...prev, room_id: "" }));
+                setAppliedFilters((prev) => ({ ...prev, room_id: "" }));
+                setPage(1);
               },
-            ]}
-            onClearAll={() => {
-              setFilters({ room_id: "" });
-              setAppliedFilters({ room_id: "" });
-              setPage(1);
-            }}
-          />
-          {apiError ? (
-            <Alert variant="error" className="mt-6" title="Error">
-              {apiError}
-            </Alert>
-          ) : null}
+            },
+          ]}
+          onClearAll={() => {
+            setFilters({ room_id: "" });
+            setAppliedFilters({ room_id: "" });
+            setPage(1);
+          }}
+        />
+        {apiError ? (
+          <Alert variant="error" className="mt-6" title="Error">
+            {apiError}
+          </Alert>
+        ) : null}
       </ReportFilterCard>
 
       <ResourceView
@@ -225,7 +232,7 @@ export default function ActiveContractsReportPage() {
               { key: "tenant", label: "Tenant" },
               { key: "room", label: "Room" },
               { key: "bed", label: "Bed", className: "text-center" },
-              { key: "move_in", label: "Move-in", className: "text-center" },
+              { key: "move_in", label: "Move-in", className: "text-center", headerClassName: "whitespace-nowrap" },
               { key: "rate", label: "Monthly Rent", className: "text-right" },
               { key: "deposit", label: "Deposit", className: "text-right" },
               { key: "clearance", label: "Clearance", className: "text-center" },
@@ -241,15 +248,19 @@ export default function ActiveContractsReportPage() {
                 </td>
                 <td className="px-6 py-4 text-center text-xs font-bold text-stone-700">{row.bed_label}</td>
                 <td className="px-6 py-4 text-center text-[10px] font-medium text-stone-500">{formatDateString(row.move_in_date)}</td>
-                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-900">{formatPHP(row.monthly_rate)}</td>
-                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-500">{formatPHP(row.deposit_amount)}</td>
+                <td className="px-6 py-4 text-right">
+                  <CurrencyDisplay amount={row.monthly_rate} className="text-xs font-bold text-stone-900" />
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <CurrencyDisplay amount={row.deposit_amount} className="text-xs font-bold text-stone-500" />
+                </td>
                 <td className="px-6 py-4 text-center">
                   <StatusBadge variant={row.is_cleared ? 'success' : 'warning'}>
-                    {row.is_cleared ? 'cleared' : 'pending'}
+                    {row.is_cleared ? 'Cleared' : 'Pending'}
                   </StatusBadge>
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <StatusBadge>{row.bed_status}</StatusBadge>
+                  <StatusBadge>{row.contract_status}</StatusBadge>
                 </td>
                 <td className="px-6 py-4 text-right">
                   <Link

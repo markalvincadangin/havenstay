@@ -36,7 +36,7 @@
  
          $paginator = RoomService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
  
-         return $this->paginated($paginator, [], 'Rooms retrieved successfully.');
+         return $this->paginated($paginator, [], 'Rooms retrieved successfully.', RoomResource::class);
      }
  
      /**
@@ -54,7 +54,10 @@
       */
      public function show(ManageRoomRequest $request, Room $room): JsonResponse
      {
-         return $this->success('Room retrieved successfully.', new RoomResource($room->load(['bedSpaces', 'meterAssignments.meter'])));
+         return $this->success('Room retrieved successfully.', new RoomResource($room->load([
+             'bedSpaces.activeContract.tenant',
+             'meterAssignments.meter'
+         ])));
      }
  
      /**

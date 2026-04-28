@@ -29,6 +29,7 @@
              'status' => $this->status,
              'amenities' => $this->amenities,
              'description' => $this->description,
+            'is_metered' => (bool) $this->is_metered,
              
              // Relationships
              'bed_spaces' => BedSpaceResource::collection($this->whenLoaded('bedSpaces')),

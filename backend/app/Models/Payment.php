@@ -43,6 +43,7 @@ class Payment extends Model
         'voided_at',
         'voided_by',
         'void_reason',
+        'idempotency_key',
     ];
 
     /**

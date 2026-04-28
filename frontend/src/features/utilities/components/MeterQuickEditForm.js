@@ -14,7 +14,6 @@ import RecordStateAlert from '@/components/ui/RecordStateAlert';
 
 export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) {
   const { showToast } = useToasts();
-  const [apiError, setApiError] = useState("");
   const isEditing = !!meter?.meter_id;
   const readOnly = isEditing && !canManageMeters(currentUser);
 
@@ -36,7 +35,6 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
   });
 
   const onSubmit = async (values) => {
-    setApiError("");
     if (readOnly) return;
     try {
       if (isEditing) {
@@ -47,7 +45,7 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
             utility_id: Number(values.utility_id),
           }),
         });
-        showToast(`Hardware record ${values.serial_number} updated.`, "success");
+        showToast(`Meter ${values.serial_number} updated successfully.`, "success");
       } else {
         await apiRequest("/api/meters", {
           method: "POST",
@@ -56,12 +54,12 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
             utility_id: Number(values.utility_id),
           }),
         });
-        showToast(`New meter ${values.serial_number} registered.`, "success");
+        showToast(`Meter ${values.serial_number} registered successfully.`, "success");
       }
 
       onSuccess();
     } catch (error) {
-      applyServerFieldErrors(error, setError, { setApiError });
+      applyServerFieldErrors(error, setError, { showToast });
     }
   };
 
@@ -69,7 +67,6 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
     <QuickEditFormShell
       onSubmit={handleSubmit(onSubmit)}
       isSubmitting={isSubmitting}
-      apiError={apiError}
       onCancel={onCancel}
       submitLabel={isEditing ? "Update Meter" : "Register Hardware"}
     >

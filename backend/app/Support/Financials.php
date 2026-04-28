@@ -29,7 +29,7 @@
       * @param string|null $lookupDate The date for rate resolution (mandated per v5.0 blueprint).
       * @return float total_cost
       */
-     public static function computeUtilityCost(int $meterId, float $currentReading, ?string $lookupDate = null): float
+     public static function computeUtilityCost(int $meterId, float $currentReading, ?string $lookupDate = null, ?float $baseValue = null): float
      {
          $meter = Meter::with('utility')->findOrFail($meterId);
          
@@ -49,8 +49,14 @@
              ->orderBy('effective_from', 'desc')
              ->first();
  
-         $unitRate = $rate ? (float) $rate->base_rate : 0;
-         $prevValue = $lastReading ? (float) $lastReading->reading_value : 0;
+         if (!$rate) {
+             throw \Illuminate\Validation\ValidationException::withMessages([
+                 'utility_rate' => ["Forensic Audit Failure: No effective utility rate found for {$meter->utility->name} on or before {$lookupDate}."]
+             ]);
+         }
+ 
+         $unitRate = (float) $rate->base_rate;
+         $prevValue = $baseValue !== null ? $baseValue : ($lastReading ? (float) $lastReading->reading_value : 0);
  
          $consumption = $currentReading - $prevValue;
  
@@ -113,9 +119,16 @@
       */
      public static function getTotalPaid(int $contractId): float
      {
-         return (float) Payment::where('contract_id', $contractId)
-             ->whereNull('voided_at')
-             ->sum('amount_paid');
+         // Forensic Rule: Total paid includes both direct contract payments (Deposits) 
+         // and payments made against billings belonging to this contract.
+         return (float) Payment::where(function($q) use ($contractId) {
+             $q->where('contract_id', $contractId)
+               ->orWhereHas('billing', function($sub) use ($contractId) {
+                   $sub->where('contract_id', $contractId);
+               });
+         })
+         ->whereNull('voided_at')
+         ->sum('amount_paid');
      }
  
      /**

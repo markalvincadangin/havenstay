@@ -34,7 +34,7 @@
  
          $paginator = ContractService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
  
-         return $this->paginated($paginator, [], 'Contracts retrieved successfully.');
+         return $this->paginated($paginator, [], 'Contracts retrieved successfully.', ContractResource::class);
      }
  
      /**
@@ -57,8 +57,12 @@
       */
      public function store(StoreContractRequest $request): JsonResponse
      {
-         $contract = ContractService::create($request->user(), $request->validated());
- 
+         $data = $request->validated();
+         
+         // Middleware handles the lock/replay. We just pass the key to the service.
+         $data['idempotency_key'] = $request->header('Idempotency-Key');
+         
+         $contract = ContractService::create($request->user(), $data);
          return $this->created('Contract created successfully.', new ContractResource($contract));
      }
  

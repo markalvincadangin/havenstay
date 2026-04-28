@@ -316,11 +316,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
          $report[$key] = $slice;
          
          $report['meta'] = [
-             'current_page' => $page,
-             'last_page' => max(1, (int) ceil($total / $perPage)),
-             'per_page' => $perPage,
-             'total' => $total,
-         ];
+            'current_page' => $page,
+            'last_page' => max(1, (int) ceil($total / $perPage)),
+            'per_page' => $perPage,
+            'total' => $total,
+            'from' => $total > 0 ? ($page - 1) * $perPage + 1 : 0,
+            'to' => min($total, $page * $perPage),
+        ];
  
          return $report;
      }

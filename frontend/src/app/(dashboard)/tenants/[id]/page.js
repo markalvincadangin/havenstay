@@ -6,12 +6,12 @@ import {
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import {  useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { apiRequest, fetcher } from "@/lib/api";
 import { flattenApiErrors } from "@/lib/errors";
 import { canManageBilling, canManageTenants } from "@/lib/auth";
-import { formatDateString, formatPHP, formatTenantDirectoryName, formatPII } from "@/lib/formatters";
+import { formatDateString, formatTenantDirectoryName, formatPII } from "@/lib/formatters";
 import { Card } from "@/components/ui/Card";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Table } from "@/components/ui/Table";
@@ -81,7 +81,7 @@ export default function TenantDetailsPage() {
     setBusyAction(action);
     try {
       await apiRequest(path, { method: "POST" });
-      showToast(`Action ${action} completed.`, "success");
+      showToast(`Tenant status updated to ${action}.`, "success");
       await mutateTenant();
     } catch (error) {
       setActionError(flattenApiErrors(error));
@@ -91,18 +91,21 @@ export default function TenantDetailsPage() {
   };
   return (
     <StandardPage
-      title={fullName}
-      subtitle={
-        tenant ? (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-stone-500">
-              Comprehensive profile: contact, lease, and ledger context.
-            </span>
-            <div className="h-3 w-[1px] bg-stone-200" />
-            <ResourceIdCell id={tenant.tenant_id} type="tenant" />
-          </div>
+      title={
+        loading ? (
+          "Loading Profile..."
         ) : (
-          "Loading tenant record…"
+          <div className="flex items-center gap-3">
+            {fullName}
+            {tenant && <ResourceIdCell id={tenant.tenant_id} type="tenant" />}
+          </div>
+        )
+      }
+      subtitle={
+        loading ? (
+          "Synchronizing tenant records..."
+        ) : (
+          "Complete tenant's profile information"
         )
       }
       loading={loading}
@@ -150,168 +153,175 @@ export default function TenantDetailsPage() {
       <ConfirmationDialog
         open={showArchiveModal}
         title="Archive Tenant Record"
-        description={`This will move ${fullName} to historical archives. This action releases active operational locks while preserving all forensic and audit data.`}
-        confirmLabel="Archive Profile"
+        description={`Are you sure you want to archive ${fullName}? Their profile will be moved to historical records, but all past contracts and payments will be preserved for review.`}
+        confirmLabel="Archive Tenant"
         isDanger
         isLoading={busyAction === "archive"}
         onConfirm={handleArchiveTenant}
         onCancel={() => busyAction !== "archive" && setShowArchiveModal(false)}
       />
-      <div className="space-y-6">
-        <RecordStateAlert show={Boolean(actionError)} variant="error" title="Action blocked">
-          {actionError}
-        </RecordStateAlert>
-        <RecordStateAlert show={hasActiveContract && canManage} variant="info" title="Lifecycle locked">
-          Tenant lifecycle changes are restricted while an active contract exists. Process move-out first.
-        </RecordStateAlert>
-        <RecordStateAlert show={tenant?.status === 'archived'} variant="warning" title="Forensic History">
-          This profile is currently archived in the historical registry. Restoration is required before this tenant can be assigned to new lease agreements.
-        </RecordStateAlert>
-        <div className="grid gap-6 lg:grid-cols-12">
-          {/* --- Left Column: Overview --- */}
-          <aside className="lg:col-span-4 space-y-6">
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
-              <div className="bg-stone-50/50 border-b border-stone-100 px-8 py-6 flex flex-col items-center text-center">
-                <Avatar tenant={tenant} size="xl" />
-                <h2 className="mt-4 text-xl font-black text-stone-900 tracking-tight flex items-center gap-2">
-                  {fullName}
-                  {tenant?.correlation_id && (
-                    <span className="font-mono text-[10px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-2 py-0.5" title={`Workflow ID: ${tenant.correlation_id.toUpperCase()}`}>
-                      #WF-{tenant.correlation_id.slice(0, 5).toUpperCase()}
-                    </span>
-                  )}
-                </h2>
-                <div className="mt-2">
-                  <StatusBadge size="sm">{tenant?.status || "active"}</StatusBadge>
-                </div>
-              </div>
-              <div className="flex justify-center border-b border-stone-100 bg-stone-50/30 px-4 py-3">
-                <span className="text-xs font-bold uppercase tracking-widest text-stone-400">Quick Profile</span>
-              </div>
-              <div className="p-8 space-y-2">
-                <MetricItem
-                  label="Assigned Unit"
-                  value={activeContract ? (activeContract.room?.room_code ? `Room ${activeContract.room.room_code}` : "—") : "—"}
-                  icon={MapPin}
-                />
-                <MetricItem
-                  label="Move-in Date"
-                  value={activeContract ? formatDateString(activeContract.move_in_date) : "—"}
-                  icon={Calendar}
-                />
-                <MetricItem
-                  label="Security Deposit"
-                  value={activeContract ? formatPHP(activeContract.deposit_amount) : "—"}
-                  icon={FileCheck}
-                />
-              </div>
-            </Card>
-            <FormSection
-              title="Emergency Contact"
-              icon={Phone}
-              className="hs-glass-effect"
-              bodyClassName="p-8 space-y-4"
-            >
-              <div className="space-y-4">
-                <DetailRow label="Name" value={tenant?.emergency_contact_name} icon={User} />
-                <DetailRow label="Phone" value={tenant?.emergency_contact_number} icon={Phone} mono />
-              </div>
-            </FormSection>
-          </aside>
-          {/* --- Right Column: Details & History --- */}
-          <main className="lg:col-span-8 space-y-6">
-            <FormSection
-              title="Identity & Contact"
-              icon={User}
-              className="hs-glass-effect"
-              bodyClassName="p-8"
-            >
-              <div className="grid gap-x-12 gap-y-2 md:grid-cols-2">
-                <DetailRow label="First Name" value={tenant?.first_name} icon={User} />
-                <DetailRow label="Last Name" value={tenant?.last_name} icon={User} />
-                <DetailRow label="Mobile Number" value={formatPII(tenant?.contact_number, "phone", canManage)} icon={Phone} mono />
-                <DetailRow label="Email" value={formatPII(tenant?.email, "email", canManage)} icon={Mail} />
-                <div className="md:col-span-2">
-                  <DetailRow label="Permanent Address" value={tenant?.address} icon={MapPin} />
-                </div>
-              </div>
-            </FormSection>
-            <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
-              <div className="border-b border-stone-100 bg-white px-8 py-5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
-                    <History size={14} aria-hidden />
+      {tenant ? (
+        <div className="space-y-6">
+          <RecordStateAlert show={Boolean(actionError)} variant="error" title="Action blocked">
+            {actionError}
+          </RecordStateAlert>
+          <RecordStateAlert show={hasActiveContract && canManage} variant="info" title="Active contract found">
+            Tenant lifecycle changes are restricted while an active contract exists. Process move-out first.
+          </RecordStateAlert>
+          <RecordStateAlert show={tenant?.status === 'archived'} variant="warning" title="Archived Record">
+            This profile is currently archived in the historical registry. Restoration is required before this tenant can be assigned to new lease agreements.
+          </RecordStateAlert>
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* --- Left Column: Overview --- */}
+            <aside className="lg:col-span-4 space-y-6">
+              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
+                <div className="bg-stone-50/50 border-b border-stone-100 px-8 py-6 flex flex-col items-center text-center">
+                  <Avatar tenant={tenant} size="xl" />
+                  <h2 className="mt-4 text-xl font-black text-stone-900 tracking-tight flex items-center gap-2">
+                    {fullName}
+                    {tenant?.correlation_id && (
+                      <span className="font-mono text-[10px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-2 py-0.5" title={`Workflow ID: ${tenant.correlation_id.toUpperCase()}`}>
+                        #WF-{tenant.correlation_id.slice(0, 5).toUpperCase()}
+                      </span>
+                    )}
+                  </h2>
+                  <div className="mt-2">
+                    <StatusBadge size="sm">{tenant?.status || "active"}</StatusBadge>
                   </div>
-                  <h2 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">Contract History</h2>
                 </div>
-              </div>
-              <div className="p-0">
-                <Table
-                  embedded
-                  caption="History of tenant contracts"
-                  columns={[
-                    { key: "contract_id", label: "CONTRACT ID" },
-                    { key: "room", label: "ASSIGNED UNIT" },
-                    { key: "dates", label: "CONTRACT PERIOD", className: "text-center" },
-                    { key: "status", label: "STATUS", className: "text-center" },
-                    { key: "actions", label: "", className: "text-right" },
-                  ]}
-                  rows={contracts.map((c) => (
-                    <tr
-                      key={c.contract_id}
-                      className={interactiveTableRowClass}
-                      onClick={() => router.push(`/contracts/${c.contract_id}`)}
-                    >
-                      <td className="px-8 py-5">
-                        <div className="flex flex-col gap-1.5 items-start">
-                          <ResourceIdCell id={c.contract_id} type="contract" />
-                          {c.correlation_id && (
-                            <div className="font-mono text-[8px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-1.5 py-0.5 tracking-widest leading-none block" title={`Workflow ID: ${c.correlation_id.toUpperCase()}`}>
-                              #WF-{c.correlation_id.slice(0, 5).toUpperCase()}
+                <div className="flex justify-center border-b border-stone-100 bg-stone-50/30 px-4 py-3">
+                  <span className="text-xs font-bold uppercase tracking-widest text-stone-400">Quick Profile</span>
+                </div>
+                <div className="p-8 space-y-2">
+                  <MetricItem
+                    label="Room / Bed"
+                    value={activeContract ? (activeContract.room?.room_code ? `Room ${activeContract.room.room_code}` : "—") : "—"}
+                    icon={MapPin}
+                  />
+                  <MetricItem
+                    label="Move-in Date"
+                    value={activeContract ? formatDateString(activeContract.move_in_date) : "—"}
+                    icon={Calendar}
+                  />
+                  <MetricItem
+                    label="Security Deposit"
+                    value={activeContract ? activeContract.deposit_amount : 0}
+                    currency={true}
+                    icon={FileCheck}
+                  />
+                </div>
+              </Card>
+              <FormSection
+                title="Emergency Contact"
+                icon={Phone}
+                className="hs-glass-effect"
+                bodyClassName="p-8 space-y-4"
+              >
+                <div className="space-y-4">
+                  <DetailRow label="Emergency Contact Name" value={tenant?.emergency_contact_name} icon={User} />
+                  <DetailRow label="Emergency Number" value={tenant?.emergency_contact_number} icon={Phone} mono />
+                </div>
+              </FormSection>
+            </aside>
+            {/* --- Right Column: Details & History --- */}
+            <main className="lg:col-span-8 space-y-6">
+              <FormSection
+                title="Identity & Contact"
+                icon={User}
+                className="hs-glass-effect"
+                bodyClassName="p-8"
+              >
+                <div className="grid gap-x-12 gap-y-2 md:grid-cols-2">
+                  <DetailRow label="First Name" value={tenant?.first_name} icon={User} />
+                  <DetailRow label="Last Name" value={tenant?.last_name} icon={User} />
+                  <DetailRow label="Mobile Number" value={formatPII(tenant?.contact_number, "phone", canManage)} icon={Phone} mono />
+                  <DetailRow label="Email" value={formatPII(tenant?.email, "email", canManage)} icon={Mail} />
+                  <div className="md:col-span-2">
+                    <DetailRow label="Home Address" value={tenant?.address} icon={MapPin} />
+                  </div>
+                </div>
+              </FormSection>
+              <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
+                <div className="border-b border-stone-100 bg-white px-8 py-5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
+                      <History size={14} aria-hidden />
+                    </div>
+                    <h2 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">Contract History</h2>
+                  </div>
+                </div>
+                <div className="p-0">
+                  <Table
+                    embedded
+                    caption="History of tenant contracts"
+                    columns={[
+                      { key: "contract_id", label: "CONTRACT ID" },
+                      { key: "room", label: "ASSIGNED UNIT" },
+                      { key: "dates", label: "CONTRACT PERIOD", className: "text-center" },
+                      { key: "status", label: "STATUS", className: "text-center" },
+                      { key: "actions", label: "", className: "text-right" },
+                    ]}
+                    rows={contracts.map((c) => (
+                      <tr
+                        key={c.contract_id}
+                        className={interactiveTableRowClass}
+                        onClick={() => router.push(`/contracts/${c.contract_id}`)}
+                      >
+                        <td className="px-8 py-5">
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <ResourceIdCell id={c.contract_id} type="contract" />
+                            {c.correlation_id && (
+                              <div className="font-mono text-[8px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-1.5 py-0.5 tracking-widest leading-none block" title={`Workflow ID: ${c.correlation_id.toUpperCase()}`}>
+                                #WF-{c.correlation_id.slice(0, 5).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-5">
+                          <div className="font-bold text-sm text-stone-800 leading-tight">
+                            {c.room?.room_code ? `Room ${c.room.room_code}` : "—"}
+                          </div>
+                          {c.bed_space?.bed_label && (
+                            <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest mt-1">
+                              {c.bed_space.bed_label}
                             </div>
                           )}
-                        </div>
-                      </td>
-                      <td className="py-5">
-                        <div className="font-bold text-sm text-stone-800 leading-tight">
-                          {c.room?.room_code ? `Room ${c.room.room_code}` : "—"}
-                        </div>
-                        {c.bed_space?.bed_label && (
-                          <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest mt-1">
-                            {c.bed_space.bed_label}
+                        </td>
+                        <td className="py-5 text-center">
+                          <div className="text-xs text-stone-600 leading-tight">
+                            {formatDateString(c.move_in_date)} — {c.expected_move_out_date ? formatDateString(c.expected_move_out_date) : "Present"}
                           </div>
-                        )}
-                      </td>
-                      <td className="py-5 text-center">
-                        <div className="text-xs text-stone-600 leading-tight">
-                          {formatDateString(c.move_in_date)} — {c.expected_move_out_date ? formatDateString(c.expected_move_out_date) : "Present"}
-                        </div>
-                      </td>
-                      <td className="py-5 text-center">
-                        <StatusBadge size="xs">{c.status}</StatusBadge>
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        {c.status === "active" && canManageBilling(currentUser) ? (
-                          <Link
-                            href={`/billing?contract_id=${c.contract_id}`}
-                            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-400 transition-[border-color,box-shadow,colors] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600 shadow-sm"
-                            onClick={stopRowClick}
-                            aria-label="View ledger"
-                          >
-                            <ArrowUpRight size={16} aria-hidden />
-                          </Link>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                  emptyTitle="No contracts found"
-                  emptyDescription="This tenant has no registered rental agreements."
-                />
-              </div>
-            </Card>
-          </main>
+                        </td>
+                        <td className="py-5 text-center">
+                          <StatusBadge size="xs">{c.status}</StatusBadge>
+                        </td>
+                        <td className="px-8 py-5 text-right">
+                          {c.status === "active" && canManageBilling(currentUser) ? (
+                            <Link
+                              href={`/billing?contract_id=${c.contract_id}`}
+                              className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-400 transition-[border-color,box-shadow,colors] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600 shadow-sm"
+                              onClick={stopRowClick}
+                              aria-label="View ledger"
+                            >
+                              <ArrowUpRight size={16} aria-hidden />
+                            </Link>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                    emptyTitle="No contracts found"
+                    emptyDescription="This tenant has no registered rental agreements."
+                  />
+                </div>
+              </Card>
+            </main>
+          </div>
         </div>
-      </div>
+      ) : !loading && !tenantError ? (
+        <Alert variant="warning" title="Profile Not Found">
+          The requested tenant profile could not be found in the system registry.
+        </Alert>
+      ) : null}
       <SideSheetOverlay
         isOpen={!!editingTenant}
         onClose={() => setEditingTenant(null)}

@@ -117,7 +117,7 @@ export default function LoginPage() {
 
           <div className="px-8 pb-10 pt-10 sm:px-12 sm:pb-12 sm:pt-12">
             <motion.div variants={itemVariants} className="mb-10 flex flex-col items-center text-center">
-              <div className="relative mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/50 shadow-sm ring-1 ring-stone-100 backdrop-blur-md">
+              <div className="relative mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md ring-1 ring-stone-200">
                 <Image src="/brand/logo-dark.svg" alt="HavenStay" width={38} height={38} priority />
               </div>
 

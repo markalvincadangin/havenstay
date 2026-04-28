@@ -15,8 +15,6 @@ export function QuickEditFormShell({
     <form onSubmit={onSubmit} className="space-y-8">
       {children}
 
-      {apiError && <Alert variant="error" title="Update Failed">{apiError}</Alert>}
-
       <div className="flex flex-col-reverse gap-3 pt-6 mt-8 sm:flex-row sm:justify-end border-t border-stone-100">
         <Button variant="secondary" onClick={onCancel} disabled={isSubmitting} type="button">
           Cancel

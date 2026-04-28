@@ -117,8 +117,9 @@ class DemoSeeder extends Seeder
         $roomData = [
             'sharedFour' => ['code' => 'UNIT-101', 'type' => RoomType::SHARED, 'cap' => 4, 'rate' => 5800.00, 'desc' => 'Sampaloc Shared-4 (U-Belt)'],
             'sharedTwin' => ['code' => 'UNIT-102', 'type' => RoomType::SHARED, 'cap' => 2, 'rate' => 8200.00, 'desc' => 'España Twin (Quiet Zone)'],
-            'soloStandard' => ['code' => 'UNIT-201', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 14500.00, 'desc' => 'Loyola Studio (Student Solo)'],
-            'soloExecutive' => ['code' => 'UNIT-202', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 16800.00, 'desc' => 'Katipunan Executive (Professional Solo)'],
+            'soloStandard' => ['code' => 'UNIT-201', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 14500.00, 'desc' => 'Loyola Studio (Student Solo)', 'metered' => true],
+            'soloExecutive' => ['code' => 'UNIT-202', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 16800.00, 'desc' => 'Katipunan Executive (Professional Solo)', 'metered' => true],
+            'soloInclusive' => ['code' => 'UNIT-301', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 18500.00, 'desc' => 'BGC Premium (All-Inclusive)', 'metered' => false],
         ];
 
         foreach ($roomData as $key => $d) {
@@ -127,6 +128,7 @@ class DemoSeeder extends Seeder
                 'capacity' => $d['cap'], 
                 'monthly_rate' => $d['rate'], 
                 'status' => RoomStatus::AVAILABLE,
+                'is_metered' => $d['metered'] ?? true,
                 'description' => $d['desc'],
                 'amenities' => 'CCTV, Wi-Fi, Water Heater',
             ]);
@@ -149,6 +151,11 @@ class DemoSeeder extends Seeder
         $water = Utility::where('name', 'Water')->first();
 
         foreach ($rooms as $room) {
+            if (!$room->is_metered) {
+                echo "[seeder] Skipping hardware for all-inclusive room: {$room->room_code}\n";
+                continue;
+            }
+
             // Electricity Meter
             $eMeter = Meter::updateOrCreate(['serial_number' => "E-{$room->room_code}"], [
                 'utility_id' => $elec->utility_id, 
@@ -197,6 +204,9 @@ class DemoSeeder extends Seeder
 
         // 5. Scenario: The Discounted Veteran (Mang Ben) - Rate Override
         $this->seedScenarioRateOverride($users, $inventory);
+
+        // 6. Scenario: The All-Inclusive Executive (Rico)
+        $this->seedScenarioAllInclusive($users, $inventory);
     }
 
     private function seedScenarioConsistentPayer(array $users, array $inventory): void
@@ -311,6 +321,25 @@ class DemoSeeder extends Seeder
             'contract_type' => 'fixed_term', 'move_in_date' => '2025-01-01', 
             'monthly_rate' => 16800.00, 'monthly_rate_override' => 15500.00, // Loyalty Discount
             'deposit_amount' => 15500.00, 'status' => ContractStatus::ACTIVE,
+        ]);
+
+        $bed->update(['status' => BedSpaceStatus::OCCUPIED]);
+    }
+
+    private function seedScenarioAllInclusive(array $users, array $inventory): void
+    {
+        $tenant = Tenant::updateOrCreate(['email' => 'rico.m@example.ph'], [
+            'first_name' => 'Rico', 'last_name' => 'Manila', 'contact_number' => '09223334444',
+            'emergency_contact_name' => 'Teresa Manila', 'emergency_contact_number' => '09220001111', 
+            'address' => 'BGC, Taguig, PH', 'status' => TenantStatus::ACTIVE,
+        ]);
+        
+        $bed = BedSpace::where('room_id', $inventory['rooms']['soloInclusive']->room_id)->firstOrFail();
+        
+        Contract::create([
+            'tenant_id' => $tenant->tenant_id, 'bed_space_id' => $bed->bed_space_id, 'created_by' => $users['admin']->user_id,
+            'contract_type' => 'fixed_term', 'move_in_date' => '2025-04-01', 
+            'monthly_rate' => 18500.00, 'deposit_amount' => 18500.00, 'status' => ContractStatus::ACTIVE,
         ]);
 
         $bed->update(['status' => BedSpaceStatus::OCCUPIED]);

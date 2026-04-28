@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { canManageRooms } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
-import { formatPHP } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import Alert from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
 import FilterPanelCard from "@/components/ui/FilterPanelCard";
@@ -248,7 +248,16 @@ export default function RoomsPage() {
                           </p>
                         </div>
                       </div>
-                      <StatusBadge size="xs">{room.status}</StatusBadge>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-md border ${
+                          room.is_metered 
+                            ? "bg-amber-50 text-amber-600 border-amber-100" 
+                            : "bg-blue-50 text-blue-600 border-blue-100"
+                        }`}>
+                          {room.is_metered ? "METERED" : "ALL-INCLUSIVE"}
+                        </span>
+                        <StatusBadge size="xs">{room.status}</StatusBadge>
+                      </div>
                     </div>
                     <div className="space-y-4 p-6">
                       <div className="grid grid-cols-2 gap-4">
@@ -260,9 +269,9 @@ export default function RoomsPage() {
                         </div>
                         <div className="text-right">
                           <p className="mb-1 text-[10px] font-black tracking-[0.2em] text-stone-300 uppercase text-right leading-none">MONTHLY RENT</p>
-                          <p className="font-mono text-sm font-black tabular-nums text-stone-900">
-                            {formatPHP(room.monthly_rate)}<span className="ml-1 text-[10px] font-medium text-stone-500 font-sans tracking-tight opacity-60">/ bed</span>
-                          </p>
+                          <div className="text-sm font-bold text-stone-900">
+                            <CurrencyDisplay amount={room.monthly_rate} /><span className="ml-1 text-[10px] font-medium text-stone-500 font-sans tracking-tight opacity-60">/ bed</span>
+                          </div>
                         </div>
                       </div>
                       <OccupancyBar

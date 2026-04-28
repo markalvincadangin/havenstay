@@ -142,9 +142,11 @@ CREATE TABLE contracts (
     is_cleared             BOOLEAN      DEFAULT FALSE,
     status                 ENUM('pending_payment','active','completed','terminated','voided') DEFAULT 'pending_payment',
     notes                  TEXT         NULL,
+    idempotency_key        VARCHAR(36)  NULL,
     created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at             DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at             DATETIME NULL,
+    UNIQUE KEY uq_contracts_idempotency (idempotency_key),
     CONSTRAINT fk_contract_tenant FOREIGN KEY (tenant_id)    REFERENCES tenants    (tenant_id),
     CONSTRAINT fk_contract_bed    FOREIGN KEY (bed_space_id) REFERENCES bed_spaces (bed_space_id),
     CONSTRAINT fk_contract_owner  FOREIGN KEY (created_by)   REFERENCES users      (user_id),
@@ -214,9 +216,11 @@ CREATE TABLE billing (
     billing_period_to   DATE NOT NULL,
     due_date            DATE NOT NULL,
     status              ENUM('unpaid','partial','paid','overdue') DEFAULT 'unpaid',
+    idempotency_key     VARCHAR(36) NULL,
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_billing_cycle (contract_id, billing_period_from, billing_period_to),
+    UNIQUE KEY uq_billing_idempotency (idempotency_key),
     CONSTRAINT fk_billing_contract FOREIGN KEY (contract_id) REFERENCES contracts (contract_id)
 ) ENGINE=InnoDB;
 
@@ -252,7 +256,9 @@ CREATE TABLE payments (
     voided_at        DATETIME      NULL,
     voided_by        INT           NULL,
     void_reason      VARCHAR(255)  NULL,
+    idempotency_key  VARCHAR(36)   NULL,
     created_at       DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_payments_idempotency (idempotency_key),
     CONSTRAINT fk_pay_billing  FOREIGN KEY (billing_id)   REFERENCES billing (billing_id),
     CONSTRAINT fk_pay_contract FOREIGN KEY (contract_id)  REFERENCES contracts (contract_id),
     CONSTRAINT fk_pay_actor    FOREIGN KEY (processed_by) REFERENCES users   (user_id),

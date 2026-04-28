@@ -32,6 +32,10 @@
              // Relationships
              'meter' => new MeterResource($this->whenLoaded('meter')),
              'recorder' => new UserResource($this->whenLoaded('recorder')),
+             'billing' => $this->billing ? [
+                 'billing_id' => $this->billing->billing_id,
+                 'period' => $this->billing->billing_period_from . ' to ' . $this->billing->billing_period_to,
+             ] : null,
          ];
      }
  }

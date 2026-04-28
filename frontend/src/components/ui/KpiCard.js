@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 
 /**
  * KpiCard component — quantitative summary surface.
@@ -17,6 +18,7 @@ import { motion, useReducedMotion } from "framer-motion";
  * @param {boolean} [isLoading] - Shows pulse skeleton state.
  * @param {string|null} [error] - Error message to display.
  * @param {boolean} [isDanger] - Applies red-600 treatment to value and icon well.
+ * @param {boolean} [currency] - If true, renders value using CurrencyDisplay.
  */
 export function KpiCard({ 
   label, 
@@ -31,7 +33,9 @@ export function KpiCard({
   isDanger = false,
   isSuccess = false,
   isWarning = false,
+  isNeutral = false,
   isActiveDecision = false,
+  currency = false,
   sparkline: SparklineComponent = null,
   className = ""
 }) {
@@ -95,15 +99,22 @@ export function KpiCard({
           <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
             {label}
           </p>
-          <motion.h3 
+          <motion.h3
             animate={isSyncing ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
             transition={isSyncing ? { repeat: Infinity, duration: 1.5, ease: "easeInOut" } : {}}
             className={[
-              "mt-1 text-2xl font-mono font-black tracking-tight tabular-nums sm:text-2xl break-words leading-none",
+              "mt-1 whitespace-nowrap leading-none",
               isDanger ? "text-red-600" : isSuccess ? "text-emerald-700" : isWarning ? "text-amber-700" : "text-stone-900"
             ].join(" ")}
           >
-            {value}
+            {currency ? (
+              <CurrencyDisplay
+                amount={value}
+                className="text-2xl font-bold tracking-tight"
+              />
+            ) : (
+              <span className="text-2xl font-bold font-mono tabular-nums tracking-tight">{value}</span>
+            )}
           </motion.h3>
           {sub && (
             <div className="mt-1 font-mono text-[9px] font-bold uppercase tracking-widest tabular-nums text-stone-400">
@@ -117,9 +128,14 @@ export function KpiCard({
             <div
               className={[
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/60 shadow-sm transition-[box-shadow,border-color] duration-300",
-                isDanger ? "bg-red-50 text-red-500" : isSuccess ? "bg-emerald-50 text-emerald-600" : isWarning ? "bg-amber-50 text-amber-600" : "bg-teal-50 text-teal-600"
+                isDanger ? "bg-red-50 text-red-500" : 
+                isSuccess ? "bg-emerald-50 text-emerald-600" : 
+                isWarning ? "bg-amber-50 text-amber-600" : 
+                isNeutral ? "bg-stone-100 text-stone-400" : "bg-teal-50 text-teal-600",
+                isActiveDecision ? "animate-pulse" : ""
               ].join(" ")}
             >
+
               <Icon size={18} strokeWidth={2.5} />
             </div>
             {SparklineComponent && <div className="mt-auto hidden sm:block">{SparklineComponent}</div>}

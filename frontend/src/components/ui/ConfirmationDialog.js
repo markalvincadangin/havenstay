@@ -39,14 +39,13 @@ export default function ConfirmationDialog({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <motion.button
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm cursor-default"
+            className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm"
             onClick={onCancel}
-            disabled={isLoading}
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}

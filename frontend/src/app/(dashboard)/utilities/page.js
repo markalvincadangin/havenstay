@@ -17,7 +17,8 @@ import {
 import { fetcher } from "@/lib/api";
 import { canManageMeters, canManageUsers } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { formatPHP } from "@/lib/formatters";
+import { formatDateString } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import Alert from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
@@ -88,13 +89,13 @@ export default function UtilitiesPage() {
 
   return (
     <StandardPage
-      title="Utility Services"
+      title="Utility Catalog"
       subtitle="Manage utility services and rates."
       loading={authLoading || loading}
       skeleton={<SkeletonGridPage cards={3} />}
       actions={
         <PageHeaderActions
-          ctaLabel="Register Service"
+          ctaLabel="Register Utility"
           ctaHref="/utilities/new"
           ctaIcon={Plus}
           ctaClassName="px-8 shadow-lg shadow-teal-900/10"
@@ -118,7 +119,7 @@ export default function UtilitiesPage() {
             {/* KPI Overview */}
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <KpiCard
-                label="Provisioned Services"
+                label="Provisioned Utilities"
                 value={stats.count}
                 sub="Total utility categories"
                 icon={Server}
@@ -149,9 +150,9 @@ export default function UtilitiesPage() {
             {/* Filter Section */}
             <FilterPanelCard icon={Search} title="Filters">
               <div className="max-w-md">
-                <Field label="Search by name or unit" className="!mb-0">
+                <Field label="Search utilities" className="!mb-0">
                   <Input
-                    placeholder="Search services..."
+                    placeholder="Search utilities..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     icon={Search}
@@ -170,8 +171,8 @@ export default function UtilitiesPage() {
               emptyProps={{
                 title: searchQuery ? "No results found" : "No utilities registered",
                 description: searchQuery
-                  ? "Try adjusting your search terms to find a specific service."
-                  : "There are no billable services found in the database. Contact an administrator to map a utility.",
+                  ? "Try adjusting your search terms to find a specific utility."
+                  : "There are no billable utilities found in the database. Contact an administrator to map a utility.",
               }}
             >
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -180,9 +181,8 @@ export default function UtilitiesPage() {
                   const isWater = utility.name.toLowerCase().includes("water");
                   const UtilityIcon = isElectric ? Zap : (isWater ? Droplet : Box);
 
-                  const activeRateFormatted = utility.active_rate?.base_rate
-                    ? formatPHP(utility.active_rate.base_rate)
-                    : "—";
+                  const unitDisplay = utility.unit_of_measurement === "KWH" ? "kWh" : (utility.unit_of_measurement === "M3" ? "m³" : utility.unit_of_measurement);
+                  const activeRate = utility.active_rate?.base_rate ?? 0;
 
                   return (
                     <Card key={utility.utility_id} className="relative overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl flex flex-col hover:border-teal-200 hover:shadow-lg hover:-translate-y-1 transition-all group duration-300 hs-glass-effect">
@@ -194,20 +194,21 @@ export default function UtilitiesPage() {
                           <div>
                             <h2 className="text-lg font-black text-stone-900 tracking-tight leading-tight group-hover:text-teal-900 transition-colors">{utility.name}</h2>
                             <div className="text-[10px] font-mono font-bold text-stone-400 tracking-widest uppercase mt-1">
-                              {utility.unit_of_measurement}
+                              {unitDisplay}
                             </div>
                           </div>
                         </div>
-                        <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+                        <StatusBadge variant="success" size="sm">Active</StatusBadge>
                       </div>
 
                       <div className="p-8 flex-1 flex flex-col justify-center">
-                        <div className="mb-2 text-[10px] uppercase font-black tracking-widest text-stone-400">Base Service Rate</div>
+                        <div className="mb-2 text-[10px] uppercase font-black tracking-widest text-stone-400">Base Rate</div>
                         <div className="flex items-baseline gap-2">
-                          <span className="text-3xl font-mono font-black text-stone-900 tabular-nums tracking-tighter">
-                            {activeRateFormatted}
-                          </span>
-                          <span className="text-xs font-bold text-stone-500">per {utility.unit_of_measurement}</span>
+                          <CurrencyDisplay
+                            amount={activeRate}
+                            className="text-3xl font-bold text-stone-900 tracking-tighter"
+                          />
+                          <span className="text-xs font-bold text-stone-500">per {unitDisplay}</span>
                         </div>
 
                         {!utility.active_rate && (
@@ -219,7 +220,7 @@ export default function UtilitiesPage() {
                         <div className="mt-6 grid grid-cols-2 gap-4 border-t border-stone-100 pt-6">
                           <div>
                             <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Meters</p>
-                            <p className="text-sm font-black text-stone-900 font-mono">{utility.meters?.length || 0} units</p>
+                            <p className="text-sm font-black text-stone-900 font-mono">{utility.meters?.length || 0} meters</p>
                           </div>
                           <div>
                             <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest">Pricing</p>
@@ -233,7 +234,7 @@ export default function UtilitiesPage() {
                         className="flex items-center justify-between border-t border-stone-100/50 bg-stone-50/50 px-6 py-3.5 mt-auto"
                       >
                         <span className="text-[10px] font-black tracking-[0.2em] text-stone-400 transition-colors group-hover:text-teal-600 uppercase">
-                          View Service Details
+                          View Utility
                         </span>
                         <div className="flex items-center gap-2.5">
                           <QuickEditRowAction
@@ -243,7 +244,7 @@ export default function UtilitiesPage() {
                               e.stopPropagation();
                               setEditingUtility(utility);
                             }}
-                            title="Update service configuration"
+                            title="Update utility configuration"
                           />
                           <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-100 bg-white text-stone-300 transition-[border-color,background-color,color] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600">
                             <ArrowUpRight size={14} aria-hidden />
@@ -278,7 +279,7 @@ export default function UtilitiesPage() {
       <SideSheetOverlay
         isOpen={!!editingUtility}
         onClose={() => setEditingUtility(null)}
-        title="Service Configuration"
+        title="Utility Configuration"
         subtitle={editingUtility?.name?.toUpperCase()}
       >
         {editingUtility && (

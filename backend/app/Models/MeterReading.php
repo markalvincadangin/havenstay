@@ -49,4 +49,9 @@ class MeterReading extends Model
     {
         return $this->belongsTo(User::class, 'recorded_by', 'user_id');
     }
+
+    public function billing(): BelongsTo
+    {
+        return $this->belongsTo(Billing::class, 'billing_id', 'billing_id');
+    }
 }

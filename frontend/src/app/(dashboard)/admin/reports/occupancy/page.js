@@ -7,6 +7,7 @@ import { canViewReports } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { flattenApiErrors } from "@/lib/errors";
 import { exportReportCsv } from "@/lib/downloads";
+import { useToasts } from "@/context/ToastContext";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Card } from "@/components/ui/Card";
@@ -33,6 +34,7 @@ import { BarChart3, Home, Users, CheckCircle } from "lucide-react";
 
 export default function OccupancyReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
@@ -67,7 +69,7 @@ export default function OccupancyReportPage() {
         setApiError(flattenApiErrors(reportError));
       }
     } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
-      setApiError("Unauthorized: you do not have permission to view reports.");
+      setApiError("Access restricted. You don’t have permission to view this report.");
     }
   }, [reportError, authLoading, currentUser]);
 
@@ -92,7 +94,7 @@ export default function OccupancyReportPage() {
         filenamePrefix: "occupancy-report",
       });
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      showToast(flattenApiErrors(error), "error");
     } finally {
       setExporting(false);
     }
@@ -104,10 +106,19 @@ export default function OccupancyReportPage() {
   return (
     <StandardPage
       title="Occupancy Report"
-      subtitle="Filter and export system data."
+      subtitle={
+        <div className="flex flex-col gap-2">
+          <p>Filter and export system data.</p>
+          <div className="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-stone-400/70">
+            <span>Generated {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-stone-200">|</span>
+            <span>{report.meta?.total ?? 0} Records</span>
+          </div>
+        </div>
+      }
       loading={authLoading || loading}
       skeleton={<SkeletonListPage rows={8} />}
-      breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "Reports", href: "/admin/reports" }, { label: "Occupancy" }]} />}
+      breadcrumbs={<Breadcrumbs items={[{ label: "Reports", href: "/admin/reports" }, { label: "Occupancy" }]} />}
       actions={
         <ReportHeaderActions
           user={currentUser}
@@ -152,7 +163,7 @@ export default function OccupancyReportPage() {
 
       <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={apiUnavailable} className="hs-glass-effect">
         <div className="grid gap-6 sm:grid-cols-4">
-          <Field label="Filter by Unit Type">
+          <Field label="Filter by Room Type">
             <Select
               value={roomTypeFilter}
               onChange={(event) => {
@@ -162,7 +173,7 @@ export default function OccupancyReportPage() {
               disabled={apiUnavailable}
               className="!h-11"
             >
-              <option value="all">All Unit Types</option>
+              <option value="all">All Room Types</option>
               {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -239,13 +250,13 @@ export default function OccupancyReportPage() {
                   <StatusBadge>{row.room_type}</StatusBadge>
                 </td>
                 <td colSpan={4} className="px-6 py-3 pr-12 w-[350px]">
-                  <OccupancyBar 
+                  <OccupancyBar
                     capacity={row.total_beds}
                     roomStatus="active"
                     bedSpaces={[
-                        ...Array(row.occupied_beds).fill({ status: 'occupied' }),
-                        ...Array(row.vacant_beds).fill({ status: 'vacant' })
-                    ]} 
+                      ...Array(row.occupied_beds).fill({ status: 'occupied' }),
+                      ...Array(row.vacant_beds).fill({ status: 'vacant' })
+                    ]}
                   />
                 </td>
               </tr>

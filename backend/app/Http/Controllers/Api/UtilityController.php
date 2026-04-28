@@ -28,7 +28,7 @@
      public function index(ManageUtilityRequest $request): JsonResponse
      {
          // Fetch all utilities, ordered by name, and eager load their rates ordered by effective_from DESC
-         $utilities = Utility::with(['rates' => function ($query) {
+         $utilities = Utility::with(['meters', 'rates' => function ($query) {
              $query->orderBy('effective_from', 'desc');
          }])->orderBy('name')->get();
  

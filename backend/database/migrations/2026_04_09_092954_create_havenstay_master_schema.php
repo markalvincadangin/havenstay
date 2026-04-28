@@ -116,6 +116,7 @@ return new class extends Migration
             $table->enum('status', ['available', 'unavailable', 'maintenance'])->default('available');
             $table->text('amenities')->nullable();
             $table->text('description')->nullable();
+            $table->boolean('is_metered')->default(true);
             $table->timestamps();
             $table->softDeletes();
         });
@@ -146,6 +147,7 @@ return new class extends Migration
             $table->boolean('is_cleared')->default(false);
             $table->enum('status', ['pending_payment', 'active', 'completed', 'terminated', 'voided'])->default('pending_payment');
             $table->text('notes')->nullable();
+            $table->string('idempotency_key', 36)->nullable()->unique('uq_contracts_idempotency');
             $table->timestamps();
             $table->softDeletes();
             $table->foreign('tenant_id')->references('tenant_id')->on('tenants');
@@ -189,6 +191,7 @@ return new class extends Migration
             $table->boolean('is_rollover')->default(false);
             $table->unsignedInteger('recorded_by');
             $table->timestamps();
+            $table->unique(['meter_id', 'reading_date', 'reading_value'], 'uk_meter_reading_forensic');
             $table->foreign('meter_id')->references('meter_id')->on('meters');
             $table->foreign('recorded_by')->references('user_id')->on('users');
         });
@@ -210,6 +213,7 @@ return new class extends Migration
             $table->date('billing_period_to');
             $table->date('due_date');
             $table->enum('status', ['unpaid', 'partial', 'paid', 'overdue'])->default('unpaid');
+            $table->string('idempotency_key', 36)->nullable()->unique('uq_billing_idempotency');
             $table->timestamps();
             $table->unique(['contract_id', 'billing_period_from', 'billing_period_to'], 'uq_billing_cycle');
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
@@ -242,6 +246,7 @@ return new class extends Migration
             $table->timestamp('voided_at')->nullable();
             $table->unsignedInteger('voided_by')->nullable();
             $table->string('void_reason', 255)->nullable();
+            $table->string('idempotency_key', 36)->nullable()->unique('uq_payments_idempotency');
             $table->timestamp('created_at')->useCurrent();
             $table->foreign('billing_id')->references('billing_id')->on('billing');
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
@@ -310,6 +315,7 @@ return new class extends Migration
                 bs.bed_space_id,
                 bs.bed_label,
                 bs.status AS bed_status,
+                c.status AS contract_status,
                 c.move_in_date,
                 c.expected_move_out_date
             FROM contracts c
@@ -345,7 +351,8 @@ return new class extends Migration
                 r.room_code,
                 t.tenant_id,
                 CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
-                c.contract_id
+                c.contract_id,
+                c.deposit_amount
             FROM bed_spaces bs
             JOIN rooms r ON bs.room_id = r.room_id
             LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status IN ('active', 'pending_payment')
@@ -379,12 +386,15 @@ return new class extends Migration
             SELECT
                 c.contract_id,
                 t.tenant_id,
+                t.email,
                 CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
                 c.move_in_date,
-                c.expected_move_out_date,
-                c.actual_move_out_date,
-                c.status AS contract_status,
-                r.room_code,
+                c.actual_move_out_date AS move_out_date,
+                c.status AS status,
+                c.is_cleared,
+                r.room_id,
+                r.room_code AS room_label,
+                bs.bed_space_id,
                 bs.bed_label
             FROM contracts c
             JOIN tenants t ON c.tenant_id = t.tenant_id

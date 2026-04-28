@@ -4,19 +4,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Users, Receipt, Calendar, _CreditCard, PlusCircle,
-  DoorOpen, _Bed, Lock, AlertTriangle, HandCoins
+  DoorOpen, _Bed, Lock, AlertTriangle, HandCoins, Activity
 } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { normalizePaginatedList, normalizeReportRows } from "@/lib/pagination";
 import { canManageBilling } from "@/lib/auth";
 import {
-  formatPHP,
   formatDateString,
   formatTenantDirectoryName,
   formatTimestamp,
   getTodayDate
 } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Card } from "@/components/ui/Card";
@@ -124,15 +124,14 @@ export default function PlatformDashboardPage() {
   const loading = occLoading || billSummaryLoading || billLoading || tenantLoading || payLoading || dueLoading || contractsLoading;
   return (
     <StandardPage
-      title="Overview"
-      subtitle="Welcome to HavenStay Platform! Here's what's happening with your boarding house business."
-      breadcrumbs={<Breadcrumbs items={[{ label: "Overview" }]} />}
+      title="Dashboard"
+      subtitle="Real-time operational overview and financial summary."
       loading={loading}
       skeleton={<DashboardSkeleton />}
       actions={
         <PageHeaderActions
           ctaHref={canManageBilling(currentUser) ? "/billing/new" : null}
-          ctaLabel="New Billing"
+          ctaLabel="Generate Bills"
           ctaIcon={PlusCircle}
           user={currentUser}
         />
@@ -172,11 +171,16 @@ export default function PlatformDashboardPage() {
             className="hs-glass-effect"
           />
           <KpiCard
-            label="Accounts Overdue"
+            label="Overdue Balances"
             icon={AlertTriangle}
             value={canSeeFinancials ? strictlyOverdueCount : lockedValue}
-            sub={canSeeFinancials ? (strictlyOverdueCount > 0 ? `${strictlyOverdueCount} UNPAID BILLS · ${formatPHP(strictlyOverdueTotal)}` : "ALL ACCOUNTS CURRENT") : "RESTRICTED VIEW"}
+            sub={canSeeFinancials ? (strictlyOverdueCount > 0 ? (
+              <span className="flex items-center gap-1">
+                {strictlyOverdueCount} UNPAID BILL{strictlyOverdueCount === 1 ? '' : 'S'} · <CurrencyDisplay amount={strictlyOverdueTotal} />
+              </span>
+            ) : "ALL ACCOUNTS CURRENT") : "RESTRICTED VIEW"}
             isDanger={canSeeFinancials && strictlyOverdueCount > 0}
+            isNeutral={canSeeFinancials && strictlyOverdueCount === 0}
             isActiveDecision={canSeeFinancials && strictlyOverdueCount > 0}
             href={canSeeFinancials ? "/billing?status=overdue" : null}
             isLoading={billLoading}
@@ -185,16 +189,16 @@ export default function PlatformDashboardPage() {
             className="hs-glass-effect"
           />
           <KpiCard
-            label="MTD Collections"
+            label="Monthly Collections"
             icon={HandCoins}
-            value={canSeeFinancials ? formatPHP(billSummary.collected_total) : lockedValue}
+            value={canSeeFinancials ? billSummary.collected_total : lockedValue}
             sub={canSeeFinancials ? "TOTAL POSTED THIS MONTH" : "RESTRICTED VIEW"}
             isSuccess={canSeeFinancials && Number(billSummary.collected_total) > 0}
             href={canSeeFinancials ? "/payments" : null}
             isLoading={billSummaryLoading}
             isSyncing={billSummaryValidating}
             error={billSummaryError}
-            sparkline={canSeeFinancials ? <Sparkline data={[15, 30, 25, 45, 40, 65]} color="stroke-emerald-500" /> : null}
+            currency={canSeeFinancials}
             className="hs-glass-effect"
           />
         </div>
@@ -205,11 +209,13 @@ export default function PlatformDashboardPage() {
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                  <Calendar size={13} aria-hidden />
+                  <Activity size={13} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Turnover Forecast</h2>
+                <h2 className="hs-strip-title text-stone-400">Arrivals & Departures</h2>
               </div>
-              <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest">Next 30 Days</div>
+              <Link href="/contracts" className="text-[10px] font-bold uppercase tracking-widest text-teal-600 hover:text-teal-700 transition-colors">
+                View Schedule →
+              </Link>
             </div>
             <div className="p-0 flex-1">
               <ResourceView
@@ -217,7 +223,7 @@ export default function PlatformDashboardPage() {
                 isEmpty={turnoverSchedule.length === 0}
                 emptyProps={{
                   title: "Quiet window ahead",
-                  description: "No departures or arrivals scheduled for the next 30 days.",
+                  description: "No scheduled arrivals or departures for the next 30 days.",
                   variant: "compact"
                 }}
               >
@@ -275,7 +281,7 @@ export default function PlatformDashboardPage() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                   <Receipt size={14} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Latest Collections</h2>
+                <h2 className="hs-strip-title text-stone-400">Latest Payments</h2>
               </div>
               <Link href="/payments" className="text-[10px] font-bold uppercase tracking-widest text-teal-600 hover:text-teal-700 transition-colors">
                 View Ledger →
@@ -296,9 +302,9 @@ export default function PlatformDashboardPage() {
                 <Table
                   embedded
                   columns={[
-                    { key: "record", label: "PAYMENT ID", className: "px-8" },
-                    { key: "tenant", label: "TENANT NAME" },
-                    { key: "value", label: "COLLECTION", className: "px-8 text-right" }
+                    { key: "record", label: "PAYMENT ID", className: "px-8 w-32" },
+                    { key: "tenant", label: "Tenant", className: "w-1/2" },
+                    { key: "value", label: "Amount paid", className: "px-8 text-right" }
                   ]}
                   rows={payments.map((p) => (
                     <tr
@@ -313,15 +319,16 @@ export default function PlatformDashboardPage() {
                         <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors leading-none">
                           {p.billing?.contract?.tenant ? formatTenantDirectoryName(p.billing.contract.tenant) : "—"}
                         </div>
-                        <div className="text-[10px] font-mono tracking-tighter text-stone-400 mt-1.5 uppercase font-bold">
+                        <div className="text-[10px] font-mono tabular-nums tracking-tighter text-stone-400 mt-1.5 uppercase font-bold">
                           {formatTimestamp(p.created_at)}
                         </div>
                       </td>
                       <td className="px-8 py-4 text-right">
                         <div className="flex flex-col items-end gap-1">
-                          <div className="font-mono text-sm font-black tabular-nums text-teal-700">
-                            {formatPHP(p.amount_paid)}
-                          </div>
+                          <CurrencyDisplay
+                            amount={p.amount_paid}
+                            className="text-sm font-bold text-teal-700"
+                          />
                           {p.correlation_id && (
                             <div className="font-mono text-[8px] font-bold text-stone-400 bg-stone-100 rounded-full px-2 py-0.5" title={`Workflow ID: ${p.correlation_id.toUpperCase()}`}>
                               #WF-{p.correlation_id.slice(0, 5).toUpperCase()}
@@ -342,7 +349,7 @@ export default function PlatformDashboardPage() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-50 text-red-600">
                   <Calendar size={13} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Attention: Due Today</h2>
+                <h2 className="hs-strip-title text-stone-400">Attention: Due Today</h2>
               </div>
               <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5">
                 <div className="size-1 rounded-full bg-red-500 animate-pulse" />
@@ -382,13 +389,13 @@ export default function PlatformDashboardPage() {
                         <ResourceIdCell id={b.billing_id} type="billing" />
                       </td>
                       <td className="px-8 py-4 text-right">
-                        <div className="font-mono text-sm font-bold tabular-nums text-red-600">
-                          {formatPHP(b.balance)}
+                        <div className="text-sm font-bold text-red-600">
+                          <CurrencyDisplay amount={b.balance} />
                         </div>
                       </td>
                       <td className="px-8 py-4 text-right">
                         <Link
-                          href={`/billing/${b.billing_id}`}
+                          href={`/payments/new?billing_id=${b.billing_id}`}
                           className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-700 transition-all border border-teal-100 bg-teal-50 px-3 py-1.5 rounded-lg whitespace-nowrap inline-block"
                         >
                           Record Payment
@@ -407,7 +414,7 @@ export default function PlatformDashboardPage() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
                   <Receipt size={14} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Recent Billing</h2>
+                <h2 className="hs-strip-title text-stone-400">Recent Bills</h2>
               </div>
               <Link href="/billing" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 transition-colors">
                 View All →
@@ -444,12 +451,12 @@ export default function PlatformDashboardPage() {
                         <div className="mt-1.5 flex items-center gap-2">
                           <ResourceIdCell id={b.billing_id} type="billing" />
                           <span className="opacity-50 text-[10px] font-black tracking-widest text-stone-300">·</span>
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">RM {b.room_code || "—"}</span>
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">ROOM-{(b.room_code || "—").replace('UNIT-', '')}</span>
                         </div>
                       </td>
                       <td className="px-8 py-4 text-right">
-                        <div className="font-mono text-sm font-black tabular-nums text-stone-900">
-                          {formatPHP(b.amount_due)}
+                        <div className="text-sm font-bold text-stone-900">
+                          <CurrencyDisplay amount={b.amount_due} />
                         </div>
                         <div className="mt-1.5">
                           <StatusBadge size="xs">{b.status}</StatusBadge>

@@ -51,8 +51,9 @@
  
          $totalCharge = 0.0;
          $breakdown = [];
+         $readings = $data['readings'] ?? [];
  
-         foreach ($data['readings'] as $reqReading) {
+         foreach ($readings as $reqReading) {
              $prev = MeterReading::with('meter')->find($reqReading['previous_reading_id']);
              $curr = MeterReading::find($reqReading['current_reading_id']);
  
@@ -64,7 +65,8 @@
              $charge = Financials::computeUtilityCost(
                  $prev->meter_id, 
                  (float) $curr->reading_value, 
-                 $data['billing_period_start']
+                 $data['billing_period_start'],
+                 (float) $prev->reading_value
              );
  
              // Back-calculate consumption for breakdown display
@@ -97,10 +99,15 @@
  
          $apportionments = [];
          foreach ($activeContracts as $contract) {
+             $baseRent = (float) ($contract->monthly_rate_override ?? $contract->monthly_rate);
+             $utilityShare = $apportionmentMap[$contract->contract_id] ?? 0;
+             
              $apportionments[] = [
                  'contract_id' => $contract->contract_id,
                  'tenant_name' => $contract->tenant->first_name . ' ' . $contract->tenant->last_name,
-                 'amount' => $apportionmentMap[$contract->contract_id] ?? 0,
+                 'base_rent' => $baseRent,
+                 'utility_share' => $utilityShare,
+                 'total_estimated' => Financials::roundToCent($baseRent + $utilityShare),
                  'override_reason' => null
              ];
          }
@@ -136,13 +143,14 @@
                          'billing_period_from' => $data['billing_period_start'],
                          'billing_period_to' => $data['billing_period_end'],
                          'due_date' => $data['due_date'],
-                         'line_items' => [] // Manual items handled below
+                         'line_items' => $split['manual_items'] ?? [] 
                      ]);
  
                      // Distribute line items
                      // FORENSIC ITEMIZATION: To satisfy DB constraint chk_bli_utility_link,
                      // we must generate one line item per meter reading.
-                     foreach ($data['readings'] as $reqReading) {
+                     $readings = $data['readings'] ?? [];
+                     foreach ($readings as $reqReading) {
                          $prev = MeterReading::with('meter')->find($reqReading['previous_reading_id']);
                          $curr = MeterReading::find($reqReading['current_reading_id']);
                          if (!$prev || !$curr) continue;
@@ -150,7 +158,8 @@
                          $meterTotalCharge = Financials::computeUtilityCost(
                              $prev->meter_id, 
                              (float) $curr->reading_value, 
-                             $data['billing_period_start']
+                             $data['billing_period_start'],
+                             (float) $prev->reading_value
                          );
                          
                          // Apportion this specific meter's cost to this tenant

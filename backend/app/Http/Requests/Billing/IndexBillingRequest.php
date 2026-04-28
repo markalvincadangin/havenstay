@@ -26,6 +26,7 @@ class IndexBillingRequest extends FormRequest
             'contract_id' => ['nullable', 'integer'],
             'tenant_id' => ['nullable', 'integer'],
             'status' => ['nullable', 'string', 'in:unpaid,partial,paid,overdue'],
+            'past_due' => ['nullable', 'boolean'],
             'q' => ['nullable', 'string', 'max:200'],
         ], Pagination::queryRules());
     }

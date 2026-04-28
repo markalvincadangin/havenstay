@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { apiRequest } from "@/lib/api";
 import { applyServerFieldErrors } from "@/lib/forms";
+import { useToasts } from "@/context/ToastContext";
 import { Field, Input } from "@/components/ui/Fields";
 import { QuickEditFormShell } from "@/components/ui/QuickEditFormShell";
 import { Clock } from "lucide-react";
 
 export function UtilityRateQuickEditForm({ preselectedUtilityId, onSuccess, onCancel }) {
-  const [apiError, setApiError] = useState(null);
+  const { showToast } = useToasts();
 
   const {
     register,
@@ -25,7 +26,6 @@ export function UtilityRateQuickEditForm({ preselectedUtilityId, onSuccess, onCa
   });
 
   const onSubmit = async (values) => {
-    setApiError(null);
     try {
       await apiRequest("/api/utilities/rates", {
         method: "POST",
@@ -37,7 +37,7 @@ export function UtilityRateQuickEditForm({ preselectedUtilityId, onSuccess, onCa
       });
       onSuccess();
     } catch (err) {
-      applyServerFieldErrors(err, setError, { setApiError });
+      applyServerFieldErrors(err, setError, { showToast });
     }
   };
 
@@ -48,7 +48,6 @@ export function UtilityRateQuickEditForm({ preselectedUtilityId, onSuccess, onCa
       icon={Clock}
       onSubmit={handleSubmit(onSubmit)}
       isSubmitting={isSubmitting}
-      apiError={apiError}
       onCancel={onCancel}
       submitLabel="Publish Rate"
     >

@@ -1,55 +1,55 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useToasts } from "@/context/ToastContext";
 import { Zap, Droplet, AlertTriangle } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { applyServerFieldErrors } from "@/lib/forms";
 import { Field, Input } from "@/components/ui/Fields";
 import { QuickEditFormShell } from "@/components/ui/QuickEditFormShell";
+import { useForm } from "react-hook-form";
 export function MeterReadingForm({ meter, onSuccess, onCancel }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [apiError, setApiError] = useState("");
-  const [formData, setFormData] = useState({
-    reading_date: new Date().toISOString().split('T')[0],
-    reading_value: "",
-    is_rollover: false
+  const { register, handleSubmit, formState: { errors }, setError, watch } = useForm({
+    defaultValues: {
+      reading_date: new Date().toISOString().split('T')[0],
+      reading_value: "",
+      is_rollover: false
+    }
   });
+  const { showToast } = useToasts();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isElectric = meter?.utility?.name?.toLowerCase().includes("electric") || meter?.utility_type === "electric";
   const latestR = meter?.readings?.[0]; // Assumes readings are sorted desc
   const latestValue = latestR ? Number(latestR.reading_value) : 0;
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setApiError("");
-    const val = parseFloat(formData.reading_value);
-    if (isNaN(val)) {
-      setApiError("A numerical reading value is required.");
-      return;
-    }
+  const onFormSubmit = async (data) => {
+    const val = parseFloat(data.reading_value);
+    
     // Monotonicity Check (BR-MET-004) vs Rollover (BR-MET-005)
-    if (!formData.is_rollover && val < latestValue) {
-      setApiError(`Validation failed: The new reading must be ≥ the last record (${latestValue}) unless this is a Rollover event.`);
+    if (!data.is_rollover && val < latestValue) {
+      showToast(`Reading must be ≥ the last recorded value (${latestValue}) unless this is a rollover event.`, "error");
       return;
     }
+
     setIsSubmitting(true);
     try {
-      await apiRequest(`/api/meters/${meter.meter_id}/readings`, {
+      const response = await apiRequest(`/api/meters/${meter.meter_id}/readings`, {
         method: "POST",
         body: JSON.stringify({
-          ...formData,
+          ...data,
           reading_value: val,
-          is_rollover: formData.is_rollover
         })
       });
-      onSuccess();
+      // Pass the new reading back for auto-selection in the wizard
+      onSuccess(response);
     } catch (err) {
-      setApiError(err.message || "Failed to record reading.");
+      applyServerFieldErrors(err, setError, { showToast });
     } finally {
       setIsSubmitting(false);
     }
   };
   return (
     <QuickEditFormShell
-      onSubmit={handleSubmit}
+      onSubmit={handleSubmit(onFormSubmit)}
       isSubmitting={isSubmitting}
-      apiError={apiError}
       onCancel={onCancel}
       submitLabel="Confirm Reading"
     >
@@ -65,23 +65,24 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
             </p>
           </div>
         </div>
-        <Field label="Reading Date" required>
+        <Field label="Reading Date" required error={errors.reading_date?.message}>
           <Input
             type="date"
-            value={formData.reading_date}
-            onChange={(e) => setFormData({ ...formData, reading_date: e.target.value })}
+            {...register("reading_date", { required: "Date is required." })}
             className="font-bold cursor-pointer"
           />
         </Field>
-        <Field label="Reading Value" required>
+        <Field label="Reading Value" required error={errors.reading_value?.message}>
           <div className="relative">
             <Input
               type="number"
               step="0.0001"
               autoFocus
-              placeholder={formData.is_rollover ? "Post-rollover value" : `≥ ${latestValue}`}
-              value={formData.reading_value}
-              onChange={(e) => setFormData({ ...formData, reading_value: e.target.value })}
+              placeholder={latestValue ? `≥ ${latestValue}` : "Current reading"}
+              {...register("reading_value", { 
+                required: "Reading value is required.",
+                min: { value: 0, message: "Reading cannot be negative." }
+              })}
               className="!h-16 px-8 text-xl font-black tabular-nums border-stone-200 focus:border-teal-500"
             />
             <div className="absolute right-6 top-1/2 -translate-y-1/2 text-xs font-black uppercase tracking-widest text-stone-300 pointer-events-none">
@@ -94,8 +95,7 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
             <div className="relative flex items-center">
               <input
                 type="checkbox"
-                checked={formData.is_rollover}
-                onChange={(e) => setFormData({ ...formData, is_rollover: e.target.checked })}
+                {...register("is_rollover")}
                 className="size-5 rounded border-stone-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
               />
             </div>
@@ -109,7 +109,7 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
             </div>
           </label>
         </div>
-        {!formData.is_rollover && (
+        {!watch("is_rollover") && (
           <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-100 flex gap-3">
             <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-[10px] font-medium text-amber-800 leading-relaxed uppercase">

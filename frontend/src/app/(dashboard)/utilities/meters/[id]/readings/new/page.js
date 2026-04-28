@@ -9,6 +9,7 @@ import { fetcher, apiRequest } from "@/lib/api";
 import { canManageMeters } from "@/lib/auth";
 import { flattenApiErrors } from "@/lib/errors";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useToasts } from "@/context/ToastContext";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
@@ -33,10 +34,8 @@ export default function NewMeterReadingPage({ params }) {
   const router = useRouter();
 
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const canAccess = useMemo(() => canManageMeters(currentUser), [currentUser]);
-  const viewDenied = !authLoading && currentUser !== null && !canAccess;
-
-  const [apiError, setApiError] = useState(null);
 
   const { data: meter, error: meterError } = useSWR(
     !authLoading && currentUser && canAccess ? `/api/meters/${meterId}` : null,
@@ -68,11 +67,10 @@ export default function NewMeterReadingPage({ params }) {
   const readingValue = useWatch({ control, name: "reading_value" });
 
   const onSubmit = async (values) => {
-    setApiError(null);
 
     // Client-Side Monotonicity Enforcement
     if (!values.is_rollover && latestReading && parseFloat(values.reading_value) < parseFloat(latestReading.reading_value)) {
-      setApiError("Forensic Violation: Reading value cannot be lower than the previous reading unless flagged as a rollover. Check the dial rollover box if the hardware reset.");
+      showToast("Reading value cannot be lower than the previous reading unless flagged as a rollover. Check the dial rollover box if the hardware reset.", "error");
       return;
     }
 
@@ -84,16 +82,16 @@ export default function NewMeterReadingPage({ params }) {
           reading_value: parseFloat(values.reading_value),
           is_rollover: values.is_rollover,
           // Sending note in payload for potential forensic audit trail
-          rollover_reason: values.is_rollover ? values.rollover_reason : null, 
+          rollover_reason: values.is_rollover ? values.rollover_reason : null,
         }),
       });
 
       // Invalidate the meter detail to show the new reading
       mutate(`/api/meters/${meterId}`);
-      
+
       router.push(`/admin/meters/${meterId}`);
     } catch (err) {
-      setApiError(flattenApiErrors(err));
+      showToast(flattenApiErrors(err), "error");
     }
   };
 
@@ -156,7 +154,7 @@ export default function NewMeterReadingPage({ params }) {
                       Last Recorded Baseline
                     </div>
                     <div className="font-mono text-sm font-bold text-teal-900 tabular-nums">
-                      {Number(latestReading.reading_value).toFixed(2)} {meter.utility?.unit_of_measurement} 
+                      {Number(latestReading.reading_value).toFixed(2)} {meter.utility?.unit_of_measurement}
                       <span className="text-teal-600/70 font-medium ml-2 text-xs">
                         on {formatDateString(latestReading.reading_date)}
                       </span>
@@ -183,9 +181,9 @@ export default function NewMeterReadingPage({ params }) {
                     />
                   </Field>
 
-                  <Field 
-                    label={`Reading Value (${meter.utility?.unit_of_measurement || "Units"})`} 
-                    required 
+                  <Field
+                    label={`Reading Value (${meter.utility?.unit_of_measurement || "Units"})`}
+                    required
                     error={errors.reading_value?.message}
                   >
                     <Input
@@ -195,7 +193,7 @@ export default function NewMeterReadingPage({ params }) {
                       placeholder="0.0000"
                       className="!h-12 border-stone-200 font-bold focus:border-teal-500/50 font-mono tracking-wider tabular-nums"
                       hasError={Boolean(errors.reading_value)}
-                      {...register("reading_value", { 
+                      {...register("reading_value", {
                         required: "Measurement value is required.",
                         min: { value: 0, message: "Reading cannot be negative." }
                       })}
@@ -205,20 +203,20 @@ export default function NewMeterReadingPage({ params }) {
                   {/* Non-regressive context feedback */}
                   {!isRollover && latestReading && readingValue !== "" && (
                     <div className="md:col-span-2">
-                       {parseFloat(readingValue) < parseFloat(latestReading.reading_value) && (
-                          <p className="text-xs font-bold text-rose-600 mt-1 flex items-center gap-1.5">
-                            <AlertTriangle size={12} />
-                            Warning: Value is lower than previous reading. This will be rejected unless marked as a rollover.
-                          </p>
-                       )}
+                      {parseFloat(readingValue) < parseFloat(latestReading.reading_value) && (
+                        <p className="text-xs font-bold text-rose-600 mt-1 flex items-center gap-1.5">
+                          <AlertTriangle size={12} />
+                          Warning: Value is lower than previous reading. This will be rejected unless marked as a rollover.
+                        </p>
+                      )}
                     </div>
                   )}
 
                   <div className="md:col-span-2 pt-4 border-t border-stone-100">
                     <label className="flex items-start gap-4 p-4 rounded-xl border border-stone-200 hover:border-stone-300 transition-colors bg-white cursor-pointer select-none">
                       <div className="pt-0.5">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           className="w-5 h-5 rounded border-stone-300 text-teal-600 focus:ring-teal-600"
                           {...register("is_rollover")}
                         />
@@ -235,7 +233,7 @@ export default function NewMeterReadingPage({ params }) {
                   {isRollover && (
                     <div className="md:col-span-2 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                       <Alert variant="warning" title="Validation Bypass Active">
-                         You are skipping the check that prevents lower values from being entered. This action will be recorded in the audit history.
+                        You are skipping the check that prevents lower values from being entered. This action will be recorded in the audit history.
                       </Alert>
 
                       <Field label="Rollover Reason" required error={errors.rollover_reason?.message}>
@@ -243,8 +241,8 @@ export default function NewMeterReadingPage({ params }) {
                           placeholder="Provide justification for bypass (e.g., 'Dial rolled over 99999', 'Meter swapped')"
                           className="!h-12 border-stone-200 font-bold focus:border-amber-500/50"
                           hasError={Boolean(errors.rollover_reason)}
-                          {...register("rollover_reason", { 
-                            required: isRollover ? "A justification is strictly required for rollover events." : false 
+                          {...register("rollover_reason", {
+                            required: isRollover ? "A justification is strictly required for rollover events." : false
                           })}
                         />
                       </Field>
@@ -253,12 +251,6 @@ export default function NewMeterReadingPage({ params }) {
                 </div>
               </div>
             </Card>
-
-            {apiError && (
-              <Alert variant="error" title="Could not save reading">
-                <div className="text-xs leading-relaxed">{apiError}</div>
-              </Alert>
-            )}
 
             <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-end">
               <Button

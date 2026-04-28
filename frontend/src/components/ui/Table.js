@@ -68,7 +68,7 @@ export function Table({
                   key={col.key}
                   scope="col"
                   className={[
-                    "px-6 text-[9px] font-black tracking-[0.15em] text-stone-400 uppercase",
+                    "px-6 text-[10px] font-black tracking-widest text-stone-400 uppercase",
                     thPadding,
                     col.className?.includes("text-right") ? "text-right" : 
                     col.className?.includes("text-center") ? "text-center" : "text-left",

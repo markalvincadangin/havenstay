@@ -28,7 +28,7 @@ export default function Toast({ message, type = "success", onClose, duration = 4
   }, [onClose, duration]);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.95 }}
+      initial={{ opacity: 0, y: -12, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
       className={`flex items-center gap-3 rounded-2xl border p-4 shadow-xl shadow-stone-900/5 ${variant.className} min-w-[320px] pointer-events-auto`}

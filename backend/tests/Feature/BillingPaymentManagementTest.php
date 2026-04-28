@@ -104,7 +104,7 @@ class BillingPaymentManagementTest extends TestCase
         $response = $this->actingAs($this->adminUser)->postJson('/api/payments', [
             'billing_id' => $billing->billing_id,
             'amount_paid' => 2000,
-            'payment_date' => '2026-05-08',
+            'payment_date' => now()->toDateString(),
             'payment_method' => 'cash',
             'payment_category' => 'billing',
         ]);
@@ -115,10 +115,10 @@ class BillingPaymentManagementTest extends TestCase
             'status' => \App\Enums\BillingStatus::PARTIAL->value,
         ]);
 
-        // Verify transaction log
-        $this->assertDatabaseHas('transaction_logs', [
-            'action' => 'POST_PAYMENT',
-            'status' => 'committed',
+        $this->assertTriggerAuditLog([
+            'user_id' => $this->adminUser->user_id,
+            'target_table' => 'payments',
+            'action' => 'INSERT',
         ]);
     }
 
@@ -131,20 +131,23 @@ class BillingPaymentManagementTest extends TestCase
         $billing->load('contract');
         $tenantId = (int) $billing->contract->tenant_id;
 
+        $today = now()->toDateString();
+        $billing->update(['billing_period_from' => $today]);
+
         $this->actingAs($this->adminUser)->postJson('/api/payments', [
             'billing_id' => $billing->billing_id,
             'amount_paid' => 2000,
-            'payment_date' => '2026-05-01',
+            'payment_date' => $today,
             'payment_method' => 'cash',
             'payment_category' => 'billing',
         ])->assertCreated();
 
-        $response = $this->actingAs($this->viewerUser)->getJson(
+        $response = $this->actingAs($this->adminUser)->getJson(
             "/api/reports/tenant-ledger?tenant_id={$tenantId}"
         );
 
         $response->assertOk();
-        $entries = $response->json('entries');
+        $entries = $response->json('data.entries');
         $this->assertCount(2, $entries);
         $this->assertSame('debit', $entries[0]['type']);
         $this->assertSame('credit', $entries[1]['type']);
@@ -160,7 +163,7 @@ class BillingPaymentManagementTest extends TestCase
         $response = $this->actingAs($this->staffUser)->postJson('/api/payments', [
             'billing_id' => $billing->billing_id,
             'amount_paid' => 0, // Invalid
-            'payment_date' => '2026-05-08',
+            'payment_date' => now()->toDateString(),
             'payment_method' => 'cash',
             'payment_category' => 'billing',
         ]);
@@ -173,10 +176,10 @@ class BillingPaymentManagementTest extends TestCase
             'status' => \App\Enums\BillingStatus::UNPAID->value,
         ]);
 
-        // Verify rolled-back transaction log
-        $this->assertDatabaseHas('transaction_logs', [
-            'action' => 'POST_PAYMENT',
-            'status' => 'rolled_back',
+        // Verify audit log shows no successful payment insert
+        $this->assertDatabaseMissing('audit_logs', [
+            'action' => 'INSERT',
+            'target_table' => 'payments',
         ]);
     }
 
@@ -187,7 +190,7 @@ class BillingPaymentManagementTest extends TestCase
         $this->actingAs($this->adminUser)->postJson('/api/payments', [
             'billing_id' => $billing->billing_id,
             'amount_paid' => 1000,
-            'payment_date' => '2026-05-08',
+            'payment_date' => now()->toDateString(),
             'payment_method' => 'gcash',
             'reference_number' => '',
         ])->assertUnprocessable()->assertJsonValidationErrors(['reference_number']);
@@ -223,7 +226,7 @@ class BillingPaymentManagementTest extends TestCase
             'payment_method' => \App\Enums\PaymentMethod::CASH->value,
         ]);
         $paidBilling->refresh();
-        BillingService::syncBillingStatus($paidBilling);
+        BillingService::syncBillingStatus($this->adminUser, $paidBilling);
 
         $response = $this->actingAs($this->viewerUser)
             ->getJson('/api/billing?status=paid&past_due=1');
@@ -243,7 +246,7 @@ class BillingPaymentManagementTest extends TestCase
             'status' => \App\Enums\BillingStatus::UNPAID->value,
         ]);
 
-        BillingService::syncBillingStatus($zeroBilling->refresh());
+        BillingService::syncBillingStatus($this->adminUser, $zeroBilling->refresh());
 
         $this->assertDatabaseHas('billing', [
             'billing_id' => $zeroBilling->billing_id,
@@ -265,8 +268,8 @@ class BillingPaymentManagementTest extends TestCase
 
         $payment = Payment::where('billing_id', $billing->billing_id)->firstOrFail();
 
-        $this->actingAs($this->adminUser)->deleteJson("/api/payments/{$payment->payment_id}", [
-            'void_reason' => 'Test',
+        $this->actingAs($this->adminUser)->postJson("/api/payments/{$payment->payment_id}/void", [
+            'void_reason' => 'Mistaken entry',
         ])->assertOk();
 
         $this->assertDatabaseHas('billing', [

@@ -15,13 +15,18 @@ class UtilityForecastRequest extends FormRequest
 
     public function rules(): array
     {
+        $room = \App\Models\Room::find($this->room_id);
+        $isMetered = $room ? (bool) $room->is_metered : true;
+
+        $readingsRule = $isMetered ? ['required', 'array', 'min:1'] : ['nullable', 'array'];
+
         return [
             'room_id' => ['required', 'integer', 'exists:rooms,room_id'],
             'billing_period_start' => ['required', 'date'],
             'billing_period_end' => ['required', 'date', 'after:billing_period_start'],
             
             // Array of meter readings to calculate utility consumption
-            'readings' => ['required', 'array', 'min:1'],
+            'readings' => $readingsRule,
             'readings.*.meter_id' => ['required', 'integer', 'exists:meters,meter_id'],
             'readings.*.previous_reading_id' => ['required', 'integer', 'exists:meter_readings,reading_id'],
             'readings.*.current_reading_id' => ['required', 'integer', 'exists:meter_readings,reading_id'],

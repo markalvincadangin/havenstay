@@ -3,7 +3,7 @@
 namespace App\Http\Concerns;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\LengthAwarePaginator;
 use App\Support\Pagination;
 
 /**
@@ -59,8 +59,13 @@ trait RespondsWithJson
     /**
      * Paginated list response envelope.
      */
-    protected function paginated(LengthAwarePaginator $paginator, array $extraMeta = [], string $message = 'Records retrieved successfully.'): JsonResponse
+    protected function paginated(LengthAwarePaginator $paginator, array $extraMeta = [], string $message = 'Records retrieved successfully.', ?string $resourceClass = null): JsonResponse
     {
+        if ($resourceClass && class_exists($resourceClass)) {
+            $paginator->setCollection(
+                collect($resourceClass::collection($paginator->getCollection()))
+            );
+        }
         return Pagination::fromPaginator($paginator, $extraMeta, $message);
     }
 }

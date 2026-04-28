@@ -348,7 +348,7 @@ export const INTERACTIVE_TABLE_ROW_CLASS =
  */
 export const ID_PREFIX_MAP = {
   tenant: "TENANT",
-  contract: "CON",
+  contract: "CONTRACT",
   billing: "BILL",
   room: "ROOM",
   bed: "BS",

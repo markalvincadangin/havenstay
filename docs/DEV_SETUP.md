@@ -149,83 +149,32 @@ example:
 | [ngrok](https://ngrok.com) | 1 static domain, 40 conn/min | `ngrok http 8000` |
 | [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) | Unlimited, no account needed for quick tunnels | `cloudflared tunnel --url http://localhost:8000` |
 
-### Step-by-step (ngrok example)
+### Zero-Touch Tunneling (New!)
 
-**1. Expose the Laravel backend**
+Because the backend is configured to accept wildcard CORS and Sanctum requests for `*.trycloudflare.com` and `*.ngrok-free.app`, you **do not** need to update your `.env` files every time you generate a new tunnel URL.
 
+Here is the fastest way to share your local environment:
+
+**1. Start your local servers**
+Make sure Laravel is running on `8000` and Next.js is running on `3000`.
+
+**2. Open ONE tunnel to the frontend**
 ```bash
-ngrok http 8000
-# Note the Forwarding URL: https://xxxx.ngrok-free.app
-```
-
-**2. Configure the backend** (`backend/.env`)
-
-```dotenv
-FRONTEND_URL=http://localhost:3000        # or your frontend tunnel URL
-SANCTUM_STATEFUL_DOMAINS=localhost:3000,xxxx.ngrok-free.app
-```
-
-Restart Laravel after editing `.env`:
-
-```bash
-php artisan config:clear
-# For Docker: docker compose restart backend
-```
-
-**3. Configure the frontend** (`frontend/.env.local`)
-
-```dotenv
-# Tell Next.js server-side rewrites to proxy to the tunnel
-BACKEND_INTERNAL_URL=https://xxxx.ngrok-free.app
-
-# If you also want the browser to reach the backend directly (uncomment only if needed)
-# NEXT_PUBLIC_API_BASE_URL=https://xxxx.ngrok-free.app
-```
-
-**4. If your frontend is also behind a tunnel** (optional)
-
-```bash
-ngrok http 3000
-# Note the Forwarding URL: https://yyyy.ngrok-free.app
-```
-
-Add the frontend tunnel domain to `frontend/.env.local`:
-
-```dotenv
-ALLOWED_DEV_ORIGINS=yyyy.ngrok-free.app
-```
-
-This tells Next.js's dev server to accept requests from that origin (handled
-dynamically in `next.config.mjs` — no source code changes needed).
-
-**5. Restart the frontend dev server** after any `.env.local` change:
-
-```bash
-# Stop next dev (Ctrl+C), then:
-npm run dev
-# Or for Docker:
-docker compose restart frontend
-```
-
-### Cloudflare Tunnel (no-account quick tunnel)
-
-```bash
-# Expose backend
-cloudflared tunnel --url http://localhost:8000
-# Expose frontend (optional)
 cloudflared tunnel --url http://localhost:3000
 ```
 
-Then follow the same env-var steps above with the `trycloudflare.com` URLs.
+**3. Share the link!**
+Send the `https://<random-words>.trycloudflare.com` link to anyone. 
+
+*How it works*: The browser hits the frontend tunnel. Next.js proxies the `/api/*` requests internally to your local Laravel server at `127.0.0.1:8000`. Laravel sees the request came from `*.trycloudflare.com` and automatically allows the CORS and Auth cookies because of the wildcard patterns in `config/cors.php` and `SANCTUM_STATEFUL_DOMAINS`!
 
 > [!NOTE]
-> Quick Cloudflare tunnels generate a new URL on every run. Use a named
-> tunnel with a config file for a stable URL during long sessions.
+> If you are testing webhooks or an external service that needs to hit the backend directly, you will still need to open a second tunnel to `localhost:8000`.
 
 ### Tunnel with Docker
 
 If using Docker Compose, run the tunnel on the **host machine** and point it at
-the forwarded port (`localhost:8000` for backend, `localhost:3000` for frontend).
+the forwarded port (`localhost:3000` for frontend).
 The containers publish these ports to the host, so the tunnel sees them correctly.
 
 ---

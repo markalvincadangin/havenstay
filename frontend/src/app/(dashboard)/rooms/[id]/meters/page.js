@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { apiRequest, fetcher } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useToasts } from "@/context/ToastContext";
 import StandardPage from "@/components/ui/StandardPage";
 import { Card } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -36,6 +37,7 @@ export default function RoomMetersPage() {
   const _router = useRouter();
   const roomId = params?.id;
   const { user: currentUser } = useAuth();
+  const { showToast } = useToasts();
   const { data: room } = useSWR(currentUser && roomId ? `/api/rooms/${roomId}` : null, fetcher);
   const { data: readings, error, mutate } = useSWR(
     currentUser && roomId ? `/api/rooms/${roomId}/meters` : null,
@@ -43,7 +45,6 @@ export default function RoomMetersPage() {
   );
   const [activeTab, setActiveTab] = useState("electric");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [actionError, setActionError] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   // Form State
   const [formData, setFormData] = useState({
@@ -58,10 +59,9 @@ export default function RoomMetersPage() {
   const latestDateStr = latestR ? formatDateString(latestR.reading_date) : "N/A";
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setActionError("");
     const val = parseFloat(formData.reading_value);
     if (isNaN(val) || val < latestReadingValue) {
-        setActionError(`Validation failed: The new reading must be ≥ the last record (${latestReadingValue} on ${latestDateStr}).`);
+        showToast(`Validation failed: The new reading must be ≥ the last record (${latestReadingValue} on ${latestDateStr}).`, "error");
         return;
     }
     setIsSubmitting(true);
@@ -76,29 +76,33 @@ export default function RoomMetersPage() {
       });
       setShowAddModal(false);
       setFormData({ reading_date: new Date().toISOString().split('T')[0], reading_value: "" });
+      showToast("Reading recorded successfully.", "success");
       mutate();
     } catch (err) {
-      setActionError(err.message || "Failed to record meter reading.");
+      showToast(err.message || "Failed to record meter reading.", "error");
     } finally {
       setIsSubmitting(false);
     }
   };
   return (
     <StandardPage
-      title={`Room ${room?.room_code || ''} Meters`}
+      title={
+        <div className="flex items-center gap-4">
+          <span>Room {room?.room_code || ''} Meters</span>
+          <ResourceIdCell id={roomId} type="room" />
+        </div>
+      }
       subtitle={
-          <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                  <ResourceIdCell id={roomId} type="room" />
-                  <span className="text-stone-300">·</span>
-                  <span className="text-[10px] font-mono font-bold text-stone-500 uppercase tracking-widest leading-none">
-                      Last Reading: {latestReadingValue} {activeTab === 'electric' ? 'kWh' : 'm³'}
-                  </span>
-              </div>
-              <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
-                Track chronological utility consumption and forensic meter history.
-              </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono font-bold text-stone-500 uppercase tracking-widest leading-none">
+              Last Reading: {latestReadingValue} {activeTab === 'electric' ? 'kWh' : 'm³'}
+            </span>
           </div>
+          <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
+            Track chronological utility consumption and forensic meter history.
+          </p>
+        </div>
       }
       loading={!room && !error}
       error={error}
@@ -120,11 +124,6 @@ export default function RoomMetersPage() {
       }
     >
       <div className="space-y-8">
-        {actionError && (
-          <Alert variant="error" title="Reading Validation Failed">
-            {actionError}
-          </Alert>
-        )}
         <div className="grid gap-8 lg:grid-cols-12">
           {/* Quick Stats & Entry Trigger */}
           <aside className="lg:col-span-4 space-y-6">
@@ -192,9 +191,10 @@ export default function RoomMetersPage() {
                   columns={[
                     { key: "id", label: "METER ID", className: "pl-8" },
                     { key: "date", label: "READING DATE" },
-                    { key: "value", label: "METER VALUE" },
+                    { key: "value", label: `Reading (${activeTab === 'electric' ? 'kWh' : 'm³'})` },
                     { key: "consumption", label: "CONSUMPTION", className: "text-right" },
-                    { key: "recorder", label: "STAFF NAME", className: "text-right px-8" },
+                    { key: "billing", label: "LINKED BILLING", className: "text-right" },
+                    { key: "recorder", label: "RECORDED BY", className: "text-right px-8" },
                   ]}
                   rows={currentReadings.map((reading, idx) => {
                     const prevReading = currentReadings[idx + 1];
@@ -227,6 +227,18 @@ export default function RoomMetersPage() {
                            </span>
                         </td>
                         <td className="px-8 py-5 text-right">
+                           <div className="flex flex-col items-end gap-1">
+                             {reading.billing ? (
+                               <>
+                                 <span className="text-[10px] font-bold text-teal-600 uppercase tracking-tight">#{reading.billing.billing_id}</span>
+                                 <span className="text-[8px] font-medium text-stone-400 tabular-nums uppercase">{reading.billing.period}</span>
+                               </>
+                             ) : (
+                               <span className="text-[10px] font-bold text-stone-300 uppercase tracking-widest italic">Pending</span>
+                             )}
+                           </div>
+                        </td>
+                        <td className="px-8 py-5 text-right">
                            <div className="flex items-center justify-end gap-2">
                              <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 group-hover:text-stone-900 transition-colors">
                                {reading.recorder ? `${reading.recorder.first_name} ${reading.recorder.last_name}` : 'Unknown'}
@@ -236,7 +248,7 @@ export default function RoomMetersPage() {
                       </tr>
                     );
                   })}
-                  emptyTitle="No Meter Logs"
+                  emptyTitle="No Meter Readings"
                   emptyDescription={`No ${activeTab} readings have been recorded for this room yet.`}
                 />
               </div>

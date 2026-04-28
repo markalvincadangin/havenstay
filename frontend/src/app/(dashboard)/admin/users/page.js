@@ -12,10 +12,12 @@ import { canManageUsers } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useTableSort } from "@/hooks/useTableSort";
 import { sortClientRows } from "@/lib/tableSort";
+import { useToasts } from "@/context/ToastContext";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import FilterChips from "@/components/ui/FilterChips";
 import { Field, Input, Select } from "@/components/ui/Fields";
 import { SkeletonGridPage } from "@/components/ui/Skeleton";
@@ -41,6 +43,7 @@ function safeLower(value) {
 export default function UsersPage() {
   const _router = useRouter();
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
     usePaginatedFilters({
       initialFilters: { query: "", role: "all", status: "all" },
@@ -55,7 +58,6 @@ export default function UsersPage() {
         return extra;
       },
     });
-  const [apiError, setApiError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
   const [confirmToggleUser, setConfirmToggleUser] = useState(null);
   const [confirmInput, setConfirmInput] = useState("");
@@ -100,13 +102,12 @@ export default function UsersPage() {
   }, [users, sortColumn, sortDirection]);
   async function handleToggleActive(user) {
     if (user.username !== confirmInput) {
-      setApiError(`Forensic rejection: Input '${confirmInput}' does not match username '${user.username}'.`);
+      showToast(`Access Denied: Input '${confirmInput}' does not match username '${user.username}'.`, "error");
       return;
     }
     const nextActive = !user.is_active;
     const action = nextActive ? "reactivate" : "deactivate";
     setActionLoading(user.user_id);
-    setApiError(null);
     try {
       await apiRequest(`/api/users/${user.user_id}/${action}`, {
         method: "POST",
@@ -115,7 +116,7 @@ export default function UsersPage() {
       setConfirmInput("");
       refetchUsers();
     } catch (uError) {
-      setApiError(flattenApiErrors(uError));
+      showToast(flattenApiErrors(uError), "error");
       console.error("Request Error:", uError);
     } finally {
       setActionLoading(null);
@@ -126,7 +127,6 @@ export default function UsersPage() {
     <StandardPage
       title="Users"
       subtitle="Manage staff and admin accounts."
-      breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "Users" }]} />}
       loading={authLoading || loading}
       skeleton={<SkeletonGridPage cards={8} />}
       actions={
@@ -140,11 +140,6 @@ export default function UsersPage() {
       }
     >
       <div className="space-y-6">
-        {apiError && (
-          <Alert variant="error" title="Request Error">
-            {apiError}
-          </Alert>
-        )}
         {viewDenied && (
           <Alert variant="warning" title="Access restricted" data-testid="access-denied-users">
             You do not have permission to view this page. Only administrators can open the user directory.
@@ -153,46 +148,34 @@ export default function UsersPage() {
         )}
         {!viewDenied && (
           <div className="space-y-6">
-            {confirmToggleUser && (
-              <Card className="border-rose-200 bg-rose-50/50 p-8 shadow-xl">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-rose-700 flex items-center gap-2">
-                      <Shield size={16} />
-                      Security Confirmation Required
-                    </h3>
-                    <p className="text-sm font-medium text-rose-600/80 leading-relaxed max-w-xl">
-                      Deactivating <span className="font-bold">@{confirmToggleUser.username}</span> will immediately revoke all system session tokens.
-                      Type the username below to confirm this destructive action.
-                    </p>
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-center gap-3">
-                    <Input
-                      value={confirmInput}
-                      onChange={(e) => setConfirmInput(e.target.value)}
-                      placeholder={confirmToggleUser.username}
-                      className="!h-10 border-rose-200 bg-white placeholder:text-rose-200 text-rose-900 font-bold"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button variant="secondary" onClick={() => setConfirmToggleUser(null)} className="!h-10 rounded-xl px-4">
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="danger"
-                        onClick={() => handleToggleActive(confirmToggleUser)}
-                        disabled={confirmInput !== confirmToggleUser.username || actionLoading !== null}
-                        loading={actionLoading !== null}
-                        className="!h-10 rounded-xl px-6 shadow-lg shadow-rose-900/10"
-                      >
-                        Confirm Deactivation
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )}
+            <ConfirmationDialog
+              open={!!confirmToggleUser}
+              title="Security Confirmation Required"
+              description={`Deactivating @${confirmToggleUser?.username} will immediately revoke all system session tokens.`}
+              confirmLabel="CONFIRM DEACTIVATION"
+              isDanger
+              isLoading={actionLoading !== null}
+              onConfirm={() => handleToggleActive(confirmToggleUser)}
+              onCancel={() => {
+                setConfirmToggleUser(null);
+                setConfirmInput("");
+              }}
+            >
+              <div className="space-y-4">
+                <p className="text-xs font-medium text-stone-500">
+                  Type the username <span className="font-bold text-rose-600">{confirmToggleUser?.username}</span> below to confirm this destructive action.
+                </p>
+                <Input
+                  autoFocus
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value)}
+                  placeholder={confirmToggleUser?.username}
+                  className="!h-11 border-stone-200 focus:border-rose-500/50"
+                />
+              </div>
+            </ConfirmationDialog>
             <div className="grid gap-4 sm:grid-cols-3">
-              <KpiCard label="Total Personnel" value={listMeta?.total ?? users.length} icon={Users} sub="Matching filters" isSyncing={isSyncing} className="hs-glass-effect" />
+              <KpiCard label="Total Users" value={listMeta?.total ?? users.length} icon={Users} sub="Matching filters" isSyncing={isSyncing} className="hs-glass-effect" />
               <KpiCard label="Active Sessions" value={activeCount} icon={UserCheck} sub="On this page" isSyncing={isSyncing} className="hs-glass-effect" />
               <KpiCard label="Administrators" value={adminCount} icon={ShieldCheck} sub="On this page" isSyncing={isSyncing} className="hs-glass-effect" />
             </div>
@@ -379,7 +362,7 @@ export default function UsersPage() {
           setIsRegistering(false);
           setEditingUser(null);
         }}
-        title={isRegistering ? "Register Staff" : "Administer Account"}
+        title={isRegistering ? "REGISTER USER" : "USER DETAILS"}
       >
         <UserQuickEditForm
           user={editingUser}

@@ -57,7 +57,7 @@ export function SideSheetOverlay({ isOpen, onClose, title, children }) {
             className="h-full w-full max-w-md bg-white shadow-[0_0_40px_rgba(0,0,0,0.1)] flex flex-col pointer-events-auto border-l border-stone-200"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-8 py-5 border-b border-stone-100 bg-stone-50/50 shrink-0">
+            <div className="flex items-center justify-between px-8 py-5 border-b border-stone-100 bg-white z-10 shrink-0 shadow-sm shadow-stone-900/5">
               <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">
                 {title}
               </h2>

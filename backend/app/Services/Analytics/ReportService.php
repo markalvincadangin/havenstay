@@ -80,6 +80,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -92,7 +94,19 @@ class ReportService
      */
     public static function occupancyStatus(array $filters = [], ?int $page = null, ?int $perPage = null): array
     {
-        $query = DB::table('vw_occupancy_status');
+        $query = DB::table('vw_occupancy_status as vos')
+            ->leftJoin('contracts as c', 'vos.contract_id', '=', 'c.contract_id')
+            ->select([
+                'vos.bed_space_id',
+                'vos.bed_label',
+                'vos.bed_status',
+                'vos.room_id',
+                'vos.room_code',
+                'vos.tenant_id',
+                'vos.tenant_name',
+                'vos.contract_id',
+                'c.deposit_amount as deposit_amount'
+            ]);
 
         if (! empty($filters['room_id'])) {
             $query->where('room_id', (int) $filters['room_id']);
@@ -131,6 +145,7 @@ class ReportService
                 'tenant_id' => $row->tenant_id !== null ? (int) $row->tenant_id : null,
                 'tenant_name' => $row->tenant_name,
                 'contract_id' => $row->contract_id !== null ? (int) $row->contract_id : null,
+                'deposit_amount' => (float) ($row->deposit_amount ?? 0),
             ];
         });
 
@@ -231,7 +246,9 @@ class ReportService
                 'bed_space_id' => (int) $row->bed_space_id,
                 'bed_label' => $row->bed_label,
                 'bed_status' => $row->bed_status,
+                'contract_status' => $row->contract_status,
                 'deposit_amount' => (float) ($row->deposit_amount ?? 0),
+                'is_cleared' => (bool) ($row->is_cleared ?? false),
             ];
         });
 
@@ -643,27 +660,29 @@ class ReportService
 
         $status = $filters['status'] ?? 'all';
         if ($status === 'active') {
-            $query->where('contract_status', 'active');
+            $query->where('status', 'active');
         } elseif ($status === 'completed') {
-            $query->where('contract_status', 'completed');
+            $query->where('status', 'completed');
         } elseif ($status === 'terminated') {
-            $query->where('contract_status', 'terminated');
+            $query->where('status', 'terminated');
         } elseif ($status === 'moved_out') {
-            $query->whereIn('contract_status', ['completed', 'terminated']);
+            $query->whereIn('status', ['completed', 'terminated']);
         }
 
-        $rows = $query->get()->map(function ($row) {
-            $moveOut = $row->actual_move_out_date ?? $row->expected_move_out_date;
-
+        $rows = $query->get();
+        $mappedRows = $rows->map(function ($row) {
             return [
                 'contract_id' => (int) $row->contract_id,
                 'tenant_id' => (int) $row->tenant_id,
+                'email' => $row->email,
                 'tenant_name' => $row->tenant_name,
-                'email' => $row->email ?? null,
                 'move_in_date' => $row->move_in_date,
-                'move_out_date' => $moveOut,
-                'room_label' => $row->room_code.' / '.$row->bed_label,
-                'status' => $row->contract_status,
+                'move_out_date' => $row->move_out_date,
+                'status' => $row->status,
+                'is_cleared' => (bool) $row->is_cleared,
+                'room_id' => (int) $row->room_id,
+                'room_label' => $row->room_label,
+                'bed_label' => $row->bed_label,
             ];
         });
 

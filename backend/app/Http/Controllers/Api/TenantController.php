@@ -32,7 +32,7 @@ class TenantController extends Controller
 
         $paginator = TenantService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
 
-        return $this->paginated($paginator, [], 'Tenants retrieved successfully.');
+        return $this->paginated($paginator, [], 'Tenants retrieved successfully.', TenantResource::class);
     }
 
     /**

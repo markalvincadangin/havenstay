@@ -38,6 +38,7 @@ class Room extends Model
         'status',
         'amenities',
         'description',
+        'is_metered',
     ];
 
     protected function casts(): array
@@ -50,6 +51,7 @@ class Room extends Model
             'status' => RoomStatus::class,
             'amenities' => 'array',
             'description' => 'string',
+            'is_metered' => 'boolean',
         ];
     }
 

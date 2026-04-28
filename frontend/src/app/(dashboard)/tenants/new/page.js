@@ -23,8 +23,7 @@ export default function NewTenantPage() {
    const router = useRouter();
    const { user: currentUser } = useAuth();
    const { showToast } = useToasts();
-   const [apiError, setApiError] = useState("");
-   
+
    const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
    const {
@@ -72,7 +71,6 @@ export default function NewTenantPage() {
       const isValid = await trigger();
       if (!isValid) return;
 
-      setApiError("");
       if (!canManageTenants(currentUser)) return;
 
       const values = getValues();
@@ -101,7 +99,7 @@ export default function NewTenantPage() {
             }
          }
       } catch (error) {
-         applyServerFieldErrors(error, setError, { setApiError });
+         applyServerFieldErrors(error, setError, { showToast });
       }
    };
 
@@ -116,7 +114,7 @@ export default function NewTenantPage() {
    return (
       <StandardPage
          title="Register Tenant"
-         subtitle="Complete a multi-step profile creation for a new residency applicant."
+         subtitle="Step-by-step registration for new tenants."
          skeleton={<SkeletonDetailPage />}
          breadcrumbs={
             <Breadcrumbs
@@ -124,7 +122,6 @@ export default function NewTenantPage() {
             />
          }
       >
-         {apiError && <Alert variant="error" title="Registration Failed" className="max-w-4xl mx-auto mb-6">{apiError}</Alert>}
          {readOnly && <Alert variant="warning" title="Restricted" className="max-w-4xl mx-auto mb-6">Read-only mode. Registration is disabled.</Alert>}
 
          <WizardFrame
@@ -137,7 +134,7 @@ export default function NewTenantPage() {
             onSubmit={() => onSubmitTenant("view")}
             isSubmitting={isSubmitting}
             nextLabel="Next Step"
-            submitLabel="Finalize Registration"
+            submitLabel="Register Tenant"
             cancelLabel="Discard Changes"
          >
             <div className="space-y-6">
@@ -150,7 +147,7 @@ export default function NewTenantPage() {
                               disabled={readOnly}
                               placeholder="Juan"
                               className="!h-11 border-stone-200"
-                              {...register("first_name", { required: "First name represents the identity root." })}
+                              {...register("first_name", { required: "First name is required." })}
                            />
                         </Field>
                         <Field label="Last Name" required error={errors.last_name?.message}>
@@ -158,16 +155,16 @@ export default function NewTenantPage() {
                               disabled={readOnly}
                               placeholder="Dela Cruz"
                               className="!h-11 border-stone-200"
-                              {...register("last_name", { required: "Family name is structurally required." })}
+                              {...register("last_name", { required: "Last name is required." })}
                            />
                         </Field>
                      </div>
-                     <Field label="Permanent Registration Address" required error={errors.address?.message}>
+                     <Field label="Home Address" required error={errors.address?.message}>
                         <Textarea
                            rows={3}
                            disabled={readOnly}
                            className="border-stone-200"
-                           {...register("address", { required: "A permanent physical address is required for regulatory compliance." })}
+                           {...register("address", { required: "Please provide a home address." })}
                         />
                      </Field>
                   </div>
@@ -176,24 +173,24 @@ export default function NewTenantPage() {
                {currentStepIndex === 1 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                      <div className="grid gap-6 sm:grid-cols-2">
-                        <Field label="Primary Mobile Number" required error={errors.contact_number?.message}>
+                        <Field label="Contact Number" required error={errors.contact_number?.message}>
                            <Input
                               autoFocus
                               disabled={readOnly}
                               className="!h-11 font-mono tabular-nums border-stone-200"
                               {...register("contact_number", {
-                                 required: "A primary communications number is essential.",
-                                 pattern: { value: PH_MOBILE_REGEX, message: "Use local PH active format." }
+                                 required: "Contact number is required.",
+                                 pattern: { value: PH_MOBILE_REGEX, message: "Please enter a valid PH mobile number." }
                               })}
                            />
                         </Field>
-                        <Field label="Digital Communication (Email)" required error={errors.email?.message}>
+                        <Field label="Email Address" required error={errors.email?.message}>
                            <Input
                               disabled={readOnly}
                               type="email"
                               placeholder="juan@example.ph"
                               className="!h-11 border-stone-200 gap-x-6"
-                              {...register("email", { required: "An electronic address is required." })}
+                              {...register("email", { required: "Email address is required." })}
                            />
                         </Field>
                      </div>
@@ -203,12 +200,12 @@ export default function NewTenantPage() {
                {currentStepIndex === 2 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                      <div className="grid gap-6 sm:grid-cols-2">
-                        <Field label="Emergency Proxy Name" required error={errors.emergency_contact_name?.message}>
+                        <Field label="Emergency Contact Name" required error={errors.emergency_contact_name?.message}>
                            <Input
                               autoFocus
                               disabled={readOnly}
                               className="!h-11 border-stone-200"
-                              {...register("emergency_contact_name", { required: "Proxy is required for security incidents." })}
+                              {...register("emergency_contact_name", { required: "Emergency contact name is required." })}
                            />
                         </Field>
                         <Field label="Emergency Number" required error={errors.emergency_contact_number?.message}>
@@ -216,7 +213,7 @@ export default function NewTenantPage() {
                               disabled={readOnly}
                               className="!h-11 font-mono tabular-nums border-stone-200"
                               {...register("emergency_contact_number", {
-                                 required: "Emergency phone is non-negotiable.",
+                                 required: "Please provide a valid emergency contact number.",
                                  pattern: { value: PH_MOBILE_REGEX, message: "Invalid format" },
                               })}
                            />

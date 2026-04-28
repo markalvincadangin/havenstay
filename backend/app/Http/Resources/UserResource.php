@@ -29,6 +29,7 @@
              'role_id' => $this->role_id,
              'role_name' => $this->role?->role_name,
              'last_login_at' => $this->last_login_at,
+             'is_active' => (bool) $this->is_active,
              'created_at' => $this->created_at,
              'updated_at' => $this->updated_at,
              

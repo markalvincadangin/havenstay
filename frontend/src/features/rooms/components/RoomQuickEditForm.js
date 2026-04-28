@@ -1,5 +1,5 @@
 "use client";
-import { useState,  } from "react";
+import { useState, } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { DoorOpen, ShieldCheck, Trash2, Plus, Info } from "lucide-react";
 import { apiRequest } from "@/lib/api";
@@ -9,13 +9,14 @@ import { useToasts } from "@/context/ToastContext";
 import { parseMoneyInput } from "@/lib/formatters";
 import { Field, Input, Select, Textarea } from "@/components/ui/Fields";
 import { QuickEditFormShell } from "@/components/ui/QuickEditFormShell";
-import {  ROOM_TYPE_LABELS } from "@/lib/constants";
+import { ROOM_TYPE_LABELS } from "@/lib/constants";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import RecordStateAlert from '@/components/ui/RecordStateAlert';
+import { ROOM_STATUS_LABELS } from "@/lib/constants";
 export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
   const { showToast } = useToasts();
-  const [apiError, setApiError] = useState("");
   const readOnly = !canManageRooms(currentUser);
   const {
     register,
@@ -37,6 +38,7 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
         status: b.status || "vacant",
         is_occupied: b.status === "occupied" || !!b.active_contract
       })),
+      is_metered: !!room.is_metered,
     },
   });
   const { fields, append, remove } = useFieldArray({
@@ -45,7 +47,6 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
   });
   const roomType = useWatch({ control, name: "room_type" });
   const onSubmit = async (values) => {
-    setApiError("");
     if (readOnly) return;
     try {
       const rate = parseMoneyInput(values.monthly_rate);
@@ -60,6 +61,7 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
           bed_space_id: b.bed_space_id,
           bed_label: b.bed_label,
         })),
+        is_metered: !!values.is_metered,
       };
       await apiRequest(`/api/rooms/${room.room_id}`, {
         method: "PUT",
@@ -68,35 +70,53 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
       showToast(`Room ${values.room_code} updated successfully.`, "success");
       onSuccess();
     } catch (error) {
-      applyServerFieldErrors(error, setError, { setApiError });
+      applyServerFieldErrors(error, setError, { showToast });
     }
   };
   return (
     <QuickEditFormShell
       onSubmit={handleSubmit(onSubmit)}
       isSubmitting={isSubmitting}
-      apiError={apiError}
       onCancel={onCancel}
       submitLabel="Update Room"
     >
+      {/* Forensic Anchor Header */}
+      <div className="mb-8 border-b border-stone-100 bg-stone-50/50 -mx-8 -mt-8 p-8 flex items-center justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">Resource context</p>
+          <div className="flex items-center gap-3">
+            <h4 className="text-sm font-bold text-stone-900 truncate">{room.room_code}</h4>
+            <ResourceIdCell id={room.room_id} type="room" />
+          </div>
+        </div>
+        <StatusBadge size="xs">{room.status}</StatusBadge>
+      </div>
+
       <RecordStateAlert variant="info" className="mb-6">
         Room status is maintained automatically from bed space occupancy. Manual overrides are not permitted (BR-ROM-003).
       </RecordStateAlert>
       <div>
         <h3 className="hs-strip-title text-[10px] uppercase tracking-[0.2em] text-stone-400 mb-4 flex items-center gap-2">
-          <DoorOpen size={12} /> General Asset Details
+          <DoorOpen size={12} /> Room Details
         </h3>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Room Code" required error={errors.room_code?.message}>
-            <Input className="!h-10 border-stone-200" disabled={readOnly} {...register("room_code", { required: "Room code is required for unit identification." })} />
+            <Input className="!h-10 border-stone-200" disabled={readOnly} {...register("room_code", { required: "Room code is required for room identification." })} />
           </Field>
-          <Field label="Status (Automatic)">
+          <Field label="Status">
             <div className="h-10 flex items-center">
               <StatusBadge>{room.status}</StatusBadge>
             </div>
           </Field>
           <Field label="Monthly Rate" required error={errors.monthly_rate?.message}>
-            <Input type="number" step="0.01" className="!h-10 border-stone-200 font-mono font-bold" disabled={readOnly} {...register("monthly_rate", { required: "Monthly rate is required for billing cycles." })} />
+            <Input
+              type="number"
+              step="0.01"
+              prefix="₱"
+              className="!h-10 border-stone-200 font-mono font-bold"
+              disabled={readOnly}
+              {...register("monthly_rate", { required: "Monthly rate is required for billing cycles." })}
+            />
           </Field>
           <Field label="Type" required>
             <Select className="!h-10 border-stone-200" disabled={readOnly || room?.has_occupied_beds} {...register("room_type")}>
@@ -105,15 +125,21 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
               ))}
             </Select>
           </Field>
+          <Field label="Utility Billing Type">
+            <Select className="!h-10 border-stone-200 font-bold" disabled={readOnly} {...register("is_metered")}>
+              <option value="1">Metered (Usage-based)</option>
+              <option value="0">All-Inclusive (Fixed)</option>
+            </Select>
+          </Field>
         </div>
       </div>
       <div>
         <div className="mb-4">
           <h3 className="hs-strip-title text-[10px] uppercase tracking-[0.2em] text-stone-400 flex items-center gap-2">
-            <ShieldCheck size={12} /> Bed Inventories
+            <ShieldCheck size={12} /> Bed Spaces
           </h3>
           <p className="text-[10px] text-stone-400 mt-1">
-            {roomType === 'solo' ? "Solo units enforce 1 bed." : "Manage bed labels manually."}
+            {roomType === 'solo' ? "Solo rooms enforce 1 bed." : "Manage bed labels manually."}
           </p>
         </div>
         <div className="space-y-3">
@@ -124,8 +150,8 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
                   <Input placeholder="Bed Label" className="!h-10 border-stone-200 text-sm" disabled={readOnly || field.is_occupied} {...register(`bed_spaces.${index}.bed_label`, { required: "Required" })} />
                 </Field>
               </div>
-              <div className="w-24 shrink-0">
-                 <Input disabled value={field.status} className="!h-10 bg-stone-50 border-stone-100 text-[10px] uppercase font-bold text-stone-400" />
+              <div className="w-32 shrink-0 flex items-center justify-end">
+                <StatusBadge size="xs">{field.status}</StatusBadge>
               </div>
               {roomType === "shared" && !field.is_occupied && !readOnly && fields.length > 2 && (
                 <Button type="button" variant="ghost" onClick={() => remove(index)} className="!h-10 w-10 shrink-0 text-rose-400">

@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  PlusCircle, Search, HandCoins, Receipt, Activity, FileX, Wallet 
+import {
+  PlusCircle, Search, HandCoins, Receipt, Activity, FileX, Wallet
 } from "lucide-react";
 
 import useSWR from "swr";
@@ -14,7 +14,6 @@ import { sortClientRows } from "@/lib/tableSort";
 import {
   compareTenantDirectoryName,
   formatDateString,
-  formatPHP,
   formatTenantDirectoryName,
   getCurrentMonthRange,
 } from "@/lib/formatters";
@@ -26,6 +25,7 @@ import { Field, Input, Select } from "@/components/ui/Fields";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Table } from "@/components/ui/Table";
 import { KpiCard } from "@/components/ui/KpiCard";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import { METHOD_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
 import {
   normalizePaginatedList,
@@ -141,8 +141,8 @@ export default function PaymentsListPage() {
 
   return (
     <StandardPage
-      title="Payment Registry"
-      subtitle="Track collections, transaction history, and settlement ledger."
+      title="Payment History"
+      subtitle="List of all payments and financial settlements."
       breadcrumbs={<Breadcrumbs items={[{ label: "Payments" }]} />}
       loading={loading}
       skeleton={<SkeletonListPage rows={10} />}
@@ -161,21 +161,23 @@ export default function PaymentsListPage() {
           <KpiCard
             label="Daily Collections"
             icon={HandCoins}
-            value={formatPHP(collectedToday)}
+            value={collectedToday}
             sub="TOTAL TAKEN TODAY"
             isSuccess={collectedToday > 0}
             isLoading={!todayRepData && !monthRepData}
             isSyncing={todayValidating}
+            currency={true}
             className="hs-glass-effect"
           />
           <KpiCard
             label="Monthly Collections"
             icon={Receipt}
-            value={formatPHP(collectedThisMonth)}
+            value={collectedThisMonth}
             sub="POSTED COLLECTIONS MTD"
             isSuccess={collectedThisMonth > 0}
             isLoading={!todayRepData && !monthRepData}
             isSyncing={monthValidating}
+            currency={true}
             className="hs-glass-effect"
           />
           <KpiCard
@@ -191,78 +193,80 @@ export default function PaymentsListPage() {
           <KpiCard
             label="Voided (MTD)"
             icon={FileX}
-            value={formatPHP(voidedThisMonth)}
+            value={voidedThisMonth}
             sub="FORENSIC OVERVIEW"
             isDanger={voidedThisMonth > 0}
+            isNeutral={voidedThisMonth === 0}
             isLoading={!todayRepData && !monthRepData}
             isSyncing={monthValidating}
+            currency={true}
             className="hs-glass-effect"
           />
         </div>
 
         <FilterPanelCard icon={Search}>
-            <div className="grid items-end gap-6 lg:grid-cols-12">
-              <div className="lg:col-span-5">
-                <Field label="Search Registry">
-                  <Input
-                    icon={Search}
-                    value={tenantQuery}
-                    onChange={(e) => updateFilter("query", e.target.value)}
-                    placeholder="Resident name, Payment ID, or reference..."
-                    className="!h-12 border-stone-200"
-                  />
-                </Field>
-              </div>
-              <div className="lg:col-span-3">
-                <Field label="Collection Status">
-                  <Select
-                    value={statusFilter}
-                    onChange={(e) => updateFilter("status", e.target.value)}
-                    className="!h-12 border-stone-200 font-bold uppercase tracking-widest text-[10px]"
-                  >
-                    <option value="all">All Statuses</option>
-                    {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="lg:col-span-2">
-                <Field label="Payment From">
-                  <Input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => updateFilter("dateFrom", e.target.value)}
-                    className="!h-12 border-stone-200 font-bold tabular-nums"
-                  />
-                </Field>
-              </div>
-              <div className="lg:col-span-2">
-                <Field label="Payment To">
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => updateFilter("dateTo", e.target.value)}
-                    className="!h-12 border-stone-200 font-bold tabular-nums"
-                  />
-                </Field>
-              </div>
+          <div className="grid items-end gap-6 lg:grid-cols-12">
+            <div className="lg:col-span-5">
+              <Field label="Search Payments">
+                <Input
+                  icon={Search}
+                  value={tenantQuery}
+                  onChange={(e) => updateFilter("query", e.target.value)}
+                  placeholder="Resident name, Payment ID, or reference..."
+                  className="!h-12 border-stone-200"
+                />
+              </Field>
             </div>
-            <FilterChips
-              className="mt-6"
-              items={[
-                { key: "tenant", label: "Search", value: tenantQuery, onClear: () => updateFilter("query", "") },
-                {
-                  key: "status",
-                  label: "Status",
-                  value: statusFilter !== "all" ? PAYMENT_STATUS_LABELS[statusFilter] || statusFilter : "",
-                  onClear: () => updateFilter("status", "all"),
-                },
-                { key: "from", label: "Date From", value: dateFrom, onClear: () => updateFilter("dateFrom", "") },
-                { key: "to", label: "Date To", value: dateTo, onClear: () => updateFilter("dateTo", "") },
-              ]}
-              onClearAll={resetFilters}
-            />
+            <div className="lg:col-span-3">
+              <Field label="Collection Status">
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => updateFilter("status", e.target.value)}
+                  className="!h-12 border-stone-200 font-bold uppercase tracking-widest text-[10px]"
+                >
+                  <option value="all">All Statuses</option>
+                  {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <div className="lg:col-span-2">
+              <Field label="Payment From">
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => updateFilter("dateFrom", e.target.value)}
+                  className="!h-12 border-stone-200 font-bold tabular-nums"
+                />
+              </Field>
+            </div>
+            <div className="lg:col-span-2">
+              <Field label="Payment To">
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => updateFilter("dateTo", e.target.value)}
+                  className="!h-12 border-stone-200 font-bold tabular-nums"
+                />
+              </Field>
+            </div>
+          </div>
+          <FilterChips
+            className="mt-6"
+            items={[
+              { key: "tenant", label: "Search", value: tenantQuery, onClear: () => updateFilter("query", "") },
+              {
+                key: "status",
+                label: "Status",
+                value: statusFilter !== "all" ? PAYMENT_STATUS_LABELS[statusFilter] || statusFilter : "",
+                onClear: () => updateFilter("status", "all"),
+              },
+              { key: "from", label: "Date From", value: dateFrom, onClear: () => updateFilter("dateFrom", "") },
+              { key: "to", label: "Date To", value: dateTo, onClear: () => updateFilter("dateTo", "") },
+            ]}
+            onClearAll={resetFilters}
+          />
         </FilterPanelCard>
 
         <ResourceView
@@ -279,7 +283,7 @@ export default function PaymentsListPage() {
         >
           <Card className="!p-0 overflow-hidden border-stone-200 rounded-2xl shadow-sm hs-glass-effect">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Collection Directory</h2>
+              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Payment Directory</h2>
               <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
                 {listMeta?.total ?? sortedFiltered.length} records matching
               </div>
@@ -287,11 +291,11 @@ export default function PaymentsListPage() {
             <Table
               embedded
               columns={[
-                { key: "payment_id", label: "TRANSACTION ID", sortable: true, sortKey: "payment_id", className: "pl-8 w-32" },
-                { key: "date", label: "POSTING DATE", sortable: true, sortKey: "date", className: "text-center" },
-                { key: "tenant", label: "TENANT NAME", sortable: true, sortKey: "tenant" },
-                { key: "amount", label: "PAYMENT AMOUNT", sortable: true, sortKey: "amount", className: "text-right" },
-                { key: "method", label: "PAYMENT METHOD", sortable: true, sortKey: "method", className: "text-center" },
+                { key: "payment_id", label: "PAYMENT ID", sortable: true, sortKey: "payment_id", className: "pl-8 w-32" },
+                { key: "date", label: "DATE", sortable: true, sortKey: "date", className: "text-center" },
+                { key: "tenant", label: "TENANT", sortable: true, sortKey: "tenant" },
+                { key: "amount", label: "AMOUNT", sortable: true, sortKey: "amount", className: "text-right" },
+                { key: "method", label: "METHOD", sortable: true, sortKey: "method", className: "text-center" },
                 { key: "status", label: "STATUS", sortable: true, sortKey: "status", className: "text-center" },
                 { key: "actions", label: "", className: "text-right w-16 px-8" },
               ]}
@@ -312,18 +316,18 @@ export default function PaymentsListPage() {
                     expandableContent={
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border border-stone-200 bg-white rounded-xl p-6 shadow-sm">
                         <div className="flex flex-col">
-                          <span className="text-[10px] font-black uppercase text-stone-400 tracking-widest">Transaction Snapshot</span>
+                          <span className="text-[10px] font-black uppercase text-stone-400 tracking-widest">Payment Details</span>
                           <div className="mt-2 text-sm text-stone-900 font-mono font-bold">
                             Method: {METHOD_LABELS[methodKey] || payment?.payment_method || "Other"} <span className="text-stone-300 mx-3">|</span>
-                            Reference: {payment.payment_reference || "—"}
+                            Reference: {payment.reference_number || "—"}
                           </div>
                         </div>
-                        <Button 
-                          onClick={() => router.push(`/payments/${payment.payment_id}`)} 
-                          variant="primary" 
-                          className="!h-10 px-8 text-[10px] font-black tracking-widest uppercase shadow-md active:scale-95 transition-transform bg-stone-900 hover:bg-stone-800"
+                        <Button
+                          onClick={() => router.push(`/payments/${payment.payment_id}`)}
+                          variant="secondary"
+                          className="!h-10 px-8 text-[10px] font-bold tracking-widest uppercase shadow-sm border-stone-200"
                         >
-                          Access Ledger
+                          View Payment
                         </Button>
                       </div>
                     }
@@ -343,9 +347,10 @@ export default function PaymentsListPage() {
                       </div>
                     </td>
                     <td className="py-5 text-right">
-                      <span className={`font-mono font-black tabular-nums ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`}>
-                        {formatPHP(payment.amount_paid)}
-                      </span>
+                      <CurrencyDisplay 
+                        amount={payment.amount_paid} 
+                        className={`text-sm font-bold ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`} 
+                      />
                     </td>
                     <td className="py-5 text-center">
                       <div className="flex items-center justify-center gap-2">

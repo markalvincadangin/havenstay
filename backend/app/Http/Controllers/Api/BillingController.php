@@ -35,7 +35,7 @@
  
          $paginator = BillingService::listPaginated($validated, $pageParams['page'], $pageParams['per_page']);
  
-         return $this->paginated($paginator, [], 'Billing records retrieved successfully.');
+         return $this->paginated($paginator, [], 'Billing records retrieved successfully.', BillingResource::class);
      }
  
      /**
@@ -58,8 +58,12 @@
       */
      public function store(StoreBillingRequest $request): JsonResponse
      {
-         $billing = BillingService::create($request->user(), $request->validated());
- 
+         $data = $request->validated();
+         
+         // Middleware handles lock/replay. Pass key for DB constraint.
+         $data['idempotency_key'] = $request->header('Idempotency-Key');
+         
+         $billing = BillingService::create($request->user(), $data);
          return $this->created('Billing record generated successfully.', new BillingResource($billing));
      }
  
@@ -80,8 +84,9 @@
      {
          AuthorizationService::ensureCanManageBilling($request->user());
  
-         $billing = BillingService::initializeContractBilling($request->user(), $contractId);
- 
+         $idempotencyKey = $request->header('Idempotency-Key');
+         
+         $billing = BillingService::initializeContractBilling($request->user(), $contractId, $idempotencyKey);
          return $this->created('Initial contract billing generated.', new BillingResource($billing));
      }
  

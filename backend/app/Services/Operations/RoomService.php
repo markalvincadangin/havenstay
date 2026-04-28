@@ -260,8 +260,6 @@
                      'status' => BedSpaceStatus::VACANT,
                  ]);
  
-                 self::syncStatusAndCapacity($room);
- 
                  return $bedSpace;
              },
              resultDetails: fn(BedSpace $bed) => [
@@ -311,10 +309,6 @@
              payload: ['bed_space_id' => $bedSpace->bed_space_id],
              operation: function () use ($bedSpace): BedSpace {
                  $bedSpace->update(['status' => BedSpaceStatus::OCCUPIED]);
- 
-                 if ($bedSpace->room) {
-                     self::syncStatusAndCapacity($bedSpace->room);
-                 }
  
                  return $bedSpace;
              },

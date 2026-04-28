@@ -75,7 +75,7 @@ export function StatusBadge({ children }) {
 
     // Room & Bed statuses
     available: "badge-success",
-    unavailable: "badge-warning",
+    unavailable: "badge-danger",
     maintenance: "badge-warning",
     occupied: "badge-info",
     vacant: "badge-success", // Bed space status
@@ -83,7 +83,7 @@ export function StatusBadge({ children }) {
     replaced: "badge-neutral", // Meter hardware status
 
     // Contract statuses
-    pending_payment: "badge-info",
+    pending_payment: "badge-warning",
     completed: "badge-neutral",
     terminated: "badge-danger",
     voided_contract: "badge-neutral",

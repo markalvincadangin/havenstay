@@ -62,6 +62,12 @@ export async function apiRequest(path, options = {}) {
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
+  
+  const method = fetchOptions.method?.toUpperCase() || "GET";
+  if (fetchOptions.idempotencyKey) {
+    headers["Idempotency-Key"] = fetchOptions.idempotencyKey;
+  }
+  
   let response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {

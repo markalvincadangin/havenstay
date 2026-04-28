@@ -34,13 +34,14 @@
          $tenantId = $this->route('tenant')?->tenant_id ?? $this->route('id');
  
          return [
-             'first_name' => ['required', 'string', 'max:100'],
-             'last_name' => ['required', 'string', 'max:100'],
-             'contact_number' => ['required', 'string', 'max:20'],
+             'first_name' => ['sometimes', 'required', 'string', 'max:100'],
+             'last_name' => ['sometimes', 'required', 'string', 'max:100'],
+             'contact_number' => ['sometimes', 'required', 'string', 'max:20', 'regex:/^(09\d{9}|(\+639)\d{9})$/'],
              
              // BR-TEN-002: Email must be unique.
              // BR-GEN-003: Uniqueness only enforced among non-deleted records.
              'email' => [
+                 'sometimes', 
                  'required', 
                  'email', 
                  'max:150', 
@@ -49,9 +50,9 @@
                      ->whereNull('deleted_at')
              ],
              
-             'emergency_contact_name' => ['required', 'string', 'max:200'],
-             'emergency_contact_number' => ['required', 'string', 'max:20'],
-             'address' => ['required', 'string'],
+             'emergency_contact_name' => ['sometimes', 'required', 'string', 'max:200'],
+             'emergency_contact_number' => ['sometimes', 'required', 'string', 'max:20', 'regex:/^(09\d{9}|(\+639)\d{9})$/'],
+             'address' => ['sometimes', 'required', 'string'],
              'status' => ['sometimes', Rule::enum(TenantStatus::class)],
          ];
      }

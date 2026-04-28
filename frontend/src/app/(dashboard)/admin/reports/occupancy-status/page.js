@@ -7,8 +7,9 @@ import useSWR from "swr";
 import { canViewReports } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { flattenApiErrors } from "@/lib/errors";
-import { formatPHP } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import { exportReportCsv } from "@/lib/downloads";
+import { useToasts } from "@/context/ToastContext";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
@@ -36,6 +37,7 @@ import {
 
 export default function OccupancyStatusReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
@@ -77,7 +79,7 @@ export default function OccupancyStatusReportPage() {
     if (reportError) {
       setApiError(flattenApiErrors(reportError));
     } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
-      setApiError("Unauthorized: you do not have permission to view reports.");
+      setApiError("Access restricted. You don’t have permission to view this report.");
     }
   }, [reportError, authLoading, currentUser]);
 
@@ -105,7 +107,7 @@ export default function OccupancyStatusReportPage() {
         filenamePrefix: "occupancy-status",
       });
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      showToast(flattenApiErrors(error), "error");
     } finally {
       setExporting(false);
     }
@@ -123,10 +125,19 @@ export default function OccupancyStatusReportPage() {
   return (
     <StandardPage
       title="Bed Occupancy"
-      subtitle="Filter and export system data."
+      subtitle={
+        <div className="flex flex-col gap-2">
+          <p>Filter and export system data.</p>
+          <div className="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-stone-400/70">
+            <span>Generated {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-stone-200">|</span>
+            <span>{report.meta?.total ?? 0} Records</span>
+          </div>
+        </div>
+      }
       loading={authLoading || (loading && !reportData)}
       skeleton={<SkeletonListPage rows={10} />}
-      breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "Reports", href: "/admin/reports" }, { label: "Bed Occupancy" }]} />}
+      breadcrumbs={<Breadcrumbs items={[{ label: "Reports", href: "/admin/reports" }, { label: "Bed Occupancy" }]} />}
       actions={
         <ReportHeaderActions
           user={currentUser}
@@ -137,119 +148,115 @@ export default function OccupancyStatusReportPage() {
       }
     >
 
-      <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-stone-500">
-        Per-bed availability, tenant name, and active contract—aligned with how beds are managed in Rooms.
-      </p>
-
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard 
-          label="Total Beds" 
-          value={s.bed_count ?? "—"} 
-          icon={BedDouble} 
+        <KpiCard
+          label="Total Beds"
+          value={s.bed_count ?? "—"}
+          icon={BedDouble}
           isSyncing={isValidating}
           className="hs-glass-effect"
         />
-        <KpiCard 
-          label="Occupied" 
-          value={s.occupied_beds ?? "—"} 
-          icon={Home} 
+        <KpiCard
+          label="Occupied"
+          value={s.occupied_beds ?? "—"}
+          icon={Home}
           isSyncing={isValidating}
           className="hs-glass-effect"
         />
-        <KpiCard 
-          label="Vacant" 
-          value={s.vacant_beds ?? "—"} 
-          icon={Search} 
+        <KpiCard
+          label="Vacant"
+          value={s.vacant_beds ?? "—"}
+          icon={Search}
           isSyncing={isValidating}
           className="hs-glass-effect"
         />
-        <KpiCard 
-          label="Maintenance" 
-          value={s.maintenance_beds ?? "—"} 
-          icon={Wrench} 
+        <KpiCard
+          label="Maintenance"
+          value={s.maintenance_beds ?? "—"}
+          icon={Wrench}
           isSyncing={isValidating}
           className="hs-glass-effect"
         />
       </div>
 
       <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={isValidating} className="hs-glass-effect">
-          <form className="grid gap-6 sm:grid-cols-4" onSubmit={onApplyFilters}>
-            <Field label="Room">
-              <Select
-                className="!h-11 border-stone-200"
-                value={filters.room_id}
-                onChange={(e) => setFilters((prev) => ({ ...prev, room_id: e.target.value }))}
-              >
-                <option value="">All rooms</option>
-                {rooms.map((r) => (
-                  <option key={r.room_id} value={String(r.room_id)}>
-                    {r.room_code}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Bed status">
-              <Select
-                className="!h-11 border-stone-200"
-                value={filters.bed_status}
-                onChange={(e) => setFilters((prev) => ({ ...prev, bed_status: e.target.value }))}
-              >
-                <option value="">All statuses</option>
-                {Object.entries(BED_STATUS_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="flex items-end sm:col-span-2">
-              <Button type="submit" variant="secondary" className="w-full !h-11 shadow-sm sm:max-w-xs">
-                Apply filters
-              </Button>
-            </div>
-          </form>
-          <FilterChips
-            className="mt-6"
-            items={[
-              {
-                key: "room",
-                label: "Room",
-                value: appliedFilters.room_id
-                  ? selectedRoom
-                    ? selectedRoom.room_code
-                    : `#${appliedFilters.room_id}`
-                  : "",
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, room_id: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, room_id: "" }));
-                  setPage(1);
-                },
+        <form className="grid gap-6 sm:grid-cols-4" onSubmit={onApplyFilters}>
+          <Field label="Room">
+            <Select
+              className="!h-11 border-stone-200"
+              value={filters.room_id}
+              onChange={(e) => setFilters((prev) => ({ ...prev, room_id: e.target.value }))}
+            >
+              <option value="">All rooms</option>
+              {rooms.map((r) => (
+                <option key={r.room_id} value={String(r.room_id)}>
+                  {r.room_code}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Bed status">
+            <Select
+              className="!h-11 border-stone-200"
+              value={filters.bed_status}
+              onChange={(e) => setFilters((prev) => ({ ...prev, bed_status: e.target.value }))}
+            >
+              <option value="">All statuses</option>
+              {Object.entries(BED_STATUS_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex items-end sm:col-span-2">
+            <Button type="submit" variant="secondary" className="w-full !h-11 shadow-sm sm:max-w-xs">
+              Apply filters
+            </Button>
+          </div>
+        </form>
+        <FilterChips
+          className="mt-6"
+          items={[
+            {
+              key: "room",
+              label: "Room",
+              value: appliedFilters.room_id
+                ? selectedRoom
+                  ? selectedRoom.room_code
+                  : `#${appliedFilters.room_id}`
+                : "",
+              onClear: () => {
+                setFilters((prev) => ({ ...prev, room_id: "" }));
+                setAppliedFilters((prev) => ({ ...prev, room_id: "" }));
+                setPage(1);
               },
-              {
-                key: "bed_status",
-                label: "Bed",
-                value: appliedFilters.bed_status
-                  ? BED_STATUS_LABELS[appliedFilters.bed_status] || appliedFilters.bed_status
-                  : "",
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, bed_status: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, bed_status: "" }));
-                  setPage(1);
-                },
+            },
+            {
+              key: "bed_status",
+              label: "Bed",
+              value: appliedFilters.bed_status
+                ? BED_STATUS_LABELS[appliedFilters.bed_status] || appliedFilters.bed_status
+                : "",
+              onClear: () => {
+                setFilters((prev) => ({ ...prev, bed_status: "" }));
+                setAppliedFilters((prev) => ({ ...prev, bed_status: "" }));
+                setPage(1);
               },
-            ]}
-            onClearAll={() => {
-              const cleared = { room_id: "", bed_status: "" };
-              setFilters(cleared);
-              setAppliedFilters(cleared);
-              setPage(1);
-            }}
-          />
-          {apiError ? (
-            <Alert variant="error" className="mt-6" title="Error">
-              {apiError}
-            </Alert>
-          ) : null}
+            },
+          ]}
+          onClearAll={() => {
+            const cleared = { room_id: "", bed_status: "" };
+            setFilters(cleared);
+            setAppliedFilters(cleared);
+            setPage(1);
+          }}
+        />
+        {apiError ? (
+          <Alert variant="error" className="mt-6" title="Error">
+            {apiError}
+          </Alert>
+        ) : null}
       </ReportFilterCard>
 
       <ResourceView
@@ -288,8 +295,10 @@ export default function OccupancyStatusReportPage() {
                   <StatusBadge>{row.bed_status}</StatusBadge>
                 </td>
                 <td className="px-6 py-4 text-xs font-bold text-stone-700">{row.tenant_name || "—"}</td>
-                <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-500">
-                  {row.deposit_amount ? formatPHP(row.deposit_amount) : "—"}
+                <td className="px-6 py-4 text-right">
+                  {row.contract_id ? (
+                    <CurrencyDisplay amount={row.deposit_amount} className="text-xs font-bold text-stone-500" />
+                  ) : "—"}
                 </td>
                 <td className="px-6 py-4 text-right">
                   {row.contract_id ? (

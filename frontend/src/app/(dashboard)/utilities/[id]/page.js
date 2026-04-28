@@ -101,7 +101,7 @@ export default function UtilityDetailPage({ params }) {
 
   if (isUnauthorized) return null;
 
-  const title = utility ? utility.name : "Service Profile";
+  const title = utility ? utility.name : "Utility Details";
   const isElectric = utility?.name?.toLowerCase().includes("electric");
   const isWater = utility?.name?.toLowerCase().includes("water");
   const UtilityIcon = isElectric ? Zap : (isWater ? Droplet : Box);
@@ -136,7 +136,7 @@ export default function UtilityDetailPage({ params }) {
                 onClick={() => setActiveSideSheet('edit-utility')}
               >
                 <Edit2 size={16} aria-hidden />
-                Update Service
+                Update Utility
               </Button>
 
               <LifecycleActions
@@ -153,8 +153,8 @@ export default function UtilityDetailPage({ params }) {
     >
       <ConfirmationDialog
         open={showArchiveModal}
-        title="Archive Service Category?"
-        message="This will hide the service from future registrations. Historical billing and consumption records will be preserved for auditing. All assigned meters must be decommissioned first."
+        title="Archive Utility?"
+        message="This will hide the utility from future registrations. Historical billing and consumption records will be preserved for auditing. All assigned meters must be decommissioned first."
         confirmLabel="Confirm Archive"
         isDanger
         isLoading={busyAction === "archive"}
@@ -188,18 +188,21 @@ export default function UtilityDetailPage({ params }) {
                     </div>
 
                     <h2 className="text-2xl font-black text-stone-900 tracking-tight">{utility.name}</h2>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                      <ResourceIdCell type="utility" id={utility.utility_id} />
                       <StatusBadge size="sm">active</StatusBadge>
                     </div>
 
                     <div className="mt-8 w-full border-t border-stone-100 pt-8 space-y-4">
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-bold uppercase tracking-widest text-stone-400">Unit</span>
-                        <span className="font-black text-stone-900 border-b-2 border-teal-500/20">{utility.unit_of_measurement}</span>
+                        <span className="font-black text-stone-900 border-b-2 border-teal-500/20">
+                          {utility.unit_of_measurement === "KWH" ? "kWh" : (utility.unit_of_measurement === "M3" ? "m³" : utility.unit_of_measurement)}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-bold uppercase tracking-widest text-stone-400">Records</span>
-                        <span className="font-black text-stone-900">{rates.length} rates</span>
+                        <span className="font-black text-stone-900">{rates.length} {rates.length === 1 ? 'rate' : 'rates'}</span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-bold uppercase tracking-widest text-stone-400">Meter Count</span>
@@ -208,18 +211,13 @@ export default function UtilityDetailPage({ params }) {
                     </div>
                   </Card>
 
-                  <Card className="border-stone-200 shadow-sm p-0 overflow-hidden">
-                    <div className="bg-stone-50/50 px-6 py-4 border-b border-stone-100 flex items-center gap-3">
-                      <ShieldCheck size={16} className="text-teal-600" />
-                      <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-900">Record Context</h3>
-                    </div>
-                    <div className="p-6">
-                      <ResourceIdCell type="utility" id={utility.utility_id} />
-                      <p className="mt-3 text-[11px] leading-relaxed text-stone-500 italic">
-                        Full audit trail enabled. All rate changes are timestamped and immutable once applied to a billing cycle.
-                      </p>
-                    </div>
-                  </Card>
+                  {/* Forensic Footer Note */}
+                  <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-6 flex items-start gap-4">
+                    <ShieldCheck size={18} className="text-teal-600 mt-0.5" />
+                    <p className="text-[11px] leading-relaxed text-stone-500 italic">
+                      Full audit trail enabled. All rate changes are timestamped and immutable once applied to a billing cycle. This utility is referenced by {meters.length} linked meters.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Main Content (67%) */}
@@ -251,7 +249,7 @@ export default function UtilityDetailPage({ params }) {
                         columns={[
                           { key: "rate_id", label: "Rate ID", className: "pl-8" },
                           { key: "base_rate", label: "Base Rate" },
-                          { key: "effective_from", label: "Effective Date" },
+                          { key: "effective_from", label: "Effective from" },
                           { key: "status", label: "Status", className: "text-right pr-8" },
                         ]}
                         rows={rates.map((rate) => {
@@ -262,7 +260,10 @@ export default function UtilityDetailPage({ params }) {
                                 <ResourceIdCell type="rate" id={rate.rate_id} />
                               </td>
                               <td className="py-5">
-                                <CurrencyCell amount={rate.base_rate} suffix={`/ ${utility.unit_of_measurement}`} />
+                                <CurrencyCell 
+                                  amount={rate.base_rate} 
+                                  suffix={`/ ${utility.unit_of_measurement === "KWH" ? "kWh" : (utility.unit_of_measurement === "M3" ? "m³" : utility.unit_of_measurement)}`} 
+                                />
                               </td>
                               <td className="py-5">
                                 <div className="flex items-center gap-2 text-xs font-mono font-medium text-stone-600">
@@ -334,7 +335,7 @@ export default function UtilityDetailPage({ params }) {
       <SideSheetOverlay
         isOpen={!!activeSideSheet}
         onClose={() => setActiveSideSheet(null)}
-        title={activeSideSheet === 'edit-utility' ? "Service Profile" : "Add Rate"}
+        title={activeSideSheet === 'edit-utility' ? "Utility Details" : "Add Rate"}
       >
         {activeSideSheet === 'add-rate' && (
           <UtilityRateQuickEditForm

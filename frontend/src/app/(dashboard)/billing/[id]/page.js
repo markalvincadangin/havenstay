@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useMemo } from "react";
 import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
-import { Calendar, Receipt, History, CreditCard, User, Building2, FileText } from "lucide-react";
+import { Calendar, Receipt, History, CreditCard, User, Building2, FileText, FileSignature } from "lucide-react";
 
 import { fetcher } from "@/lib/api";
 import { canManageBilling, canViewBilling } from "@/lib/auth";
-import { formatDateString, formatPHP } from "@/lib/formatters";
+import { formatDateString } from "@/lib/formatters";
 import { isPastDueReceivable } from "@/lib/billingReceivables";
 import Alert from "@/components/ui/Alert";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -52,7 +53,7 @@ export default function BillingDetailsPage() {
 
   const loading = !billing && !billingError;
 
-  const title = billing ? `Billing Record #${billingId}` : "Billing Detail";
+  const title = billing ? `#BILL-${String(billingId).padStart(6, '0')}` : "Billing Detail";
 
   const tenant = billing?.contract?.tenant;
   const tenantName = tenant ? `${tenant.last_name || ""}, ${tenant.first_name || ""}`.trim() : null;
@@ -62,7 +63,7 @@ export default function BillingDetailsPage() {
   const roomId = room?.room_id;
   const totalAmount = Number(billing?.total_amount || 0);
   const totalPaid = Number(billing?.total_paid || 0);
-  const balance = Number(billing?.balance || 0);
+  const balance = totalAmount - totalPaid;
   const lineItems = billing?.line_items || [];
   const payments = billing?.payments || [];
 
@@ -70,17 +71,17 @@ export default function BillingDetailsPage() {
     <StandardPage
       title={title}
       subtitle={
-        billing ? (
+        loading ? (
+          "Loading billing details..."
+        ) : billing ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-stone-500">
-              Cycle summary, posted payments, and financial status tracking.
+              Itemized charges and payments for this bill.
             </span>
             <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
             <ResourceIdCell id={billing.billing_id} type="billing" />
           </div>
-        ) : (
-          "Loading billing details…"
-        )
+        ) : null
       }
       loading={loading}
       skeleton={<SkeletonDetailPage />}
@@ -109,7 +110,7 @@ export default function BillingDetailsPage() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
                   <Receipt size={16} aria-hidden />
                 </div>
-                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Cycle Details</h2>
+                <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-[10px]">Bill Details</h2>
               </div>
               <div className="p-8">
                 <div className="grid gap-8 sm:grid-cols-2">
@@ -122,13 +123,13 @@ export default function BillingDetailsPage() {
                       tenantName || "—"
                     )}
                   </MetricItem>
-                  <MetricItem label="Assigned Unit" icon={Building2}>
+                  <MetricItem label="Room / Bed" icon={Building2}>
                     {roomId ? (
                       <Link href={`/rooms/${roomId}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
                         Room {roomCode}{bedSpace?.bed_label ? ` / ${bedSpace.bed_label}` : ""}
                       </Link>
                     ) : (
-                      `Room ${roomCode}${bedSpace?.bed_label ? ` / ${bedSpace.bed_label}` : ""}`
+                      `Room ${roomCode}${bedSpace?.bed_label ? " / " + bedSpace.bed_label : ""}`
                     )}
                   </MetricItem>
                   <MetricItem label="Billing Cycle" icon={Calendar}>
@@ -138,6 +139,13 @@ export default function BillingDetailsPage() {
                   </MetricItem>
                   <MetricItem label="Status">
                     <StatusBadge>{billing.status}</StatusBadge>
+                  </MetricItem>
+                  <MetricItem label="Linked Contract" icon={FileSignature}>
+                    {billing.contract_id ? (
+                      <Link href={`/contracts/${billing.contract_id}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
+                        #CONTRACT-{String(billing.contract_id).padStart(4, "0")}
+                      </Link>
+                    ) : "—"}
                   </MetricItem>
                   <MetricItem label="Due Date">
                     <span className={isPastDueReceivable(billing) ? "text-red-700" : "text-stone-600"}>
@@ -170,8 +178,8 @@ export default function BillingDetailsPage() {
                         {BILLING_ITEM_TYPE_LABELS[item.item_type] || item.item_type || "—"}
                       </td>
                       <td className="px-8 py-4 text-sm font-medium text-stone-900 leading-tight">{item.item_description || "—"}</td>
-                      <td className="px-8 py-4 text-right font-mono text-sm font-black tabular-nums text-stone-500 group-hover:text-stone-900">
-                        {formatPHP(item.amount)}
+                      <td className="px-8 py-4 text-right group-hover:text-stone-900">
+                        <CurrencyDisplay amount={item.amount} className="text-sm font-bold text-stone-700" />
                       </td>
                     </tr>
                   ))}
@@ -181,7 +189,7 @@ export default function BillingDetailsPage() {
                 {lineItems.length > 0 && (
                   <div className="flex items-center justify-between border-t border-stone-200 bg-stone-50/50 px-8 py-4">
                     <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Total amount</span>
-                    <span className="font-mono text-base font-black text-stone-900">{formatPHP(totalAmount)}</span>
+                    <CurrencyDisplay amount={totalAmount} className="text-base font-bold text-stone-900" />
                   </div>
                 )}
               </div>
@@ -211,14 +219,14 @@ export default function BillingDetailsPage() {
                         <div className="flex items-center gap-2">
                           {formatDateString(payment.payment_date)}
                           {payment.correlation_id && (
-                            <span className="font-mono text-[8px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-1.5 py-0.5" title={`Linked to Audit #TX-${payment.correlation_id.slice(0,8).toUpperCase()}`}>
-                              #TX-{payment.correlation_id.slice(0,5).toUpperCase()}
+                            <span className="font-mono text-[8px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-1.5 py-0.5" title={`Linked to Audit #TX-${payment.correlation_id.slice(0, 8).toUpperCase()}`}>
+                              #TX-{payment.correlation_id.slice(0, 5).toUpperCase()}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="py-5 text-right font-mono text-sm font-black tabular-nums text-emerald-700">
-                        {formatPHP(payment.amount_paid)}
+                      <td className="py-5 text-right">
+                        <CurrencyDisplay amount={payment.amount_paid} className="text-sm font-bold text-emerald-700" />
                       </td>
                       <td className="py-5 text-center">
                         <ResourceIdCell id={payment.payment_id} type="payment" />
@@ -231,7 +239,7 @@ export default function BillingDetailsPage() {
                       </td>
                     </tr>
                   ))}
-                  emptyTitle="No Collections"
+                  emptyTitle="No Payments"
                   emptyDescription="No posted payments for this cycle."
                 />
               </div>
@@ -239,67 +247,71 @@ export default function BillingDetailsPage() {
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-2xl border border-stone-200 bg-stone-900 p-8 shadow-xl hs-glass-effect">
-               <div className="flex items-center gap-2 mb-6">
-                  <CreditCard size={16} className="text-teal-400" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Summary Matrix</span>
-               </div>
-               
-               <div className="space-y-4">
-                  <div className="flex justify-between items-baseline border-b border-stone-800 pb-4">
-                     <span className="text-stone-500 tracking-widest uppercase font-black text-[10px]">Total Obligation</span>
-                     <span className="font-mono text-sm font-bold text-stone-300">{formatPHP(totalAmount)}</span>
+            <div className="rounded-2xl border border-stone-200 bg-white p-8 shadow-sm hs-glass-effect">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                  <CreditCard size={14} aria-hidden />
+                </div>
+                <h2 className="hs-strip-title text-stone-400">Billing Summary</h2>
+              </div>
+              <div className="space-y-4">
+                <div className="flex justify-between items-baseline border-b border-stone-100 pb-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Total Amount</span>
+                  <CurrencyDisplay amount={totalAmount} className="text-sm font-bold text-stone-900" />
+                </div>
+                <div className="flex justify-between items-baseline border-b border-stone-100 pb-4">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Amount Paid</span>
+                  <CurrencyDisplay amount={totalPaid} className={`text-sm font-bold ${totalPaid > 0 ? "text-emerald-600" : "text-stone-500"}`} />
+                </div>
+                <div className="pt-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-1">Remaining Balance</span>
+                  <div className="flex items-baseline justify-between">
+                    <CurrencyDisplay
+                      amount={Math.abs(balance)}
+                      className={`${balance > 0 ? "text-red-600" : "text-emerald-600"} text-3xl font-black`}
+                    />
+                    {balance < 0 && (
+                      <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                        Credit
+                      </span>
+                    )}
                   </div>
-                  <div className="flex justify-between items-baseline border-b border-stone-800 pb-4">
-                     <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Total Collections</span>
-                     <span className="font-mono text-sm font-bold text-emerald-400">{formatPHP(totalPaid)}</span>
-                  </div>
-                  <div className="pt-2">
-                     <span className="text-[10px] font-black uppercase tracking-widest text-teal-500 block mb-1">Remaining Balance</span>
-                     <div className="flex items-baseline justify-between">
-                        <span className={`${balance > 0 ? "text-rose-400" : "text-emerald-400"} font-mono text-3xl font-black tabular-nums`}>
-                          {formatPHP(Math.abs(balance))}
-                        </span>
-                        {balance < 0 && (
-                          <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                             Credit
-                          </span>
-                        )}
-                     </div>
-                  </div>
-               </div>
+                </div>
+              </div>
 
-               {canPostPayments && balance > 0 && (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={() => router.push(`/payments/new?billing_id=${billing.billing_id}`)}
-                    className="mt-8 w-full !h-12 rounded-xl bg-teal-600 text-[11px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/50 hover:bg-teal-500 active:scale-95 border-0"
-                  >
-                    Record Payment
-                  </Button>
-               )}
+              {canPostPayments && balance > 0 && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => router.push(`/payments/new?billing_id=${billing.billing_id}`)}
+                  className="mt-8 w-full !h-12 rounded-xl bg-teal-600 text-[11px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/50 hover:bg-teal-500 active:scale-95 border-0"
+                >
+                  Record Payment
+                </Button>
+              )}
             </div>
 
             <div className="rounded-2xl border border-stone-100 bg-stone-50/50 p-6 space-y-4 hs-glass-effect">
-               <div className="flex items-center gap-2 text-stone-400">
-                  <Calendar size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Important Note</span>
-               </div>
-               <MetricItem label="Due Date">
-                  <span className={isPastDueReceivable(billing) ? "text-red-700" : "text-stone-900"}>
-                     {formatDateString(billing.due_date)}
-                  </span>
-               </MetricItem>
-               <p className="text-[11px] leading-relaxed text-stone-500 font-medium">
-                 This billing record reflects the current cycle balance. If a posted payment needs correction, void it and record a new payment.
-               </p>
+              <div className="flex items-center gap-2 text-stone-400">
+                <Calendar size={14} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Important Note</span>
+              </div>
+              <MetricItem label="Due Date">
+                <span className={isPastDueReceivable(billing) ? "text-red-700" : "text-stone-900"}>
+                  {formatDateString(billing.due_date)}
+                </span>
+              </MetricItem>
+              <p className="text-[11px] leading-relaxed text-stone-500 font-medium">
+                This billing record reflects the current cycle balance. If a posted payment needs correction, void it and record a new payment.
+              </p>
             </div>
           </div>
         </div>
-      ) : (
-        <Alert variant="warning" title="Billing Not Found">The requested billing record could not be found.</Alert>
-      )}
+      ) : !loading && !billingError ? (
+        <Alert variant="warning" title="Billing Not Found">
+          The requested billing record could not be found.
+        </Alert>
+      ) : null}
     </StandardPage>
   );
 }

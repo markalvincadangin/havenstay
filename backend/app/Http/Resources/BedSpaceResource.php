@@ -28,6 +28,15 @@
              
              // Relationships
              'room' => new RoomResource($this->whenLoaded('room')),
+             'active_contract' => $this->activeContract ? [
+                 'contract_id' => $this->activeContract->contract_id,
+                 'move_in_date' => $this->activeContract->move_in_date,
+                 'tenant' => $this->activeContract->tenant ? [
+                     'tenant_id' => $this->activeContract->tenant->tenant_id,
+                     'first_name' => $this->activeContract->tenant->first_name,
+                     'last_name' => $this->activeContract->tenant->last_name,
+                 ] : null,
+             ] : null,
          ];
      }
  }

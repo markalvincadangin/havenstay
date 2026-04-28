@@ -5,7 +5,9 @@ import useSWR from "swr";
 import { canViewReports } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { flattenApiErrors } from "@/lib/errors";
-import { formatDateString, formatPHP } from "@/lib/formatters";
+import { formatDateString } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
+import { useToasts } from "@/context/ToastContext";
 import { exportReportCsv } from "@/lib/downloads";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
@@ -31,6 +33,7 @@ import ReportFilterCard from "@/components/ui/ReportFilterCard";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 export default function BillingSummaryReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
@@ -61,7 +64,7 @@ export default function BillingSummaryReportPage() {
         setApiError(flattenApiErrors(reportError));
       }
     } else if (authLoading === false && currentUser && !canViewReports(currentUser)) {
-      setApiError("Unauthorized: you do not have permission to view reports.");
+      setApiError("Access restricted. You don’t have permission to view this report.");
     }
   }, [reportError, authLoading, currentUser]);
   useEffect(() => {
@@ -89,7 +92,7 @@ export default function BillingSummaryReportPage() {
         filenamePrefix: "billing-summary-report",
       });
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      showToast(flattenApiErrors(error), "error");
     } finally {
       setExporting(false);
     }
@@ -99,13 +102,21 @@ export default function BillingSummaryReportPage() {
   return (
     <StandardPage
       title="Billing Summary"
-      subtitle="Filter and export system data."
+      subtitle={
+        <div className="flex flex-col gap-2">
+          <p>Filter and export system data.</p>
+          <div className="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-stone-400/70">
+            <span>Generated {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-stone-200">|</span>
+            <span>{tableMeta?.total ?? 0} Records</span>
+          </div>
+        </div>
+      }
       loading={authLoading || loading}
       skeleton={<SkeletonListPage rows={10} />}
       breadcrumbs={
         <Breadcrumbs
           items={[
-            { label: "Administration" },
             { label: "Reports", href: "/admin/reports" },
             { label: "Billing Summary" },
           ]}
@@ -130,24 +141,27 @@ export default function BillingSummaryReportPage() {
         />
         <KpiCard 
            label="Total Billed" 
-           value={formatPHP(report.summary?.billed_total)}
+           value={report.summary?.billed_total}
            icon={Receipt}
            isSyncing={isValidating}
+           currency={true}
            className="hs-glass-effect"
         />
         <KpiCard 
            label="Total Collected" 
-           value={formatPHP(report.summary?.collected_total)}
+           value={report.summary?.collected_total}
            icon={DollarSign}
            isSyncing={isValidating}
+           currency={true}
            className="hs-glass-effect"
         />
         <KpiCard 
            label="Outstanding Balance" 
-           value={formatPHP(report.summary?.outstanding_total)}
+           value={report.summary?.outstanding_total}
            isDanger={report.summary?.outstanding_total > 0}
            icon={Landmark}
            isSyncing={isValidating}
+           currency={true}
            className="hs-glass-effect"
         />
       </div>
@@ -252,7 +266,7 @@ export default function BillingSummaryReportPage() {
                 { key: "id", label: "Billing ID" },
                 { key: "tenant", label: "Tenant" },
                 { key: "room", label: "Room", className: "text-center" },
-                { key: "period", label: "Period", className: "text-center" },
+                { key: "period", label: "Period", className: "text-center", headerClassName: "whitespace-nowrap" },
                 { key: "due", label: "Billed", className: "text-right" },
                 { key: "paid", label: "Paid", className: "text-right" },
                 { key: "balance", label: "Balance", className: "text-right" },
@@ -267,9 +281,15 @@ export default function BillingSummaryReportPage() {
                     <ResourceIdCell id={row.room_id} prefix="ROOM" />
                   </td>
                   <td className="px-6 py-4 text-center text-[10px] font-medium text-stone-400">{formatDateString(row.billing_period_from)} – {formatDateString(row.billing_period_to)}</td>
-                  <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-stone-900 font-bold">{formatPHP(row.amount_due)}</td>
-                  <td className="px-6 py-4 text-right font-mono text-xs tabular-nums text-teal-700 font-bold">{formatPHP(row.amount_paid)}</td>
-                  <td className="px-6 py-4 text-right font-mono text-xs tabular-nums font-black text-rose-800">{formatPHP(row.outstanding_balance)}</td>
+                  <td className="px-6 py-4 text-right">
+                    <CurrencyDisplay amount={row.amount_due} className="text-xs font-bold text-stone-900" />
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <CurrencyDisplay amount={row.amount_paid} className="text-xs font-bold text-teal-700" />
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <CurrencyDisplay amount={row.outstanding_balance} className="text-xs font-bold text-rose-800" />
+                  </td>
                   <td className="px-6 py-4 text-center"><StatusBadge>{row.status}</StatusBadge></td>
               </tr>
               ))}

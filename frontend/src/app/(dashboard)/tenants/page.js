@@ -103,7 +103,7 @@ export default function TenantsPage() {
   return (
     <StandardPage
       title="Tenant Directory"
-      subtitle="Manage tenant profiles, contact information, and lease history."
+      subtitle="Manage tenant profiles, contact info, and history."
       breadcrumbs={<Breadcrumbs items={[{ label: "Tenant Directory" }]} />}
       loading={loading}
       error={error}
@@ -128,7 +128,7 @@ export default function TenantsPage() {
           className="hs-glass-effect"
         />
         <KpiCard
-          label="New Onboarded"
+          label="New Tenants"
           value={stats.newOnboarded}
           sub="Registered this month"
           icon={UserPlus}
@@ -148,7 +148,7 @@ export default function TenantsPage() {
           className="hs-glass-effect"
         />
         <KpiCard
-          label="Archived Profiles"
+          label="Archived Tenants"
           value={stats.archivedCount}
           sub="Archived historical records"
           icon={FileArchive}
@@ -242,10 +242,10 @@ export default function TenantsPage() {
               embedded
               columns={[
                 { key: "id", label: "TENANT ID", sortable: true, className: "pl-8" },
-                { key: "name", label: "TENANT NAME", sortable: true },
-                { key: "contact", label: "CONTACT INFO" },
-                { key: "room", label: "ASSIGNED UNIT", sortable: true, className: "text-center" },
-                { key: "balance", label: "LEDGER BALANCE", sortable: true, className: "text-right" },
+                { key: "name", label: "TENANT", sortable: true },
+                { key: "contact", label: "CONTACT" },
+                { key: "room", label: "ROOM/BED", sortable: true, className: "text-center" },
+                { key: "balance", label: "BALANCE", sortable: true, className: "text-right" },
                 { key: "status", label: "STATUS", sortable: true, className: "text-center" },
                 { key: "actions", label: "", className: "text-right w-16 px-8" },
               ]}
@@ -310,10 +310,10 @@ export default function TenantsPage() {
                   </td>
                   <td className="px-8 py-5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <QuickEditRowAction 
+                      <QuickEditRowAction
                         disabled={!canManageTenants(currentUser)}
-                        onClick={() => setEditingTenant(tenant)} 
-                        title="Update details" 
+                        onClick={() => setEditingTenant(tenant)}
+                        title="Update details"
                       />
                       <RowOpenIndicator />
                     </div>

@@ -35,6 +35,7 @@ class Billing extends Model
         'billing_period_to',
         'due_date',
         'status',
+        'idempotency_key',
     ];
 
 

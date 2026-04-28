@@ -21,7 +21,7 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ showToast: addToast }}>
       {children}
-      <div className="fixed bottom-8 right-8 z-[9999] flex flex-col gap-3 pointer-events-none">
+      <div className="fixed top-8 right-8 z-[9999] flex flex-col gap-3 pointer-events-none">
         <AnimatePresence mode="popLayout">
           {toasts.map((toast) => (
             <Toast

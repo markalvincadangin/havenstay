@@ -25,7 +25,6 @@ export default function NewRoomPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const { showToast } = useToasts();
-  const [apiError, setApiError] = useState("");
   const {
     register,
     handleSubmit,
@@ -35,13 +34,13 @@ export default function NewRoomPage() {
     formState: { errors, isSubmitting, isDirty },
   } = useForm({
     defaultValues: {
-      physical_number: "",
       room_code: "",
       room_type: "private",
       capacity: "1",
       monthly_rate: "",
       amenities: "",
       description: "",
+      is_metered: true,
       bed_spaces: [{ bed_label: "Bed 1", status: "vacant" }],
     },
   });
@@ -51,27 +50,23 @@ export default function NewRoomPage() {
   });
   useUnsavedChangesWarning(isDirty && !isSubmitting);
   const roomType = useWatch({ control, name: "room_type" });
-  const physicalNumber = useWatch({ control, name: "physical_number" });
-  useEffect(() => {
-    if (physicalNumber) {
-      const generatedCode = `UNIT-${String(physicalNumber).trim().toUpperCase()}`;
-      setValue("room_code", generatedCode, { shouldDirty: true });
-    }
-  }, [physicalNumber, setValue]);
+
   useEffect(() => {
     if (roomType === "private") {
       setValue("capacity", "1");
+      // For private rooms, we reset bed spaces to a single default one
+      setValue("bed_spaces", [{ bed_label: "Bed 1", status: "vacant" }]);
     } else {
+      // For shared rooms, capacity is derived from the number of bed fields
       setValue("capacity", fields.length.toString());
     }
   }, [roomType, fields.length, setValue]);
   const onSubmit = async (values) => {
-    setApiError("");
     if (!canManageRooms(currentUser)) return;
     try {
       const rate = parseMoneyInput(values.monthly_rate);
       if (Number.isNaN(rate)) {
-        setApiError("Enter a valid monthly rate.");
+        showToast("Enter a valid monthly rate.", "error");
         return;
       }
       const payload = {
@@ -81,10 +76,11 @@ export default function NewRoomPage() {
         monthly_rate: rate,
         amenities: values.amenities || null,
         description: values.description || null,
+        is_metered: values.is_metered ? 1 : 0,
       };
       if (values.room_type === "shared") {
         if (!values.bed_spaces || values.bed_spaces.length < 2) {
-          setApiError("Shared rooms must have at least 2 bed spaces.");
+          showToast("Shared rooms must have at least 2 bed spaces.", "error");
           return;
         }
         payload.bed_spaces = values.bed_spaces.map((b) => ({
@@ -96,23 +92,24 @@ export default function NewRoomPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+
       const roomId = response?.room_id || response?.id;
       if (roomId) {
-        showToast(`Unit ${values.room_code} registered.`, "success");
+        showToast(`Room ${values.room_code} registered.`, "success");
         router.push(`/rooms/${roomId}`);
       }
     } catch (error) {
-       applyServerFieldErrors(error, setError, { setApiError });
+      applyServerFieldErrors(error, setError, { showToast });
     }
   };
   const readOnly = !canManageRooms(currentUser);
   return (
     <StandardPage
       title="Register Room"
-      subtitle="Define a new unit and initialize its bed space availability."
+      subtitle="Define a new room and initialize its bed space availability."
       skeleton={<SkeletonDetailPage />}
       breadcrumbs={
-        <Breadcrumbs items={[{ label: "Room Inventory", href: "/rooms" }, { label: "Register Unit" }]} />
+        <Breadcrumbs items={[{ label: "Room Inventory", href: "/rooms" }, { label: "Register Room" }]} />
       }
       actions={
         <PageHeaderActions
@@ -130,41 +127,34 @@ export default function NewRoomPage() {
         >
           <div className="space-y-8">
             <div className="grid gap-6 sm:grid-cols-2">
-              <Field 
-                label="Unit Number" 
-                required 
-                error={errors.physical_number?.message}
-                helpText="The number displayed on the unit door (e.g. 101)."
+              <Field
+                label="Room Code"
+                required
+                error={errors.room_code?.message}
+                helpText="Unique system identifier (e.g. 101 or RM-101)."
               >
                 <Input
                   autoFocus
                   placeholder="e.g. 101"
-                  className="!h-11 border-stone-200 focus:border-teal-500/50"
+                  className="!h-11 border-stone-200 focus:border-teal-500/50 font-mono"
                   disabled={readOnly}
-                  {...register("physical_number", { required: "Room number is required." })}
-                />
-              </Field>
-              <Field label="Unit Code" required error={errors.room_code?.message} helpText="System identifier for internal tracking.">
-                <Input
-                  readOnly
-                  placeholder="UNIT-101"
-                  className="!h-11 border-stone-200 bg-stone-50 font-mono text-stone-600 cursor-not-allowed"
-                  {...register("room_code", { required: "Room code missing." })}
+                  {...register("room_code", { required: "Room code is required." })}
                 />
               </Field>
             </div>
             <div className="grid gap-6 sm:grid-cols-2">
-              <Field label="Rental Rate (PHP)" required error={errors.monthly_rate?.message}>
+              <Field label="Monthly Rent" required error={errors.monthly_rate?.message}>
                 <Input
                   type="number"
                   step="1"
+                  prefix="₱"
                   placeholder="5000"
-                  className="!h-11 border-stone-200 font-mono focus:border-teal-500/50 tabular-nums"
+                  className="!h-11 border-stone-200 font-mono focus:border-teal-500/50 tabular-nums font-bold"
                   disabled={readOnly}
-                  {...register("monthly_rate", { required: "Rent rate is required.", min: 100 })}
+                  {...register("monthly_rate", { required: "Monthly rent is required.", min: 100 })}
                 />
               </Field>
-              <Field label="Unit Category" required error={errors.room_type?.message}>
+              <Field label="Room Type" required error={errors.room_type?.message}>
                 <Select className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("room_type")}>
                   {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
@@ -235,6 +225,25 @@ export default function NewRoomPage() {
             </div>
           </FormSection>
         )}
+        <FormSection title="Utility Hardware" icon={Box}>
+          <div className="space-y-4">
+            <label className="flex items-start gap-4 p-4 rounded-xl border border-stone-200 hover:border-stone-300 transition-colors bg-white cursor-pointer select-none">
+              <div className="pt-0.5">
+                <input 
+                  type="checkbox" 
+                  className="w-5 h-5 rounded border-stone-300 text-teal-600 focus:ring-teal-600"
+                  {...register("is_metered")}
+                />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-stone-900">Enable Utility Metering</div>
+                <div className="text-xs text-stone-500 mt-1 font-medium leading-relaxed">
+                  Check this if the room has individual electric/water sub-meters. If unchecked, the room will be treated as 'All-Inclusive' during billing.
+                </div>
+              </div>
+            </label>
+          </div>
+        </FormSection>
         <FormSection title="Registry Details" icon={Box}>
           <div className="space-y-6">
             <Field label="Amenities" helpText="e.g. AC, Wi-Fi, personal desk">
@@ -245,7 +254,6 @@ export default function NewRoomPage() {
             </Field>
           </div>
         </FormSection>
-        {apiError && <Alert variant="error" title="Could not register room">{apiError}</Alert>}
         <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:justify-end">
           <Link
             href="/rooms"
@@ -260,7 +268,7 @@ export default function NewRoomPage() {
             disabled={readOnly || isSubmitting}
             className={primaryLinkCtaClass + " px-12 border-0"}
           >
-            Register Unit
+            Register Room
           </Button>
         </div>
       </form>

@@ -22,7 +22,8 @@ export default function Button({
   disabled = false,
   className = "",
   children,
-  asChild = false, // Destructure asChild correctly
+  asChild = false,
+  fullWidth = false,
   ...props
 }) {
   const isActuallyLoading = loading || isLoading;
@@ -43,9 +44,10 @@ export default function Button({
       "focus:outline-none focus:shadow-[0_0_0_3px_rgba(13,148,136,0.3)]",
     /** Danger: red outline — destructive actions (Void, Delete) */
     danger:
-      "border border-[#FECACA] bg-transparent text-[#991B1B] " +
-      "hover:bg-[#FEF2F2] hover:border-[#FCA5A5] " +
-      "focus:outline-none focus:shadow-[0_0_0_3px_rgba(153,27,27,0.2)]",
+      "bg-red-600 text-white " +
+      "hover:bg-red-700 " +
+      "active:scale-[0.98] " +
+      "focus:outline-none focus:shadow-[0_0_0_3px_rgba(220,38,38,0.3)]",
     /** Ghost: subtle — tertiary actions */
     ghost:
       "bg-transparent text-[var(--color-text)] " +
@@ -69,6 +71,7 @@ export default function Button({
     "disabled:cursor-not-allowed disabled:opacity-50",
     variantClasses[resolvedVariant] ?? variantClasses.primary,
     sizeClasses[size] ?? sizeClasses.md,
+    fullWidth ? "w-full" : "",
     className,
   ].join(" ");
 
@@ -87,12 +90,14 @@ export default function Button({
       {...props}
     >
       {isActuallyLoading ? (
-        <span
-          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-          aria-hidden="true"
-        />
-      ) : null}
-      {children}
+        <span className="flex items-center gap-2">
+          <span
+            className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+            aria-hidden="true"
+          />
+          <span className="opacity-70">Processing...</span>
+        </span>
+      ) : children}
     </button>
   );
 }

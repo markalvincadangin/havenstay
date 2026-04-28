@@ -65,6 +65,7 @@
                      'billing_period_to' => $data['billing_period_to'],
                      'due_date' => $data['due_date'],
                      'status' => BillingStatus::UNPAID,
+                     'idempotency_key' => $data['idempotency_key'] ?? null,
                  ]);
  
                  // 1. Process Base Rent
@@ -136,9 +137,10 @@
       * 
       * @param User $actor The staff member initializing billing.
       * @param int $contractId
+      * @param string|null $idempotencyKey
       * @return Billing
       */
-     public static function initializeContractBilling(User $actor, int $contractId): Billing
+     public static function initializeContractBilling(User $actor, int $contractId, ?string $idempotencyKey = null): Billing
      {
          $contract = Contract::findOrFail($contractId);
  
@@ -151,13 +153,14 @@
              actorId: $actor->user_id,
              action: 'INITIALIZE_BILLING',
              payload: ['contract_id' => $contract->contract_id, 'initial_rent' => $baseRent],
-             operation: function () use ($contract, $billingPeriodFrom, $billingPeriodTo, $dueDate, $baseRent): Billing {
+             operation: function () use ($contract, $billingPeriodFrom, $billingPeriodTo, $dueDate, $baseRent, $idempotencyKey): Billing {
                  $billing = Billing::create([
                      'contract_id' => $contract->contract_id,
                      'billing_period_from' => $billingPeriodFrom->toDateString(),
                      'billing_period_to' => $billingPeriodTo,
                      'due_date' => $dueDate,
                      'status' => BillingStatus::UNPAID,
+                     'idempotency_key' => $idempotencyKey,
                  ]);
  
                  $billing->lineItems()->create([
@@ -172,32 +175,48 @@
      }
  
      /**
-      * Authoritative status reconciliation for a billing record.
-      * 
-      * @param User $actor The staff member triggering the sync.
-      * @param Billing $billing
-      * @return Billing
-      */
-     public static function syncBillingStatus(User $actor, Billing $billing): Billing
-     {
-         $amountDue = (float) $billing->lineItems()->sum('amount');
-         $amountPaid = (float) $billing->payments()->whereNull('voided_at')->sum('amount_paid');
-         $newStatus = Financials::deriveBillingStatus($amountDue, $amountPaid, (string) $billing->due_date);
- 
-         if ($billing->status === $newStatus) {
-             return $billing;
-         }
- 
-         return self::runWriteWorkflow(
-             actorId: $actor->user_id,
-             action: 'RECONCILE_BILLING',
-             payload: ['billing_id' => $billing->billing_id, 'old_status' => $billing->status->value, 'new_status' => $newStatus->value],
-             operation: function () use ($billing, $newStatus): Billing {
-                 $billing->update(['status' => $newStatus]);
-                 return $billing->fresh();
-             }
-         );
-     }
+     * Authoritative status reconciliation for a billing record.
+     * 
+     * @param User $actor The staff member triggering the sync.
+     * @param Billing $billing
+     * @return Billing
+     */
+    public static function syncBillingStatus(User $actor, Billing $billing): Billing
+    {
+        if (self::synchronizeStatus($billing)) {
+            return self::runWriteWorkflow(
+                actorId: $actor->user_id,
+                action: 'RECONCILE_BILLING',
+                payload: ['billing_id' => $billing->billing_id, 'new_status' => $billing->status->value],
+                operation: function () use ($billing): Billing {
+                    // Actual save happens here via Workflow
+                    $billing->save();
+                    return $billing->fresh();
+                }
+            );
+        }
+        return $billing;
+    }
+
+    /**
+     * Internal: Reconcile status without workflow overhead.
+     * 
+     * @param Billing $billing
+     * @return bool True if status was changed.
+     */
+    public static function synchronizeStatus(Billing $billing): bool
+    {
+        $amountDue = (float) $billing->lineItems()->sum('amount');
+        $amountPaid = (float) $billing->payments()->whereNull('voided_at')->sum('amount_paid');
+        $newStatus = Financials::deriveBillingStatus($amountDue, $amountPaid, (string) $billing->due_date);
+
+        if ($billing->status === $newStatus) {
+            return false;
+        }
+
+        $billing->status = $newStatus;
+        return $billing->save();
+    }
  
      /**
       * List billing history with pagination.
@@ -216,7 +235,11 @@
      public static function listQueryWithSums(array $filters): Builder
      {
          $query = Billing::query()
-             ->with(['contract.tenant', 'contract.room'])
+             ->with([
+                 'contract' => fn($q) => $q->withTrashed(),
+                 'contract.tenant' => fn($q) => $q->withTrashed(),
+                 'contract.room' => fn($q) => $q->withTrashed()
+             ])
              ->withSum([
                  'lineItems as total_amount' => function ($q) {
                      $q->select(DB::raw('COALESCE(SUM(amount), 0)'));
@@ -235,6 +258,11 @@
          if (!empty($filters['status']))
              $query->where('status', $filters['status']);
  
+         if (!empty($filters['past_due'])) {
+             $query->where('due_date', '<', now()->toDateString())
+                 ->where('status', '!=', BillingStatus::PAID->value);
+         }
+ 
          $query->orderByDesc('billing_id');
  
          return $query;
@@ -248,7 +276,15 @@
       */
      public static function getById(int $billingId): ?Billing
      {
-         return Billing::with(['contract.tenant', 'contract.room', 'contract.bedSpace', 'lineItems.utility', 'payments.processor'])
+         return Billing::useWritePdo()
+             ->with([
+                'contract' => fn($q) => $q->withTrashed(),
+                'contract.tenant' => fn($q) => $q->withTrashed(),
+                'contract.room' => fn($q) => $q->withTrashed(),
+                'contract.bedSpace',
+                'lineItems.utility',
+                'payments.processor'
+             ])
              ->withSum([
                  'lineItems as total_amount' => function ($q) {
                      $q->select(DB::raw('COALESCE(SUM(amount), 0)'));

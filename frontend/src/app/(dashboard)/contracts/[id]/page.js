@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import useSWR from "swr";
+import { useEffect, useState, useMemo, useRef } from "react";
+import useSWR, { useSWRConfig } from "swr";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
+import { useToasts } from "@/context/ToastContext";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   AlertTriangle,
@@ -19,10 +20,12 @@ import {
   ShieldCheck,
   Wallet,
   Clock,
+  FileSignature,
 } from "lucide-react";
 
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { ContractQuickEditForm } from '@/features/contracts/components/ContractQuickEditForm';
+import MoveOutModal from "@/features/contracts/components/MoveOutModal";
 
 import { apiRequest, fetcher } from "@/lib/api";
 import { canManageContracts } from "@/lib/auth";
@@ -31,9 +34,9 @@ import { flattenApiErrors } from "@/lib/errors";
 import {
   formatDateRange,
   formatDateString,
-  formatPHP,
   formatTenantDirectoryName,
 } from "@/lib/formatters";
+import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 
 function maskPhone(phone) {
   if (!phone) return "—";
@@ -94,221 +97,16 @@ function MetricItem({ label, value, icon: Icon }) {
   );
 }
 
-function MoveOutModal({ open, contract, onClose, onConfirm, isSubmitting, balance }) {
-  const cancelBtnId = "moveout-cancel-btn";
-  const tenant = contract?.tenant;
-  const room = contract?.room;
-  const hasBalance = balance > 0;
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    control,
-    formState: { errors },
-    reset,
-  } = useForm({ defaultValues: { actual_move_out: "", status: "completed", notes: "" } });
-
-  const selectedStatus = useWatch({ control, name: "status" });
-
-  useEffect(() => {
-    if (open) {
-      const today = new Date().toISOString().split("T")[0];
-      const expected = contract?.expected_move_out_date;
-
-      reset({
-        actual_move_out: expected || today,
-        status: "completed",
-        notes: ""
-      });
-      setTimeout(() => document.getElementById(cancelBtnId)?.focus(), 50);
-    }
-  }, [open, reset, contract]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e) => {
-      if (e.key === "Escape" && !isSubmitting) onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, isSubmitting, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="moveout-modal-title"
-    >
-      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-6">
-        <button
-          type="button"
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
-          aria-label="Close move-out dialog"
-          disabled={isSubmitting}
-          onClick={onClose}
-        />
-
-        <div className="relative w-full max-w-[520px] transform rounded-3xl border border-stone-200 bg-white p-6 text-left shadow-2xl transition-all sm:p-10 my-8">
-        <div className="mb-8 flex items-start gap-5">
-          <div className={`flex size-14 shrink-0 items-center justify-center rounded-2xl shadow-xl transition-colors ${hasBalance ? "bg-rose-50 text-rose-600 shadow-rose-900/10" :
-              selectedStatus === "terminated" ? "bg-amber-50 text-amber-600 shadow-amber-900/10" :
-                "bg-teal-50 text-teal-600 shadow-teal-900/10"
-            }`}>
-            {hasBalance ? <AlertTriangle className="size-7" /> : <ShieldCheck className="size-7" />}
-          </div>
-          <div className="flex-1">
-            <h2 id="moveout-modal-title" className="text-2xl font-black tracking-tight text-stone-900 uppercase">
-              {hasBalance ? "Gate Pass Denied" : selectedStatus === "terminated" ? "Early Termination" : "Standard Move-Out"}
-            </h2>
-            <p className="mt-1 text-sm font-medium text-stone-500">
-              {hasBalance ? "Outstanding balances must be cleared before certification." : "Finalize the agreement and release the room inventory."}
-            </p>
-          </div>
-        </div>
-
-        <div className="mb-8 space-y-4">
-          {hasBalance ? (
-            <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-6 animate-in fade-in zoom-in-95">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-rose-700/60">Outstanding Balance</span>
-                <span className="font-mono text-xl font-black text-rose-700">{formatPHP(balance)}</span>
-              </div>
-              <p className="text-[11px] font-bold text-rose-600 leading-relaxed uppercase tracking-tight">
-                Gate Pass Blocked: Account must be settled to proceed.
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-teal-100 bg-teal-50/50 p-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-teal-700/60">Balance Status</span>
-                <span className="font-mono text-xl font-black text-teal-700">CLEAR</span>
-              </div>
-              <p className="text-[11px] font-bold text-teal-600 leading-relaxed uppercase tracking-tight">
-                Certified for forensic closure.
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-3 bg-stone-50 p-6 rounded-2xl border border-stone-100">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Resident</span>
-              <span className="text-xs font-bold text-stone-900">{tenant ? formatTenantDirectoryName(tenant) : "—"}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">Room & Bed</span>
-              <span className="text-xs font-bold text-stone-900">{room ? room.room_code : "—"}</span>
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit(onConfirm)} className="space-y-6">
-          <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">Departure Type</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                disabled={hasBalance}
-                className={`flex flex-col items-start p-5 rounded-2xl border-2 text-left transition-all ${selectedStatus === "completed"
-                    ? "border-teal-600 bg-teal-50/50 text-teal-900 shadow-lg shadow-teal-900/5"
-                    : "border-stone-100 bg-stone-50 text-stone-500 hover:border-stone-200"
-                  } ${hasBalance ? "opacity-50 cursor-not-allowed" : ""}`}
-                onClick={() => {
-                  setValue("status", "completed");
-                  setValue("actual_move_out", contract?.expected_move_out_date || new Date().toISOString().split("T")[0]);
-                }}
-              >
-                <div className={`mb-3 p-2 rounded-lg ${selectedStatus === 'completed' ? 'bg-teal-600 text-white' : 'bg-stone-200 text-stone-400'}`}>
-                   <ShieldCheck size={16} />
-                </div>
-                <span className="text-xs font-black uppercase tracking-wider mb-1">Standard</span>
-                <span className="text-[10px] font-medium leading-tight text-stone-500">Completed full lease term.</span>
-              </button>
-              <button
-                type="button"
-                disabled={hasBalance}
-                className={`flex flex-col items-start p-5 rounded-2xl border-2 text-left transition-all ${selectedStatus === "terminated"
-                    ? "border-amber-500 bg-amber-50/50 text-amber-900 shadow-lg shadow-amber-900/5"
-                    : "border-stone-100 bg-stone-50 text-stone-400 hover:border-stone-200"
-                  } ${hasBalance ? "opacity-50 cursor-not-allowed" : ""}`}
-                onClick={() => {
-                  setValue("status", "terminated");
-                  setValue("actual_move_out", new Date().toISOString().split("T")[0]);
-                }}
-              >
-                <div className={`mb-3 p-2 rounded-lg ${selectedStatus === 'terminated' ? 'bg-amber-500 text-white' : 'bg-stone-200 text-stone-400'}`}>
-                   <AlertTriangle size={16} />
-                </div>
-                <span className="text-xs font-black uppercase tracking-wider mb-1">Early</span>
-                <span className="text-[10px] font-medium leading-tight text-stone-500">Lease ended before set date.</span>
-              </button>
-            </div>
-          </div>
-
-          <Field label="Final Move-out Date" required error={errors.actual_move_out?.message}>
-            <Input
-              type="date"
-              hasError={Boolean(errors.actual_move_out)}
-              className="!h-12 border-stone-200 font-bold"
-              disabled={hasBalance}
-              {...register("actual_move_out", {
-                required: "Required.",
-              })}
-            />
-          </Field>
-
-          <Field label={selectedStatus === "terminated" ? "Termination Reason" : "Departure Notes"} error={errors.notes?.message}>
-            <Textarea
-              rows={3}
-              placeholder={selectedStatus === "terminated" ? "Why is the lease ending early? (Required)" : "Final inspection details..."}
-              className="border-stone-200"
-              disabled={hasBalance}
-              {...register("notes", {
-                required: selectedStatus === "terminated" ? "A reason for termination is required." : false
-              })}
-            />
-          </Field>
-
-          <div className="flex flex-col gap-3 pt-2">
-            <Button
-              type="submit"
-              variant={selectedStatus === "terminated" ? "warning" : "primary"}
-              className="!h-14 w-full rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-stone-900/5"
-              loading={isSubmitting}
-              disabled={hasBalance}
-            >
-              Confirm Move-Out
-            </Button>
-            <Button
-              id={cancelBtnId}
-              type="button"
-              variant="ghost"
-              className="!h-10 w-full text-[10px] font-black uppercase tracking-widest text-stone-400 hover:text-stone-600"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-);
-}
 
 export default function ContractDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const contractId = params?.id;
+  const { showToast } = useToasts();
 
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
-  const [apiError, setApiError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const { data: contract, error: contractError, mutate: refetchContract } = useSWR(
     !authLoading && currentUser && contractId ? `/api/contracts/${contractId}` : null,
     fetcher
@@ -342,6 +140,7 @@ export default function ContractDetailsPage() {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [editingContract, setEditingContract] = useState(null);
+  const [isActivating, setIsActivating] = useState(false);
   const pageTitle = contract ? `Contract #${contractId}` : "Contract Detail";
 
   const loadContract = () => refetchContract();
@@ -349,53 +148,74 @@ export default function ContractDetailsPage() {
   const [isVoiding, setIsVoiding] = useState(false);
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
 
+  const { mutate: globalMutate } = useSWRConfig();
+
   const handleVoid = async () => {
-    setApiError("");
-    setSuccessMessage("");
     setIsVoiding(true);
     try {
       await apiRequest(`/api/contracts/${contractId}/void`, {
         method: "POST",
+        body: JSON.stringify({ reason: "Contract voided by staff via detail action." }),
       });
-      setSuccessMessage("CONTRACT VOIDED AND INVENTORY RELEASED.");
+      showToast("Contract voided successfully. Inventory has been released.", "success");
       setShowVoidConfirm(false);
+
+      // Global revalidation for lists and reports
+      globalMutate(key => typeof key === 'string' && key.startsWith('/api/contracts'));
+      globalMutate(key => typeof key === 'string' && key.startsWith('/api/reports'));
+
       await loadContract();
     } catch (err) {
-      setApiError(flattenApiErrors(err) || "Failed to void contract.");
+      showToast(flattenApiErrors(err) || "Unable to void this contract. Please try again or contact support.", "error");
       setShowVoidConfirm(false);
     } finally {
       setIsVoiding(false);
     }
   };
 
+  const isInitializingBillingRef = useRef(false);
+
   const handleInitializeBilling = async () => {
-    setApiError("");
-    setSuccessMessage("");
+    if (isInitializingBillingRef.current) return;
+    isInitializingBillingRef.current = true;
     setIsInitializingBilling(true);
 
     try {
       await apiRequest(`/api/billing/initialize/${contractId}`, {
         method: "POST",
       });
-      setSuccessMessage("INITIAL BILLING GENERATED SUCCESSFULLY.");
+      showToast("Initial billing generated successfully.", "success");
       await loadContract();
       await refetchBills();
     } catch (err) {
-      const flattened = flattenApiErrors(err);
-      setApiError(flattened || "Failed to initialize billing.");
+      showToast(flattenApiErrors(err) || "Unable to generate initial billing. Please try again.", "error");
     } finally {
       setIsInitializingBilling(false);
+      isInitializingBillingRef.current = false;
+    }
+  };
+
+  const handleActivate = async () => {
+    setIsActivating(true);
+    try {
+      await apiRequest(`/api/contracts/${contractId}/activate`, {
+        method: "POST",
+      });
+      showToast("Contract activated. The lease agreement is now live.", "success");
+      await loadContract();
+    } catch (err) {
+      showToast(flattenApiErrors(err) || "Activation failed. Please ensure the minimum payment (deposit + 1st month) has been recorded.", "error");
+    } finally {
+      setIsActivating(false);
     }
   };
 
   const handleMoveOut = async (values) => {
     if (outstandingBalance > 0) {
-      setApiError("GATE PASS DENIED: CLEARED BALANCE REQUIRED FOR TERMINATION.");
+      showToast("Move-out denied: A cleared balance is required before termination.", "error");
       return;
     }
 
-    setApiError("");
-    setSuccessMessage("");
     setIsSubmittingMoveOut(true);
 
     try {
@@ -406,12 +226,17 @@ export default function ContractDetailsPage() {
           notes: values.notes || null,
         }),
       });
-      setSuccessMessage("MOVE-OUT CERTIFIED AND LEASE CONCLUDED.");
+      showToast("Move-out processed. The lease has been concluded.", "success");
+
+      // Global revalidation
+      globalMutate(key => typeof key === 'string' && key.startsWith('/api/contracts'));
+      globalMutate(key => typeof key === 'string' && key.startsWith('/api/reports'));
+
       await loadContract();
       setShowMoveOutModal(false);
       router.refresh();
     } catch (error) {
-      setApiError(flattenApiErrors(error));
+      showToast(flattenApiErrors(error), "error");
       setShowMoveOutModal(false);
     } finally {
       setIsSubmittingMoveOut(false);
@@ -419,18 +244,20 @@ export default function ContractDetailsPage() {
   };
 
   const handleArchive = async () => {
-    setApiError("");
-    setSuccessMessage("");
     setIsArchiving(true);
     try {
       await apiRequest(`/api/contracts/${contractId}/archive`, {
         method: "POST",
       });
       setShowArchiveConfirm(false);
+
+      // Global revalidation
+      globalMutate(key => typeof key === 'string' && key.startsWith('/api/contracts'));
+      globalMutate(key => typeof key === 'string' && key.startsWith('/api/reports'));
+
       router.push("/contracts");
     } catch (err) {
-      setShowArchiveConfirm(false);
-      setApiError(flattenApiErrors(err) || "Failed to archive contract.");
+      showToast(flattenApiErrors(err) || "Unable to archive this contract. Please try again.", "error");
     } finally {
       setIsArchiving(false);
     }
@@ -446,9 +273,17 @@ export default function ContractDetailsPage() {
   const tenantDisplay = tenant ? formatTenantDirectoryName(tenant) : "Agreement";
   return (
     <StandardPage
-      title={pageTitle}
+      title={
+        loading ? (
+          "Loading Agreement..."
+        ) : (
+          pageTitle
+        )
+      }
       subtitle={
-        contract ? (
+        loading ? (
+          "Synchronizing lease records..."
+        ) : contract ? (
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <ResourceIdCell id={contract.contract_id} type="contract" />
@@ -459,9 +294,7 @@ export default function ContractDetailsPage() {
               Lease profile: terms, billing, and payment history.
             </p>
           </div>
-        ) : (
-          "Loading contract details..."
-        )
+        ) : null
       }
       loading={loading}
       skeleton={<SkeletonDetailPage />}
@@ -505,7 +338,7 @@ export default function ContractDetailsPage() {
       <ConfirmationDialog
         open={showArchiveConfirm}
         title="Confirm Archive"
-        message="Are you sure you want to archive this agreement? This action will immediately release the bed space into available inventory and clear it from active listings."
+        description="Are you sure you want to archive this agreement? This action will immediately release the bed space into available inventory and clear it from active listings."
         confirmLabel="Archive History"
         isDanger
         isLoading={isArchiving}
@@ -515,9 +348,9 @@ export default function ContractDetailsPage() {
 
       <ConfirmationDialog
         open={showVoidConfirm}
-        title="Void Registration"
-        message="This will VOID the contract and release the bed space. This action represents a correction of a registration error and cannot be undone (BR-CON-012)."
-        confirmLabel="Void Registration"
+        title="Void Contract"
+        description="This will void the contract and release the bed space. This action represents a correction of a registration error and cannot be undone."
+        confirmLabel="Void Contract"
         isDanger
         isLoading={isVoiding}
         onConfirm={handleVoid}
@@ -528,12 +361,10 @@ export default function ContractDetailsPage() {
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
-        className="space-y-6"
       >
-        {(fetchError || apiError) && <Alert variant="error" title="Action Failed">{fetchError || apiError}</Alert>}
-        {successMessage && <Alert variant="success">{successMessage}</Alert>}
+        {fetchError && <Alert variant="error" title="Load Failed">{fetchError}</Alert>}
 
-        {contract ? (
+        {!loading && contract ? (
           <div className="grid gap-6 lg:grid-cols-12">
             <aside className="space-y-6 lg:col-span-4">
               <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
@@ -559,7 +390,7 @@ export default function ContractDetailsPage() {
                 <div className="space-y-2 p-8 pt-6">
                   <MetricItem label="Primary Tenant" value={tenantDisplay} icon={User} />
                   <MetricItem
-                    label="Assigned Unit"
+                    label="Room / Bed"
                     value={
                       room
                         ? `${room.room_code}${bedSpace?.bed_label ? ` · ${bedSpace.bed_label}` : ""}`
@@ -569,7 +400,7 @@ export default function ContractDetailsPage() {
                   />
                   <MetricItem
                     label="Monthly Rent"
-                    value={formatPHP(contract.monthly_rate_override ?? contract.monthly_rate)}
+                    value={<CurrencyDisplay amount={contract.monthly_rate_override ?? contract.monthly_rate} />}
                     icon={Wallet}
                   />
                   <MetricItem
@@ -583,23 +414,78 @@ export default function ContractDetailsPage() {
               {canManageContracts(currentUser) && contract.status === "pending_payment" ? (
                 <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-teal-50/20 border-teal-100">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-teal-700">Onboarding Action Required</h3>
-                  <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
-                    Generate the setup billing (Advance Rent + Deposit) to enable payment collection and activate this contract.
-                  </p>
+
+                  {contract.latest_billing ? (
+                    <>
+                      <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
+                        Setup billing has been initialized. Resident must settle the balance to activate this lease.
+                      </p>
+                      <Button
+                        variant="primary"
+                        className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all"
+                        onClick={() => router.push(`/billing/${contract.latest_billing.billing_id}`)}
+                      >
+                        View Setup Bill & Pay
+                      </Button>
+                    </>
+                  ) : outstandingBalance > 0 ? (
+                    <>
+                      <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
+                        Initial billing has been generated. Resident must settle the outstanding balance to live-activate this lease.
+                      </p>
+                      <div className="mt-4 flex flex-col gap-2 rounded-xl bg-white/50 p-4 border border-teal-100">
+                        <span className="text-[10px] font-black uppercase text-teal-600/60">Required for Activation</span>
+                        <CurrencyDisplay amount={outstandingBalance} className="text-xl font-black text-teal-700" />
+                      </div>
+                      <Button
+                        variant="primary"
+                        className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all"
+                        onClick={() => {
+                          const unpaidBill = normalizePaginatedList(billData).rows[0];
+                          if (unpaidBill) router.push(`/billing/${unpaidBill.billing_id}`);
+                        }}
+                      >
+                        View & Record Payment
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
+                        Generate the setup billing (Advance Rent + Deposit) to enable payment collection and activate this contract.
+                      </p>
+                      <Button
+                        variant="primary"
+                        className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all"
+                        onClick={handleInitializeBilling}
+                        isLoading={isInitializingBilling}
+                      >
+                        Generate Initial Bill
+                      </Button>
+                    </>
+                  )}
+
+                  <Button
+                    variant="secondary"
+                    className="mt-3 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest border-amber-200 text-amber-700 hover:bg-amber-50"
+                    onClick={() => router.push(`/payments/new?category=deposit&contract_id=${contractId}&amount=${contract.deposit_amount}`)}
+                  >
+                    Record Deposit Payment
+                  </Button>
+
                   <Button
                     variant="primary"
-                    className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all hover:scale-[1.02] active:scale-95"
-                    onClick={handleInitializeBilling}
-                    isLoading={isInitializingBilling}
+                    className="mt-3 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/5 transition-all"
+                    onClick={handleActivate}
+                    isLoading={isActivating}
                   >
-                    Generate Initial Bill
+                    Activate Contract
                   </Button>
                   <Button
                     variant="outline"
                     className="mt-3 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest border-teal-200 text-teal-700 hover:bg-teal-50"
                     onClick={() => setShowVoidConfirm(true)}
                   >
-                    Void Registration
+                    Void Contract
                   </Button>
                 </Card>
               ) : null}
@@ -617,12 +503,46 @@ export default function ContractDetailsPage() {
                   >
                     Process Move-Out
                   </Button>
+
+                  {/* BR-CON-011: Renewal logic strictly depends on a prior expected_move_out_date. 
+                      Hide for Open Ended contracts to prevent logical state conflicts. */}
+                  {contract.expected_move_out_date && (
+                    <div className="mt-6 pt-6 border-t border-stone-100">
+                      <p className="text-[10px] font-medium text-stone-400 leading-relaxed mb-4">
+                        Extend this contract for another term. This will pre-fill a new contract with current terms.
+                      </p>
+                      <Link
+                        href={`/contracts/new?renew_contract_id=${contractId}`}
+                        className="flex items-center justify-center gap-2 w-full !h-11 rounded-xl bg-teal-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 hover:bg-teal-700 transition-all"
+                      >
+                        <FileSignature size={16} />
+                        Renew Contract
+                      </Link>
+                    </div>
+                  )}
                 </Card>
               ) : null}
 
               {canManageContracts(currentUser) && !isActive && contract.status !== "pending_payment" ? (
                 <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-stone-50/50 border-stone-200">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">History Management</h3>
+
+                  {isEnded && !contract.is_cleared && (
+                    <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-100 mb-4">
+                      <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-2">Unsettled Deposit</p>
+                      <p className="text-[10px] font-medium text-amber-600 leading-relaxed mb-4">
+                        The security deposit (₱{contract.deposit_amount}) has not been refunded or rolled over.
+                      </p>
+                      <Button
+                        variant="primary"
+                        className="!h-9 w-full rounded-lg text-[10px] font-black uppercase tracking-widest bg-amber-600 hover:bg-amber-700 shadow-lg shadow-amber-900/10"
+                        onClick={() => router.push(`/payments/new?contract_id=${contractId}&category=refund&amount=${contract.deposit_amount}`)}
+                      >
+                        Process Deposit Refund
+                      </Button>
+                    </div>
+                  )}
+
                   <p className="mt-2 text-[10px] font-medium text-stone-400 leading-relaxed">
                     Closed contracts can be archived for cleaner listings. Financial records will still be retained.
                   </p>
@@ -630,16 +550,22 @@ export default function ContractDetailsPage() {
                     variant="outline"
                     className="mt-4 !h-9 w-full rounded-lg text-[10px] font-black uppercase tracking-widest border-stone-200 text-stone-600 hover:bg-white"
                     onClick={() => setShowArchiveConfirm(true)}
+                    disabled={!contract.is_cleared}
                   >
                     Archive Agreement
                   </Button>
+                  {!contract.is_cleared && (
+                    <p className="mt-2 text-[9px] font-bold text-rose-400 uppercase tracking-tighter text-center">
+                      Settlement required before archiving
+                    </p>
+                  )}
                 </Card>
               ) : null}
             </aside>
 
             <main className="space-y-6 lg:col-span-8">
               <FormSection
-                title="Tenant & Unit Assignment"
+                title="Room Assignment"
                 icon={User}
                 className="hs-glass-effect"
               >
@@ -693,24 +619,22 @@ export default function ContractDetailsPage() {
                   className="hs-glass-effect"
                 >
                   <div className="space-y-1">
-                    <DetailRow label="Deposit Amount" value={formatPHP(contract.deposit_amount)} icon={FileCheck} mono />
+                    <DetailRow label="Deposit Amount" value={<CurrencyDisplay amount={contract.deposit_amount} />} icon={FileCheck} />
                     {contract.monthly_rate_override ? (
                       <>
                         <DetailRow
                           label="Standard Rate"
-                          value={<span className="line-through text-stone-400">{formatPHP(contract.monthly_rate)}</span>}
+                          value={<span className="line-through text-stone-400"><CurrencyDisplay amount={contract.monthly_rate} /></span>}
                           icon={Receipt}
-                          mono
                         />
                         <DetailRow
                           label="Agreed Rent"
-                          value={<span className="font-bold text-teal-700">{formatPHP(contract.monthly_rate_override)}</span>}
+                          value={<span className="font-bold text-teal-700"><CurrencyDisplay amount={contract.monthly_rate_override} /></span>}
                           icon={Wallet}
-                          mono
                         />
                       </>
                     ) : (
-                      <DetailRow label="Monthly Rate" value={formatPHP(contract.monthly_rate)} icon={Receipt} mono />
+                      <DetailRow label="Monthly Rate" value={<CurrencyDisplay amount={contract.monthly_rate} />} icon={Receipt} />
                     )}
                   </div>
                 </FormSection>
@@ -779,9 +703,10 @@ export default function ContractDetailsPage() {
                           {formatDateString(p.payment_date)}
                         </td>
                         <td className="py-5 text-right">
-                          <span className="font-mono text-sm font-bold tabular-nums text-emerald-700">
-                            {formatPHP(p.amount_paid)}
-                          </span>
+                          <CurrencyDisplay
+                            amount={p.amount_paid}
+                            className="text-sm font-bold text-emerald-700"
+                          />
                         </td>
                         <td className="py-5 text-center text-[10px] font-bold uppercase tracking-widest text-stone-400">
                           {formatDateRange(
@@ -799,20 +724,20 @@ export default function ContractDetailsPage() {
                         </td>
                       </tr>
                     ))}
-                    emptyTitle="No Payments Yet"
-                    emptyDescription="No payment records have been posted for this agreement."
+                    emptyTitle="No payments posted"
+                    emptyDescription="Historical payments will appear here once collections are posted."
                   />
                 </div>
               </Card>
             </main>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-stone-200 bg-white p-12">
-            <Alert variant="warning" title="Contract not found">The requested lease agreement record could not be located.</Alert>
-          </div>
-        )}
+        ) : !loading && !contractError ? (
+          <Alert variant="warning" title="Agreement Not Found">
+            The requested contract profile could not be found in the registry.
+          </Alert>
+        ) : null}
 
-        {!canManageContracts(currentUser) && (
+        {!loading && !canManageContracts(currentUser) && (
           <div className="mt-8 flex items-center gap-3 rounded-2xl bg-stone-50 p-6 text-stone-500">
             <ShieldCheck size={20} className="text-stone-300" />
             <p className="text-xs font-bold uppercase tracking-widest leading-relaxed">
