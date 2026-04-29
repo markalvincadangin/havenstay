@@ -6,8 +6,8 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { safeParseJson } from "@/lib/formatters";
 
 /**
- * Audit Log Diff Modal — v7.3.0 Command Center Standard
- * Implements the 3-column forensic diff standard from MASTER.md §26.1
+ * Audit Log Diff Modal — v7.3.0
+ * Implements the 3-column diff standard for tracking changes.
  */
 export const AuditLogDiffModal = ({ audit, onClose }) => {
   if (!audit) return null;

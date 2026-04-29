@@ -6,7 +6,6 @@
  * @traceability
  * - Requirements: FR-053, FR-054
  * - Business Rules: BR-GEN-005, BR-AUD-001, BR-AUD-003
- * - Forensic: CCR-007
  * 
  * @performance
  * - Category: Audit Logs (30s cache)
@@ -103,7 +102,7 @@ export default function AuditLogsPage() {
       const url = `/api/audit-logs/export${queryString}`;
       window.open(`${process.env.NEXT_PUBLIC_API_URL || ""}${url}`, "_blank");
     } catch (err) {
-      console.error("Forensic export failed:", err);
+      console.error("Export failed:", err);
     } finally {
       setExporting(false);
     }

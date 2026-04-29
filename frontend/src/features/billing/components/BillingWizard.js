@@ -34,7 +34,7 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
 
   const [lastBilled, setLastBilled] = useState(null);
 
-  // Fetch forensic baseline (last billed)
+  // Fetch baseline (last billed)
   useEffect(() => {
     const fetchBaseline = async () => {
       try {
@@ -63,7 +63,7 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
     return diff;
   }, [prevRead, currRead]);
 
-  // Smart Suggestion Logic: Forensically continuous
+  // Suggestion logic: Use continuous readings where possible
   useEffect(() => {
     if (meterReadings.length === 0) return;
 
@@ -152,7 +152,7 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
               <span>Start Baseline Reading</span>
               {isContinuous && (
                 <span className="text-[9px] font-black text-teal-600 uppercase flex items-center gap-1">
-                  <ShieldCheck size={10} /> Forensic Continuity Verified
+                  <ShieldCheck size={10} /> Continuity Verified
                 </span>
               )}
             </div>
@@ -813,7 +813,7 @@ export default function BillingWizard() {
                   </div>
                 </div>
 
-                {/* Itemized Ledger Preview - Applying HCI reduction of cognitive load */}
+                {/* Itemized Ledger Preview */}
                 <div className="mt-8 space-y-4">
                   <div className="flex items-center justify-between px-2">
                     <h4 className="text-[10px] font-black text-stone-900 uppercase tracking-widest">Itemized Ledger Preview</h4>
