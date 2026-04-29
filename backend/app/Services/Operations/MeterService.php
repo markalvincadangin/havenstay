@@ -2,6 +2,7 @@
  
  namespace App\Services\Operations;
  
+ use Illuminate\Support\Facades\Cache;
  use App\Models\Meter;
  use App\Models\MeterAssignment;
  use App\Models\MeterReading;
@@ -27,7 +28,7 @@
       */
      public static function recordReading(User $actor, int $meterId, array $data): MeterReading
      {
-         return self::runWriteWorkflow(
+         $reading = self::runWriteWorkflow(
              actorId: $actor->user_id,
              action: 'RECORD_METER_READING',
              payload: [
@@ -86,6 +87,11 @@
                  return $reading;
              }
          );
+ 
+         $roomId = MeterAssignment::where('meter_id', $meterId)->whereNull('valid_to')->value('room_id');
+         self::clearCache($roomId, $meterId);
+ 
+         return $reading;
      }
  
      /**
@@ -93,7 +99,9 @@
       */
      public static function getLastBilledReading(int $meterId): ?MeterReading
      {
-         return \App\Support\Financials::getLastBilledReading($meterId);
+         return Cache::remember("meters:last_billed:{$meterId}", 300, function() use ($meterId) {
+             return \App\Support\Financials::getLastBilledReading($meterId);
+         });
      }
  
      /**
@@ -101,7 +109,7 @@
       */
      public static function assignToRoom(User $actor, int $meterId, int $roomId, string $startDate): MeterAssignment
      {
-         return self::runWriteWorkflow(
+         $assignment = self::runWriteWorkflow(
              actorId: $actor->user_id,
              action: 'ASSIGN_METER_TO_ROOM',
              payload: ['meter_id' => $meterId, 'room_id' => $roomId, 'start_date_fact' => $startDate],
@@ -118,6 +126,10 @@
                  ]);
              }
          );
+ 
+         self::clearCache($roomId, $meterId);
+ 
+         return $assignment;
      }
  
      /**
@@ -211,10 +223,25 @@
       */
      public static function getMetersForRoom(int $roomId): Collection
      {
-         return Meter::query()->whereHas('assignments', function ($q) use ($roomId) {
-             $q->where('room_id', $roomId)->whereNull('valid_to');
-         })->with(['utility', 'readings' => function ($q) {
-             $q->with(['recorder', 'billing'])->orderByDesc('reading_date')->orderByDesc('created_at');
-         }])->get();
+         return Cache::remember("meters:room:{$roomId}", 300, function() use ($roomId) {
+             return Meter::query()->whereHas('assignments', function ($q) use ($roomId) {
+                 $q->where('room_id', $roomId)->whereNull('valid_to');
+             })->with(['utility', 'readings' => function ($q) {
+                 $q->with(['recorder', 'billing'])->orderByDesc('reading_date')->orderByDesc('created_at');
+             }])->get();
+         });
+     }
+ 
+     /**
+      * Clear cached meter data.
+      */
+     public static function clearCache(?int $roomId = null, ?int $meterId = null): void
+     {
+         if ($roomId) {
+             Cache::forget("meters:room:{$roomId}");
+         }
+         if ($meterId) {
+             Cache::forget("meters:last_billed:{$meterId}");
+         }
      }
  }

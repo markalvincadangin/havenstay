@@ -2,6 +2,7 @@
  
  namespace App\Services\Operations;
  
+ use Illuminate\Support\Facades\Cache;
  use App\Services\Concerns\ManagesWorkflows;
  use App\Models\BedSpace;
  use App\Models\Contract;
@@ -91,6 +92,10 @@
              },
              resultDetails: fn(Room $room) => ['room_id' => $room->room_id]
          );
+ 
+         self::clearCache();
+ 
+         return $room;
      }
  
      /**
@@ -188,6 +193,10 @@
              },
              resultDetails: fn(Room $room) => ['room_id' => $room->room_id]
          );
+ 
+         self::clearCache();
+ 
+         return $room;
      }
  
      /**
@@ -315,6 +324,10 @@
                  'room_id' => $bed->room_id,
              ]
          );
+ 
+         self::clearCache();
+ 
+         return $bedSpace;
      }
  
      /**
@@ -345,8 +358,10 @@
       */
      public static function getAllAvailability(): Collection
      {
-         return Room::with('bedSpaces')->get()->map(function (Room $room) {
-             return self::getAvailability($room);
+         return Cache::remember('rooms:availability', 300, function() {
+             return Room::with('bedSpaces')->get()->map(function (Room $room) {
+                 return self::getAvailability($room);
+             });
          });
      }
  
@@ -401,31 +416,33 @@
       */
      public static function statsSummary(): array
      {
-         $totalRooms = Room::count();
-         $totalBeds = BedSpace::count();
-         $occupiedBeds = BedSpace::where('status', BedSpaceStatus::OCCUPIED)->count();
+         return Cache::remember('rooms:stats', 300, function() {
+             $totalRooms = Room::count();
+             $totalBeds = BedSpace::count();
+             $occupiedBeds = BedSpace::where('status', BedSpaceStatus::OCCUPIED)->count();
  
-         // Bookable vacant beds: vacant beds in rooms that still have usable inventory.
-         $bookableVacantBeds = BedSpace::where('status', BedSpaceStatus::VACANT)
-             ->whereHas('room', function ($q): void {
-                 $q->where('status', RoomStatus::AVAILABLE);
-             })
-             ->count();
+             // Bookable vacant beds: vacant beds in rooms that still have usable inventory.
+             $bookableVacantBeds = BedSpace::where('status', BedSpaceStatus::VACANT)
+                 ->whereHas('room', function ($q): void {
+                     $q->where('status', RoomStatus::AVAILABLE);
+                 })
+                 ->count();
  
-         $maintenanceBeds = BedSpace::where('status', BedSpaceStatus::MAINTENANCE)->count();
-         $offlineRooms = Room::where('status', RoomStatus::MAINTENANCE)->count();
+             $maintenanceBeds = BedSpace::where('status', BedSpaceStatus::MAINTENANCE)->count();
+             $offlineRooms = Room::where('status', RoomStatus::MAINTENANCE)->count();
  
-         $occupancyPct = $totalBeds > 0 ? (int) round(($occupiedBeds / $totalBeds) * 100) : 0;
+             $occupancyPct = $totalBeds > 0 ? (int) round(($occupiedBeds / $totalBeds) * 100) : 0;
  
-         return [
-             'total_rooms' => $totalRooms,
-             'total_beds' => $totalBeds,
-             'occupied_beds' => $occupiedBeds,
-             'bookable_vacant_beds' => $bookableVacantBeds,
-             'maintenance_beds' => $maintenanceBeds,
-             'offline_units' => $offlineRooms,
-             'occupancy_pct' => $occupancyPct,
-         ];
+             return [
+                 'total_rooms' => $totalRooms,
+                 'total_beds' => $totalBeds,
+                 'occupied_beds' => $occupiedBeds,
+                 'bookable_vacant_beds' => $bookableVacantBeds,
+                 'maintenance_beds' => $maintenanceBeds,
+                 'offline_units' => $offlineRooms,
+                 'occupancy_pct' => $occupancyPct,
+             ];
+         });
      }
  
      /**
@@ -511,5 +528,14 @@
                  $q->where('room_id', $room->room_id);
              })
              ->exists();
+     }
+ 
+     /**
+      * Clear cached room data to maintain consistency across replicas.
+      */
+     public static function clearCache(): void
+     {
+         Cache::forget('rooms:stats');
+         Cache::forget('rooms:availability');
      }
  }

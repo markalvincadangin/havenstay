@@ -2,6 +2,7 @@
  
  namespace App\Services\Operations;
  
+ use Illuminate\Support\Facades\Cache;
  use App\Services\Concerns\ManagesWorkflows;
  use App\Models\Utility;
  use App\Models\UtilityRate;
@@ -19,6 +20,16 @@
  class UtilityService
  {
      use ManagesWorkflows;
+ 
+     /**
+      * List all operational utilities with caching.
+      */
+     public static function listAll()
+     {
+         return Cache::remember('utilities:all', 600, function() {
+             return Utility::with('rates')->orderBy('name')->get();
+         });
+     }
  
      /**
       * Create a new Utility category with a mandatory initial rate.
@@ -54,6 +65,10 @@
              },
              resultDetails: fn(Utility $u) => ['utility_id' => $u->utility_id]
          );
+ 
+         self::clearCache();
+ 
+         return $utility;
      }
  
      /**
@@ -74,6 +89,10 @@
                  return $utility;
              }
          );
+ 
+         self::clearCache();
+ 
+         return $utility;
      }
  
      /**
@@ -121,5 +140,15 @@
                  $utility->delete();
              }
          );
+ 
+         self::clearCache();
+     }
+ 
+     /**
+      * Clear cached utility data.
+      */
+     public static function clearCache(): void
+     {
+         Cache::forget('utilities:all');
      }
  }

@@ -2,6 +2,7 @@
  
  namespace App\Services\Operations;
  
+ use Illuminate\Support\Facades\Cache;
  use App\Services\Concerns\ManagesWorkflows;
  use App\Models\Contract;
  use App\Models\Tenant;
@@ -39,6 +40,10 @@
              operation: fn(): Tenant => Tenant::create($data),
              resultDetails: fn(Tenant $tenant): array => ['tenant_id' => $tenant->tenant_id]
          );
+ 
+         self::clearCache();
+ 
+         return $tenant;
      }
  
      /**
@@ -85,6 +90,10 @@
              },
              resultDetails: fn(Tenant $updatedTenant): array => ['tenant_id' => $updatedTenant->tenant_id]
          );
+ 
+         self::clearCache();
+ 
+         return $tenant;
      }
  
      /**
@@ -165,19 +174,21 @@
       */
      public static function summary(): array
      {
-         return [
-             'total_records' => Tenant::count(),
-             'active_tenants' => Tenant::where('status', TenantStatus::ACTIVE)->count(),
-             'pending_move_outs' => Contract::where('status', ContractStatus::ACTIVE)
-                 ->whereNotNull('expected_move_out_date')
-                 ->whereBetween('expected_move_out_date', [
-                     now()->toDateTimeString(),
-                     now()->addDays(30)->toDateTimeString()
-                 ])
-                 ->count(),
-             'moved_out' => Tenant::where('status', TenantStatus::MOVED_OUT)->count(),
-             'archived' => Tenant::onlyTrashed()->count(),
-         ];
+         return Cache::remember('tenants:summary', 300, function() {
+             return [
+                 'total_records' => Tenant::count(),
+                 'active_tenants' => Tenant::where('status', TenantStatus::ACTIVE)->count(),
+                 'pending_move_outs' => Contract::where('status', ContractStatus::ACTIVE)
+                     ->whereNotNull('expected_move_out_date')
+                     ->whereBetween('expected_move_out_date', [
+                         now()->toDateTimeString(),
+                         now()->addDays(30)->toDateTimeString()
+                     ])
+                     ->count(),
+                 'moved_out' => Tenant::where('status', TenantStatus::MOVED_OUT)->count(),
+                 'archived' => Tenant::onlyTrashed()->count(),
+             ];
+         });
      }
  
      /**
@@ -288,5 +299,15 @@
          if ($tenant->status !== $newStatus) {
              $tenant->update(['status' => $newStatus]);
          }
+ 
+         self::clearCache();
+     }
+ 
+     /**
+      * Clear cached tenant data.
+      */
+     public static function clearCache(): void
+     {
+         Cache::forget('tenants:summary');
      }
  }

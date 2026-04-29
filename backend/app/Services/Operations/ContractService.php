@@ -22,6 +22,7 @@ use App\Enums\BillingStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Handles the rental agreement lifecycle, including check-in, activation, 
@@ -64,7 +65,7 @@ class ContractService
 
         self::validateCreateInput($data);
 
-        return self::runWriteWorkflow(
+        $contract = self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'TENANT_CHECKIN',
             payload: [
@@ -108,6 +109,10 @@ class ContractService
                 'bed_space_id' => $contract->bed_space_id,
             ]
         );
+
+        self::clearCache($data['tenant_id'] ?? null);
+
+        return $contract;
     }
 
     /**
@@ -187,34 +192,37 @@ class ContractService
      */
     public static function getUnbilledReadings(Contract $contract): \Illuminate\Support\Collection
     {
-        $roomId = $contract->room->room_id;
+        $contractId = $contract->contract_id;
+        return Cache::remember("contracts:unbilled:{$contractId}", 300, function() use ($contract) {
+            $roomId = $contract->room->room_id;
 
-        // Find meters currently or previously assigned to this room
-        return MeterReading::query()
-            ->with(['meter.utility'])
-            ->whereIn('meter_id', function ($q) use ($roomId) {
-                $q->select('meter_id')
-                    ->from('meter_assignments')
-                    ->where('room_id', $roomId);
-            })
-            ->whereNotExists(function ($q) use ($contract) {
-                $q->select(DB::raw(1))
-                    ->from('billing_line_items')
-                    ->join('billing', 'billing.billing_id', '=', 'billing_line_items.billing_id')
-                    ->whereColumn('billing_line_items.reading_id', 'meter_readings.reading_id')
-                    ->where('billing.contract_id', $contract->contract_id);
-            })
-            ->orderBy('reading_date', 'desc')
-            ->get()
-            ->map(function (MeterReading $reading) use ($contract) {
-                // Flatten for frontend consumption
-                $r = $reading->toArray();
-                $r['utility_name'] = $reading->meter->utility->name;
-                $r['utility_type'] = strtolower($reading->meter->utility->name); // for legacy FE compatibility
-                $r['unit'] = $reading->meter->utility->unit_of_measurement;
-                $r['calculated_amount'] = Financials::computeUtilityCost($reading->meter_id, (float) $reading->reading_value);
-                return $r;
-            });
+            // Find meters currently or previously assigned to this room
+            return MeterReading::query()
+                ->with(['meter.utility'])
+                ->whereIn('meter_id', function ($q) use ($roomId) {
+                    $q->select('meter_id')
+                        ->from('meter_assignments')
+                        ->where('room_id', $roomId);
+                })
+                ->whereNotExists(function ($q) use ($contract) {
+                    $q->select(DB::raw(1))
+                        ->from('billing_line_items')
+                        ->join('billing', 'billing.billing_id', '=', 'billing_line_items.billing_id')
+                        ->whereColumn('billing_line_items.reading_id', 'meter_readings.reading_id')
+                        ->where('billing.contract_id', $contract->contract_id);
+                })
+                ->orderBy('reading_date', 'desc')
+                ->get()
+                ->map(function (MeterReading $reading) use ($contract) {
+                    // Flatten for frontend consumption
+                    $r = $reading->toArray();
+                    $r['utility_name'] = $reading->meter->utility->name;
+                    $r['utility_type'] = strtolower($reading->meter->utility->name); // for legacy FE compatibility
+                    $r['unit'] = $reading->meter->utility->unit_of_measurement;
+                    $r['calculated_amount'] = Financials::computeUtilityCost($reading->meter_id, (float) $reading->reading_value);
+                    return $r;
+                });
+        });
     }
 
     /**
@@ -229,7 +237,7 @@ class ContractService
             ]);
         }
 
-        return self::runWriteWorkflow(
+        $contract = self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'UPDATE_CONTRACT',
             payload: ['contract_id' => $contract->contract_id, 'old_rate_fact' => $contract->monthly_rate],
@@ -243,6 +251,10 @@ class ContractService
                 return $contract->fresh(['tenant', 'room', 'bedSpace']);
             }
         );
+
+        self::clearCache($contract->tenant_id, $contract->contract_id);
+
+        return $contract;
     }
 
     /**
@@ -281,7 +293,7 @@ class ContractService
             ]);
         }
 
-        return self::runWriteWorkflow(
+        $contract = self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'TENANT_MOVEOUT',
             payload: ['contract_id' => $contract->contract_id, 'move_out_date_fact' => $actualMoveOut],
@@ -300,6 +312,10 @@ class ContractService
                 return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
             }
         );
+
+        self::clearCache($contract->tenant_id, $contract->contract_id);
+
+        return $contract;
     }
 
     /**
@@ -498,5 +514,18 @@ class ContractService
 
         $monthlyRate = (float) ($data['monthly_rate'] ?? $bedSpace->room->monthly_rate);
         OperationalHardening::validateDepositCap($monthlyRate, (float) ($data['deposit_amount'] ?? 0));
+    }
+
+    /**
+     * Clear cached contract data.
+     */
+    public static function clearCache(?int $tenantId = null, ?int $contractId = null): void
+    {
+        if ($contractId) {
+            Cache::forget("contracts:unbilled:{$contractId}");
+        }
+        
+        // Trigger clear in TenantService as well since contract changes affect tenant summary
+        TenantService::clearCache();
     }
 }

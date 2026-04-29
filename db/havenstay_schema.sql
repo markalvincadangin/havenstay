@@ -95,7 +95,8 @@ CREATE TABLE tenants (
     -- Forensic Uniqueness (allows re-registration after soft-delete)
     active_email VARCHAR(150) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN email ELSE NULL END) VIRTUAL,
     UNIQUE KEY uq_active_tenant_email (active_email),
-    INDEX idx_tenant_lookup (last_name, first_name)
+    INDEX idx_tenant_lookup (last_name, first_name),
+    INDEX idx_tenant_status (status)
 ) ENGINE=InnoDB;
 
 CREATE TABLE rooms (
@@ -148,6 +149,8 @@ CREATE TABLE contracts (
     updated_at             DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at             DATETIME NULL,
     UNIQUE KEY uq_contracts_idempotency (idempotency_key),
+    INDEX idx_contract_status (status),
+    INDEX idx_contract_dates  (move_in_date, expected_move_out_date),
     CONSTRAINT fk_contract_tenant FOREIGN KEY (tenant_id)    REFERENCES tenants    (tenant_id),
     CONSTRAINT fk_contract_bed    FOREIGN KEY (bed_space_id) REFERENCES bed_spaces (bed_space_id),
     CONSTRAINT fk_contract_owner  FOREIGN KEY (created_by)   REFERENCES users      (user_id),
@@ -223,6 +226,8 @@ CREATE TABLE billing (
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_billing_cycle (contract_id, billing_period_from, billing_period_to),
     UNIQUE KEY uq_billing_idempotency (idempotency_key),
+    INDEX idx_billing_status (status),
+    INDEX idx_billing_due    (due_date),
     CONSTRAINT fk_billing_contract FOREIGN KEY (contract_id) REFERENCES contracts (contract_id)
 ) ENGINE=InnoDB;
 
@@ -261,6 +266,8 @@ CREATE TABLE payments (
     idempotency_key  VARCHAR(36)   NULL,
     created_at       DATETIME      DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_payments_idempotency (idempotency_key),
+    INDEX idx_payment_date (payment_date),
+    INDEX idx_payment_cat  (payment_category),
     CONSTRAINT fk_pay_billing  FOREIGN KEY (billing_id)   REFERENCES billing (billing_id),
     CONSTRAINT fk_pay_contract FOREIGN KEY (contract_id)  REFERENCES contracts (contract_id),
     CONSTRAINT fk_pay_actor    FOREIGN KEY (processed_by) REFERENCES users   (user_id),
