@@ -8,10 +8,10 @@
  use Illuminate\Support\Facades\DB;
  
  /**
-  * Core Forensic Audit Service
+  * Audit Service
   * 
   * Handles database session context injection and manual application-level
-  * forensic events. This is the foundation of the HavenStay traceability engine.
+  * audit events. This is the foundation of the HavenStay auditing system.
   */
  class AuditService
  {

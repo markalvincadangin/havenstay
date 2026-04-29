@@ -13,9 +13,8 @@
  /**
   * UtilityService
   * 
-  * Manages the canonical utility catalog and rate schedules.
+  * Manages the utility catalog and rate schedules.
   * Aligned with BR-MET-001 and BR-MET-007.
-  * Optimized for HavenStay Forensic v5.0.
   */
  class UtilityService
  {
@@ -34,8 +33,8 @@
              actorId: $actor->user_id,
              action: 'CREATE_UTILITY',
              payload: [
-                 'name_fact' => $data['name'] ?? 'UNKNOWN',
-                 'initial_rate_fact' => $data['initial_base_rate'] ?? 0,
+                 'name' => $data['name'] ?? 'UNKNOWN',
+                 'initial_rate' => $data['initial_base_rate'] ?? 0,
              ],
              operation: function () use ($data) {
                  // 1. Create the Utility

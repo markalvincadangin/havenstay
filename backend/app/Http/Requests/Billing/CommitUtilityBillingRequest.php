@@ -31,6 +31,7 @@
  
          return [
              'room_id' => ['required', 'integer', 'exists:rooms,room_id'],
+             'total_charge' => ['required', 'numeric', 'min:0'],
              'billing_period_start' => ['required', 'date'],
              'billing_period_end' => ['required', 'date', 'after:billing_period_start'],
              

@@ -16,9 +16,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  /**
   * ReportController
   * 
-  * Orchestrates the analytical suite, including occupancy, financial summaries, 
-  * and forensic security audits.
-  * Optimized for HavenStay Forensic v5.0.
+  * Orchestrates analytical reporting, including occupancy, financial summaries, 
+  * and security audit logs.
   */
  class ReportController extends Controller
  {
@@ -162,7 +161,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
      }
  
      /**
-      * FR-054: Security Pulse Metrics (Forensic Activity).
+      * FR-054: Security Pulse Metrics (Audit Activity).
       */
      public function securityPulse(Request $request): JsonResponse
      {
@@ -174,7 +173,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
      }
  
      /**
-      * FR-023: Meter Asset Management & Metrology Summary.
+      * FR-023: Meter Asset Management & Usage Summary.
       */
      public function meterCoverage(ManageReportsRequest $request): JsonResponse
      {
@@ -298,7 +297,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
      }
  
      /**
-      * Append meta for analytical row pagination.
+      * Append meta for row pagination.
       */
      private function withOptionalRowPagination(array $report, Request $request, string $key = 'rows'): array
      {

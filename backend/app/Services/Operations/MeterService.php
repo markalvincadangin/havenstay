@@ -17,8 +17,6 @@
   * MeterService
   * 
   * Orchestrates physical utility meter lifecycle and consumption tracking.
-  * Strictly adheres to Level 5 Forensic standards.
-  * Optimized for HavenStay Forensic v5.0.
   */
  class MeterService
  {
@@ -43,7 +41,7 @@
                      ->orderByDesc('created_at')
                      ->first();
  
-                 // Forensic Check 1: Exact Duplicate Prevention (Idempotency)
+                 // Validation 1: Exact Duplicate Prevention (Idempotency)
                  $duplicate = MeterReading::where('meter_id', $meterId)
                      ->where('reading_date', $data['reading_date'])
                      ->where('reading_value', $data['reading_value'])
@@ -53,7 +51,7 @@
                      return $duplicate; 
                  }
  
-                 // Forensic Check 2: Calendar Month Guard (Multiple readings in one month)
+                 // Validation 2: Calendar Month Guard (Multiple readings in one month)
                  $readingMonth = \Carbon\Carbon::parse($data['reading_date'])->format('Y-m');
                  $existsInMonth = MeterReading::where('meter_id', $meterId)
                      ->whereRaw("DATE_FORMAT(reading_date, '%Y-%m') = ?", [$readingMonth])
@@ -64,7 +62,7 @@
                      throw ValidationException::withMessages([
                          'reading_value' => [
                              sprintf(
-                                 'Forensic Integrity Violation: Reading (%s) cannot be lower than the previous reading (%s) unless flagged as a rollover.',
+                                 'Validation Error: Reading (%s) cannot be lower than the previous reading (%s) unless flagged as a rollover.',
                                  number_format($data['reading_value'], 2),
                                  number_format($lastReading->reading_value, 2)
                              )
@@ -123,7 +121,7 @@
      }
  
      /**
-      * List meters with pagination and forensic context.
+      * List meters with pagination.
       */
      public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
      {
@@ -140,7 +138,6 @@
  
      /**
       * Assemble the latest consumption data for all active meters in a room.
-      * extracted from Room model to maintain Layer Purity.
       *
       * @return array<string, array{value: float, date: string, serial: string}>
       */
@@ -174,7 +171,7 @@
      }
  
      /**
-      * List all meters with specialized forensic filtering.
+      * List all meters with filtering.
       * @return Builder<Meter>
       */
      public static function listHistoryQuery(array $filters): Builder

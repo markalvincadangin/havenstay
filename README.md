@@ -5,7 +5,7 @@
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-black?logo=next.js)](https://nextjs.org)
 [![Docker](https://img.shields.io/badge/Infrastructure-Docker-blue?logo=docker)](https://www.docker.com/)
 
-HavenStay is a centralized, high-performance boarding house management system designed for operational efficiency, audit compliance, and forensic data integrity.
+HavenStay is a centralized, high-performance boarding house management system designed for operational efficiency, audit compliance, and data integrity.
 
 ### 🚀 Live Environments
 *   **Production Application**: [https://havenstay-theta.vercel.app/](https://havenstay-theta.vercel.app/)
@@ -28,8 +28,8 @@ See the **[Development Setup Guide](./docs/DEV_SETUP.md)** for detailed instruct
 ## Key Features
 
 - **Distributed Architecture**: Multi-node database strategy using a **MySQL Primary-Replica** topology, ensuring high availability and read-heavy optimization (Satisfies CCR-002).
-- **Forensic Auditing**: Complete row-level audit trail powered by 45 database triggers capturing full JSON snapshots (Satisfies CCR-007).
-- **Forensic UI/UX**: Professional interface using **Structural Skeletons** for layout stability and analytical clarity.
+- **Audit Trails**: Complete row-level audit trail powered by database triggers capturing full JSON snapshots.
+- **Modern UI/UX**: Professional interface using structural skeletons for layout stability and clarity.
 - **Transaction Reliability**: Robust workflow logging and explicit `DB::transaction()` boundaries for all financial operations (Satisfies CCR-006).
 - **Operational Intelligence**: Real-time dashboards and professional CSV reports using SQL Joins and Canonical Views (Satisfies CCR-005).
 

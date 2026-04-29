@@ -193,127 +193,114 @@ class UtilityApportionmentService
                 'occupant_count' => count($data['apportionments'] ?? [])
             ],
             operation: function () use ($data, $actor) {
-                $results = [];
-
-                // CCR-011: Pre-calculate weights for consistent commit logic
-                // We fetch the contracts again to ensure fresh data
-                $roomId = (int) ($data['room_id'] ?? 0);
-                $activeContracts = Contract::whereHas('bedSpace', function ($q) use ($roomId) {
-                    $q->where('room_id', $roomId);
-                })
-                    ->where('status', ContractStatus::ACTIVE)
-                    ->orderBy('move_in_date', 'asc')
-                    ->get();
-
                 $weights = self::calculateOccupancyWeights(
-                    $activeContracts,
+                    Contract::whereIn('contract_id', collect($data['apportionments'])->pluck('contract_id'))->get(),
                     $data['billing_period_start'],
                     $data['billing_period_end']
                 );
 
-                $runningTotalDistributed = 0;
-                $totalToDistribute = (float) ($data['total_charge'] ?? 0);
+                $results = [];
 
                 foreach ($data['apportionments'] as $index => $split) {
-                    $weight = $weights[$split['contract_id']] ?? 0;
+                    $billing = self::processOccupantBilling($actor, $data, $split, $weights, $index === 0);
                     
-                    // BR-MET-011: Calculate target amount with differential handling
-                    $isEarliest = ($index === 0);
-                    $targetUtilityAmount = Financials::roundToCent($totalToDistribute * $weight);
-                    
-                    // If it's the earliest, we'll reconcile at the end of the line item loop
-                    // OR we pre-calculate the diff by checking what the OTHERS will get.
-                    // To keep it simple and accurate, we distribute to all, then 
-                    // the first one gets the remainder of the WHOLE room charge.
-                    
-                    try {
-                        // Create billing record
-                        $billing = BillingService::create($actor, [
-                            'contract_id' => $split['contract_id'],
-                            'billing_period_from' => $data['billing_period_start'],
-                            'billing_period_to' => $data['billing_period_end'],
-                            'due_date' => $data['due_date'],
-                            'line_items' => $split['manual_items'] ?? []
-                        ]);
-
-                        // Distribute utility line items based on readings
-                        // Itemized per meter to comply with database constraints.
-                    } catch (\Illuminate\Validation\ValidationException $e) {
-                        // CCR-014: Fail-Safe Loop
-                        // If one tenant is already billed (e.g. new move-in), we skip them 
-                        // but CONTINUE for other tenants in the same room.
-                        \Illuminate\Support\Facades\Log::info("Utility commit skipped for contract #{$split['contract_id']} due to overlap: " . $e->getMessage());
-                        // IMPORTANT: Even if skipped, we subtract their "would-be" share from the room total
-                        // so the differential for others remains consistent.
-                        $runningTotalDistributed += $targetUtilityAmount;
-                        continue;
+                    if ($billing) {
+                        $results[] = clone $billing;
                     }
-
-                    // Distribute line items
-                    // Create one line item per meter reading.
-                    $readings = $data['readings'] ?? [];
-                    foreach ($readings as $reqReading) {
-                        $prev = MeterReading::with('meter')->find($reqReading['previous_reading_id']);
-                        $curr = MeterReading::find($reqReading['current_reading_id']);
-                        if (!$prev || !$curr)
-                            continue;
-
-                        $meterTotalCharge = Financials::computeUtilityCost(
-                            $prev->meter_id,
-                            (float) $curr->reading_value,
-                            $data['billing_period_start'],
-                            (float) $prev->reading_value
-                        );
-
-                        // Apportion this specific meter's cost to this tenant using weights
-                        $meterShare = Financials::roundToCent($meterTotalCharge * $weight);
-
-                        BillingLineItem::create([
-                            'billing_id' => $billing->billing_id,
-                            'utility_id' => $prev->meter->utility_id,
-                            'reading_id' => $curr->reading_id,
-                            'item_type' => LineItemType::UTILITY,
-                            'item_description' => $prev->meter->utility->name . " Share (Meter: " . $prev->meter->serial_number . ")",
-                            'amount' => $meterShare,
-                        ]);
-                    }
-
-                    // Adjust final balance to match calculated apportionment total.
-                    $sumOfMeters = $billing->lineItems()->where('item_type', LineItemType::UTILITY)->sum('amount');
-                    
-                    // Final Share Calculation with BR-MET-011 Differential
-                    if ($index === 0) {
-                        // The earliest contract absorbs the room remainder
-                        // We compute what the OTHER tenants' targets sum to
-                        $othersTargetSum = 0;
-                        foreach (array_slice($data['apportionments'], 1) as $other) {
-                            $w = $weights[$other['contract_id']] ?? 0;
-                            $othersTargetSum += Financials::roundToCent($totalToDistribute * $w);
-                        }
-                        $finalTargetForThisTenant = Financials::roundToCent($totalToDistribute - $othersTargetSum);
-                    } else {
-                        $finalTargetForThisTenant = $targetUtilityAmount;
-                    }
-
-                    $diff = Financials::roundToCent($finalTargetForThisTenant - $sumOfMeters);
-
-                    if (abs($diff) > 0.001) {
-                        BillingLineItem::create([
-                            'billing_id' => $billing->billing_id,
-                            'item_type' => LineItemType::ADJUSTMENT,
-                            'item_description' => $index === 0 ? 'Utility Rounding Differential (BR-MET-011)' : 'Utility Cent-Rounding Adjustment',
-                            'amount' => $diff,
-                        ]);
-                    }
-
-                    // Sync status
-                    $billing = BillingService::syncBillingStatus($actor, $billing);
-
-                    $results[] = clone $billing;
                 }
 
                 return $results;
             }
         );
+    }
+
+    /**
+     * Process billing for a single occupant, handling existing bills or creating new ones.
+     */
+    private static function processOccupantBilling(User $actor, array $data, array $split, array $weights, bool $isFirst): ?Billing
+    {
+        $contract = Contract::findOrFail($split['contract_id']);
+        $targetUtilityAmount = (float) $split['amount'];
+        $billing = null;
+
+        try {
+            // Create new billing record
+            $billing = BillingService::create($actor, [
+                'contract_id' => $split['contract_id'],
+                'billing_period_from' => $data['billing_period_start'],
+                'billing_period_to' => $data['billing_period_end'],
+                'due_date' => $data['due_date'],
+                'line_items' => $split['manual_items'] ?? []
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Append to existing bill if overlap occurs (BR-BIL-010)
+            $billing = Billing::where('contract_id', $split['contract_id'])
+                ->where(function ($q) use ($data) {
+                    $q->whereDate('billing_period_from', '<=', $data['billing_period_end'])
+                        ->whereDate('billing_period_to', '>=', $data['billing_period_start']);
+                })
+                ->first();
+
+            if (!$billing) {
+                \Illuminate\Support\Facades\Log::info("Utility commit skipped for contract #{$split['contract_id']} due to validation failure.");
+                return null;
+            }
+
+            // Manually add additional items for existing bills
+            if (!empty($split['manual_items'])) {
+                foreach ($split['manual_items'] as $item) {
+                    BillingLineItem::create([
+                        'billing_id' => $billing->billing_id,
+                        'item_type' => $item['item_type'] ?? LineItemType::ADJUSTMENT,
+                        'item_description' => $item['description'],
+                        'amount' => (float) $item['amount'],
+                    ]);
+                }
+            }
+        }
+
+        // Distribute utility charges per meter reading
+        $readings = $data['readings'] ?? [];
+        $sumOfMeters = 0;
+        $weight = $weights[$contract->contract_id] ?? 0;
+
+        foreach ($readings as $reqReading) {
+            $prev = MeterReading::with('meter')->find($reqReading['previous_reading_id']);
+            $curr = MeterReading::find($reqReading['current_reading_id']);
+            if (!$prev || !$curr) continue;
+
+            $meterTotalCharge = Financials::computeUtilityCost(
+                $prev->meter_id,
+                (float) $curr->reading_value,
+                $data['billing_period_start'],
+                (float) $prev->reading_value
+            );
+
+            $meterShare = Financials::roundToCent($meterTotalCharge * $weight);
+            $sumOfMeters += $meterShare;
+
+            BillingLineItem::create([
+                'billing_id' => $billing->billing_id,
+                'utility_id' => $prev->meter->utility_id,
+                'reading_id' => $curr->reading_id,
+                'item_type' => LineItemType::UTILITY,
+                'item_description' => "Utility: {$prev->meter->utility->name} (SN: {$prev->meter->serial_number})",
+                'amount' => $meterShare,
+            ]);
+        }
+
+        // Bridge the gap between individual meter shares and the target total share (BR-MET-011)
+        $diff = Financials::roundToCent($targetUtilityAmount - $sumOfMeters);
+
+        if (abs($diff) > 0.001) {
+            BillingLineItem::create([
+                'billing_id' => $billing->billing_id,
+                'item_type' => LineItemType::ADJUSTMENT,
+                'item_description' => $isFirst ? 'Utility Rounding Differential (BR-MET-011)' : 'Utility Cent-Rounding Adjustment',
+                'amount' => $diff,
+            ]);
+        }
+
+        return BillingService::syncBillingStatus($actor, $billing);
     }
 }

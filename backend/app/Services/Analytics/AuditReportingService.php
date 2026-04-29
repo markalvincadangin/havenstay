@@ -11,8 +11,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Core forensic auditing service. Handles manual application events,
- * login/logout tracking, and database trigger context management.
+ * Service for querying and exporting audit logs. Handles application
+ * events, login/logout tracking, and database context management.
  */
 class AuditReportingService
 {

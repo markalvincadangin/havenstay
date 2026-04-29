@@ -14,9 +14,8 @@
  /**
   * AuditLogController
   * 
-  * Handles administrative inspection and export of system forensic logs.
+  * Handles administrative inspection and export of system audit logs.
   * Strictly restricted to Admin role.
-  * Optimized for HavenStay Forensic v5.0 with API Resource serialization.
   */
  class AuditLogController extends Controller
  {
@@ -54,7 +53,7 @@
      }
  
      /**
-      * Export audit logs to CSV for external forensic analysis.
+      * Export audit logs to CSV for external analysis.
       */
      public function export(ExportAuditLogRequest $request): StreamedResponse
      {

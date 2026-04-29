@@ -11,15 +11,13 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Analytics engine for generating operational, financial, and forensic reports.
- * Interfaces with hardened database views for performance and reliability.
+ * Analytics engine for generating operational, financial, and audit reports.
  */
 class ReportService
 {
     use HasReportingFilters;
     /**
      * Generate an occupancy report by room and bed.
-     * Aligned with hardened schema vw_room_occupancy.
      *
      * @param  array{room_type?: string}  $filters
      * @return array{summary: array{total_rooms: int, total_beds: int, occupied_beds: int, vacant_beds: int}, rows: Collection}
@@ -423,7 +421,7 @@ class ReportService
                 'account_count' => (int) ($summaryData->account_count ?? 0),
                 'total_outstanding' => Financials::roundToCent((float) ($summaryData->total_outstanding ?? 0)),
                 'overdue_count' => (int) ($summaryData->overdue_count ?? 0),
-                'overdue_total' => Financials::roundToCent((float) ($summaryData->overdue_total ?? 0)),
+                'overdue_total' => Financials::roundToCent($summaryData->overdue_total ?? 0),
             ],
             'rows' => $mappedRows,
             'meta' => $paginator ? [
@@ -544,7 +542,7 @@ class ReportService
             return (array) $row;
         });
 
-        // CCR-007: Forensic monitoring of voided transactions
+        // Monitoring of voided transactions
         $voidedQuery = DB::table('payments')
             ->whereNotNull('voided_at');
         self::applyDateRange($voidedQuery, $filters, 'payment_date');
@@ -581,8 +579,7 @@ class ReportService
     }
 
     /**
-     * Security mutability pulse via audit logs.
-     * Aligned with forensic requirements CCR-007.
+     * Security pulse via audit logs.
      */
     public static function securityPulse(): array
     {
@@ -621,7 +618,7 @@ class ReportService
         return [
             'total_meters' => $totalMeters,
             'coverage_pct' => $totalMeters > 0 ? round(($coveredMeters / $totalMeters) * 100, 1) : 0,
-            'anomalous_spikes' => 0, // Forensic anomaly detection pending metrology baseline
+            'anomalous_spikes' => 0, // Anomaly detection pending baseline
             'total_pending' => DB::table('meters')
                 ->where('status', 'active')
                 ->count() - $coveredMeters,

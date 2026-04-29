@@ -438,6 +438,7 @@ export default function BillingWizard() {
           billing_period_end: getValues("billing_period_end"),
           due_date: getValues("due_date"),
           readings: getValues("readings"),
+          total_charge: forecast.total_charge,
           apportionments: apportionmentsPayload
         })
       });
