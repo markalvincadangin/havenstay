@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Role Model
- * 
+ *
  * Defines access levels for system operators (admin, staff, viewer).
- * 
+ *
  * @property int $role_id
  * @property string $role_name
  * @property string|null $description

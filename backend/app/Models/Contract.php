@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,25 +11,24 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Enums\ContractStatus;
-use App\Enums\ContractType;
+use Illuminate\Support\Carbon;
 
 /**
  * Contract Model
- * 
+ *
  * @property int $contract_id
  * @property int $tenant_id
  * @property int $bed_space_id
  * @property int $created_by
- * @property \App\Enums\ContractType $contract_type
- * @property \Illuminate\Support\Carbon $move_in_date
- * @property \Illuminate\Support\Carbon|null $expected_move_out_date
- * @property \Illuminate\Support\Carbon|null $actual_move_out_date
+ * @property ContractType $contract_type
+ * @property Carbon $move_in_date
+ * @property Carbon|null $expected_move_out_date
+ * @property Carbon|null $actual_move_out_date
  * @property float $monthly_rate
  * @property float|null $monthly_rate_override
  * @property float $deposit_amount
  * @property bool $is_cleared
- * @property \App\Enums\ContractStatus $status
+ * @property ContractStatus $status
  * @property string|null $notes
  */
 class Contract extends Model
@@ -35,6 +36,7 @@ class Contract extends Model
     use HasFactory, SoftDeletes;
 
     protected $table = 'contracts';
+
     protected $primaryKey = 'contract_id';
 
     protected $fillable = [

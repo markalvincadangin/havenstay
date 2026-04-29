@@ -17,9 +17,9 @@ class IndexMeterRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanViewMetrology($this->user());
+
         return true;
     }
-
 
     public function rules(): array
     {

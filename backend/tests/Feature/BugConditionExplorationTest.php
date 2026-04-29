@@ -2,8 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\BedSpaceStatus;
+use App\Enums\BillingStatus;
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
 use App\Enums\PaymentMethod;
-use App\Models\AuditLog;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
+use App\Enums\TenantStatus;
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -13,19 +19,10 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Enums\BillingStatus;
-use App\Enums\RoomStatus;
-use App\Enums\RoomType;
-use App\Enums\ContractStatus;
-use App\Enums\TenantStatus;
-use App\Enums\BedSpaceStatus;
-use App\Services\Core\AuthorizationService;
-use App\Services\Operations\BillingService;
-use App\Services\Operations\PaymentService;
 use App\Services\Analytics\ReportService;
+use App\Services\Operations\PaymentService;
 use App\Services\Operations\RoomService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -70,7 +67,7 @@ class BugConditionExplorationTest extends TestCase
         ]);
 
         $billing->refresh();
-        $this->assertEquals(0.0, (float)$billing->total_paid);
+        $this->assertEquals(0.0, (float) $billing->total_paid);
     }
 
     public function test_bug_003_room_status_set_to_invalid_occupied_enum(): void
@@ -99,7 +96,7 @@ class BugConditionExplorationTest extends TestCase
             'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 1000,
             'monthly_rate' => 5000,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
             'status' => ContractStatus::ACTIVE->value,
         ]);
 
@@ -144,7 +141,7 @@ class BugConditionExplorationTest extends TestCase
             'due_date' => '2026-06-05',
             'status' => BillingStatus::UNPAID->value,
         ]);
-        
+
         BillingLineItem::create([
             'billing_id' => $billing1->billing_id,
             'item_type' => 'base_rent',
@@ -185,7 +182,7 @@ class BugConditionExplorationTest extends TestCase
             'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 1000,
             'monthly_rate' => 5000,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
             'status' => ContractStatus::ACTIVE->value,
         ]);
 
@@ -231,7 +228,7 @@ class BugConditionExplorationTest extends TestCase
             'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 1000,
             'monthly_rate' => 5000,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
             'status' => ContractStatus::ACTIVE->value,
         ]);
     }
@@ -241,7 +238,7 @@ class BugConditionExplorationTest extends TestCase
         return array_merge([
             'first_name' => 'John',
             'last_name' => 'Doe',
-            'email' => 'john' . uniqid() . '@example.com',
+            'email' => 'john'.uniqid().'@example.com',
             'contact_number' => '+639170000000',
             'emergency_contact_name' => 'Jane Doe',
             'emergency_contact_number' => '+639170000001',

@@ -16,6 +16,7 @@ class AssignMeterRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanManageMetrology($this->user());
+
         return true;
     }
 

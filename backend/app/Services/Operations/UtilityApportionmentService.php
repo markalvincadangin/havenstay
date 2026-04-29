@@ -2,21 +2,22 @@
 
 namespace App\Services\Operations;
 
+use App\Enums\ContractStatus;
+use App\Enums\LineItemType;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
 use App\Models\Contract;
 use App\Models\MeterReading;
 use App\Models\User;
 use App\Models\UtilityRate;
-use App\Enums\ContractStatus;
-use App\Enums\LineItemType;
-use App\Support\Financials;
 use App\Services\Concerns\ManagesWorkflows;
-use Illuminate\Support\Facades\DB;
+use App\Support\Financials;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 /**
- * Implements the financial logic for utility consumption proration 
+ * Implements the financial logic for utility consumption proration
  * and rounding differential handling (BR-MET-011).
  */
 class UtilityApportionmentService
@@ -42,7 +43,7 @@ class UtilityApportionmentService
         if (empty($contractIds)) {
             return [
                 'total_charge' => 0,
-                'apportionments' => []
+                'apportionments' => [],
             ];
         }
 
@@ -54,8 +55,9 @@ class UtilityApportionmentService
             $prev = MeterReading::with('meter')->find($reqReading['previous_reading_id']);
             $curr = MeterReading::find($reqReading['current_reading_id']);
 
-            if (!$prev || !$curr)
+            if (! $prev || ! $curr) {
                 continue;
+            }
 
             $utilityId = $prev->meter->utility_id;
 
@@ -81,14 +83,13 @@ class UtilityApportionmentService
 
             $rate = $activeRate ? (float) $activeRate->base_rate : 0.0;
 
-
             $totalCharge += $charge;
             $breakdown[] = [
                 'meter' => $prev->meter->serial_number,
                 'utility' => $prev->meter->utility->name ?? 'Utility',
                 'usage' => $usage,
                 'rate' => $rate,
-                'charge' => $charge
+                'charge' => $charge,
             ];
         }
 
@@ -120,16 +121,16 @@ class UtilityApportionmentService
 
             $apportionments[] = [
                 'contract_id' => $contract->contract_id,
-                'tenant_name' => $contract->tenant->first_name . ' ' . $contract->tenant->last_name,
+                'tenant_name' => $contract->tenant->first_name.' '.$contract->tenant->last_name,
                 'base_rent' => $baseRent,
                 'utility_share' => $utilityShare,
                 'total_estimated' => Financials::roundToCent($baseRent + $utilityShare),
-                'occupancy_days' => round($weight * 100, 1) . '% share', // UI context
+                'occupancy_days' => round($weight * 100, 1).'% share', // UI context
                 'already_billed' => $alreadyBilled,
                 'is_differential_target' => ($index === 0), // BR-MET-011 Target
-                'override_reason' => $alreadyBilled ? "Note: Rent excluded (already billed for this period)." : null
+                'override_reason' => $alreadyBilled ? 'Note: Rent excluded (already billed for this period).' : null,
             ];
-            
+
             $runningTotal += $utilityShare;
         }
 
@@ -190,7 +191,7 @@ class UtilityApportionmentService
             payload: [
                 'room_id' => $data['room_id'] ?? 0,
                 'period_start' => $data['billing_period_start'] ?? null,
-                'occupant_count' => count($data['apportionments'] ?? [])
+                'occupant_count' => count($data['apportionments'] ?? []),
             ],
             operation: function () use ($data, $actor) {
                 $weights = self::calculateOccupancyWeights(
@@ -203,7 +204,7 @@ class UtilityApportionmentService
 
                 foreach ($data['apportionments'] as $index => $split) {
                     $billing = self::processOccupantBilling($actor, $data, $split, $weights, $index === 0);
-                    
+
                     if ($billing) {
                         $results[] = clone $billing;
                     }
@@ -230,9 +231,9 @@ class UtilityApportionmentService
                 'billing_period_from' => $data['billing_period_start'],
                 'billing_period_to' => $data['billing_period_end'],
                 'due_date' => $data['due_date'],
-                'line_items' => $split['manual_items'] ?? []
+                'line_items' => $split['manual_items'] ?? [],
             ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             // Append to existing bill if overlap occurs (BR-BIL-010)
             $billing = Billing::where('contract_id', $split['contract_id'])
                 ->where(function ($q) use ($data) {
@@ -241,13 +242,14 @@ class UtilityApportionmentService
                 })
                 ->first();
 
-            if (!$billing) {
-                \Illuminate\Support\Facades\Log::info("Utility commit skipped for contract #{$split['contract_id']} due to validation failure.");
+            if (! $billing) {
+                Log::info("Utility commit skipped for contract #{$split['contract_id']} due to validation failure.");
+
                 return null;
             }
 
             // Manually add additional items for existing bills
-            if (!empty($split['manual_items'])) {
+            if (! empty($split['manual_items'])) {
                 foreach ($split['manual_items'] as $item) {
                     $itemAmount = (float) $item['amount'];
                     if (abs($itemAmount) > 0.001) {
@@ -270,7 +272,9 @@ class UtilityApportionmentService
         foreach ($readings as $reqReading) {
             $prev = MeterReading::with('meter')->find($reqReading['previous_reading_id']);
             $curr = MeterReading::find($reqReading['current_reading_id']);
-            if (!$prev || !$curr) continue;
+            if (! $prev || ! $curr) {
+                continue;
+            }
 
             $meterTotalCharge = Financials::computeUtilityCost(
                 $prev->meter_id,

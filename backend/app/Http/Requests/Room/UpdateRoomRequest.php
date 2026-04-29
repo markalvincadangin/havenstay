@@ -2,13 +2,13 @@
 
 namespace App\Http\Requests\Room;
 
+use App\Enums\BedSpaceStatus;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
 use App\Models\Room;
 use App\Services\Core\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use App\Enums\RoomType;
-use App\Enums\RoomStatus;
-use App\Enums\BedSpaceStatus;
 
 /**
  * Validates data for updating room properties and bed configurations.
@@ -21,6 +21,7 @@ class UpdateRoomRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanManageRooms($this->user());
+
         return true;
     }
 

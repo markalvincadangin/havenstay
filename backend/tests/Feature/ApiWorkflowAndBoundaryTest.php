@@ -2,8 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\BedSpaceStatus;
+use App\Enums\BillingStatus;
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
 use App\Enums\PaymentMethod;
-use App\Models\AuditLog;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
+use App\Enums\TenantStatus;
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -85,14 +91,14 @@ class ApiWorkflowAndBoundaryTest extends TestCase
         $code = 'DUP-'.uniqid();
         $this->actingAs($this->adminUser)->postJson('/api/rooms', [
             'room_code' => $code,
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
         ])->assertCreated();
 
         $this->actingAs($this->adminUser)->postJson('/api/rooms', [
             'room_code' => $code,
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
         ])->assertUnprocessable()
@@ -165,15 +171,15 @@ class ApiWorkflowAndBoundaryTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'WF-'.uniqid(),
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'W1',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         return Contract::create([
@@ -184,8 +190,8 @@ class ApiWorkflowAndBoundaryTest extends TestCase
             'expected_move_out_date' => '2026-10-01',
             'deposit_amount' => 0,
             'monthly_rate' => 4000,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
     }
 
@@ -197,7 +203,7 @@ class ApiWorkflowAndBoundaryTest extends TestCase
             'billing_period_from' => '2026-05-01',
             'billing_period_to' => '2026-05-31',
             'due_date' => '2026-06-05',
-            'status' => \App\Enums\BillingStatus::UNPAID->value,
+            'status' => BillingStatus::UNPAID->value,
         ]);
 
         BillingLineItem::create([
@@ -215,12 +221,12 @@ class ApiWorkflowAndBoundaryTest extends TestCase
         return array_merge([
             'first_name' => 'John',
             'last_name' => 'Doe',
-            'email' => 'john' . uniqid() . '@example.com',
+            'email' => 'john'.uniqid().'@example.com',
             'contact_number' => '+639170000000',
             'emergency_contact_name' => 'Jane Doe',
             'emergency_contact_number' => '+639170000001',
             'address' => '123 Main St, City',
-            'status' => \App\Enums\TenantStatus::ACTIVE->value,
+            'status' => TenantStatus::ACTIVE->value,
         ], $overrides);
     }
 }

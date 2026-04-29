@@ -22,6 +22,7 @@ import RecordStateAlert from "@/components/ui/RecordStateAlert";
 import StandardPage from "@/components/ui/StandardPage";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import Avatar from "@/components/ui/Avatar";
+import Alert from "@/components/ui/Alert";
 import { useAuth } from "@/context/AuthContext";
 import { useToasts } from "@/context/ToastContext";
 import { interactiveTableRowClass, stopRowClick } from "@/lib/tableRows";

@@ -2,13 +2,14 @@
 
 namespace Tests\Unit\Services;
 
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
 use App\Models\BedSpace;
 use App\Models\Contract;
 use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Enums\ContractStatus;
 use App\Services\Operations\ContractService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
@@ -101,7 +102,7 @@ class ContractServiceTest extends TestCase
             'monthly_rate_override' => 5000,
             'deposit_amount' => 5000,
             'status' => ContractStatus::COMPLETED->value,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
             'created_at' => now()->subMonths(6),
         ]);
 
@@ -115,7 +116,7 @@ class ContractServiceTest extends TestCase
             'monthly_rate_override' => 5000,
             'deposit_amount' => 5000,
             'status' => ContractStatus::ACTIVE->value,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
             'created_at' => now(),
         ]);
 

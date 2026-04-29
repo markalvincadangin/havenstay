@@ -3,12 +3,9 @@
 namespace App\Services\Analytics;
 
 use App\Models\AuditLog;
-use App\Models\User;
 use App\Services\Concerns\HasReportingFilters;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Service for querying and exporting audit logs. Handles application
@@ -29,39 +26,39 @@ class AuditReportingService
             $q->select('user_id', 'username', 'first_name', 'last_name');
         }]);
 
-        if (!empty($filters['entity_type'])) {
+        if (! empty($filters['entity_type'])) {
             $query->where('target_table', $filters['entity_type']);
         }
 
-        if (!empty($filters['action'])) {
+        if (! empty($filters['action'])) {
             $query->where('action', $filters['action']);
         }
 
         self::applyDateRange($query, $filters, 'changed_at');
 
-        if (!empty($filters['q'])) {
+        if (! empty($filters['q'])) {
             $q = $filters['q'];
             $query->where(function ($sub) use ($q) {
                 $sub->where('correlation_id', 'LIKE', "%{$q}%")
                     ->orWhere('record_id', 'LIKE', "%{$q}%")
                     ->orWhereHas('user', function ($uq) use ($q) {
                         $uq->where('username', 'LIKE', "%{$q}%")
-                           ->orWhere('first_name', 'LIKE', "%{$q}%")
-                           ->orWhere('last_name', 'LIKE', "%{$q}%");
+                            ->orWhere('first_name', 'LIKE', "%{$q}%")
+                            ->orWhere('last_name', 'LIKE', "%{$q}%");
                     });
             });
         }
 
-        if (!empty($filters['user'])) {
+        if (! empty($filters['user'])) {
             $userQ = $filters['user'];
             $query->whereHas('user', function ($q) use ($userQ) {
                 $q->where('username', 'LIKE', "%{$userQ}%")
-                  ->orWhere('first_name', 'LIKE', "%{$userQ}%")
-                  ->orWhere('last_name', 'LIKE', "%{$userQ}%");
+                    ->orWhere('first_name', 'LIKE', "%{$userQ}%")
+                    ->orWhere('last_name', 'LIKE', "%{$userQ}%");
             });
         }
 
-        if (!empty($filters['correlation'])) {
+        if (! empty($filters['correlation'])) {
             $query->where('correlation_id', 'LIKE', "%{$filters['correlation']}%");
         }
 
@@ -72,7 +69,7 @@ class AuditReportingService
 
     public static function countAccessDeniedMatchingFilters(array $filters = []): int
     {
-        if (!empty($filters['action']) && $filters['action'] !== 'access_denied') {
+        if (! empty($filters['action']) && $filters['action'] !== 'access_denied') {
             return 0;
         }
 
@@ -98,12 +95,12 @@ class AuditReportingService
 
         $rows = $logs->map(function ($log) {
             return [
-                (string)$log->id,
-                (string)$log->changed_at,
+                (string) $log->id,
+                (string) $log->changed_at,
                 $log->user?->username ?? 'System',
                 $log->action,
                 $log->target_table,
-                (string)$log->record_id,
+                (string) $log->record_id,
                 json_encode($log->old_value),
                 json_encode($log->new_value),
             ];

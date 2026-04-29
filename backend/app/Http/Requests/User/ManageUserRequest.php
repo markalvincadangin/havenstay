@@ -16,6 +16,7 @@ class ManageUserRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanManageUsers($this->user());
+
         return true;
     }
 

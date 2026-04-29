@@ -2,6 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\BedSpaceStatus;
+use App\Enums\BillingStatus;
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
+use App\Enums\PaymentMethod;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
+use App\Enums\TenantStatus;
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -77,7 +85,7 @@ class BillingPaymentManagementTest extends TestCase
 
         $this->assertDatabaseHas('billing', [
             'billing_id' => $billingId,
-            'status' => \App\Enums\BillingStatus::UNPAID->value,
+            'status' => BillingStatus::UNPAID->value,
         ]);
 
         // Verify line items
@@ -112,7 +120,7 @@ class BillingPaymentManagementTest extends TestCase
         $response->assertCreated();
         $this->assertDatabaseHas('billing', [
             'billing_id' => $billing->billing_id,
-            'status' => \App\Enums\BillingStatus::PARTIAL->value,
+            'status' => BillingStatus::PARTIAL->value,
         ]);
 
         $this->assertTriggerAuditLog([
@@ -173,7 +181,7 @@ class BillingPaymentManagementTest extends TestCase
         // Verify status remains unpaid
         $this->assertDatabaseHas('billing', [
             'billing_id' => $billing->billing_id,
-            'status' => \App\Enums\BillingStatus::UNPAID->value,
+            'status' => BillingStatus::UNPAID->value,
         ]);
 
         // Verify audit log shows no successful payment insert
@@ -223,7 +231,7 @@ class BillingPaymentManagementTest extends TestCase
             'processed_by' => $this->adminUser->user_id,
             'amount_paid' => 4500.00,
             'payment_date' => now()->subDays(5)->toDateString(),
-            'payment_method' => \App\Enums\PaymentMethod::CASH->value,
+            'payment_method' => PaymentMethod::CASH->value,
         ]);
         $paidBilling->refresh();
         BillingService::syncBillingStatus($this->adminUser, $paidBilling);
@@ -243,14 +251,14 @@ class BillingPaymentManagementTest extends TestCase
             'billing_period_from' => '2026-05-01',
             'billing_period_to' => '2026-05-31',
             'due_date' => now()->subDays(2)->toDateString(),
-            'status' => \App\Enums\BillingStatus::UNPAID->value,
+            'status' => BillingStatus::UNPAID->value,
         ]);
 
         BillingService::syncBillingStatus($this->adminUser, $zeroBilling->refresh());
 
         $this->assertDatabaseHas('billing', [
             'billing_id' => $zeroBilling->billing_id,
-            'status' => \App\Enums\BillingStatus::PAID->value,
+            'status' => BillingStatus::PAID->value,
         ]);
     }
 
@@ -274,7 +282,7 @@ class BillingPaymentManagementTest extends TestCase
 
         $this->assertDatabaseHas('billing', [
             'billing_id' => $billing->billing_id,
-            'status' => \App\Enums\BillingStatus::UNPAID->value,
+            'status' => BillingStatus::UNPAID->value,
         ]);
     }
 
@@ -284,16 +292,16 @@ class BillingPaymentManagementTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'R'.rand(100, 999),
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Bed 1',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         return Contract::create([
@@ -304,8 +312,8 @@ class BillingPaymentManagementTest extends TestCase
             'expected_move_out_date' => '2026-10-31',
             'deposit_amount' => 1000,
             'monthly_rate' => 5000,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
     }
 
@@ -318,7 +326,7 @@ class BillingPaymentManagementTest extends TestCase
             'billing_period_from' => '2026-05-01',
             'billing_period_to' => '2026-05-31',
             'due_date' => '2026-06-05',
-            'status' => \App\Enums\BillingStatus::UNPAID->value,
+            'status' => BillingStatus::UNPAID->value,
         ]);
 
         BillingLineItem::create([
@@ -336,12 +344,12 @@ class BillingPaymentManagementTest extends TestCase
         return array_merge([
             'first_name' => 'John',
             'last_name' => 'Doe',
-            'email' => 'john' . uniqid() . '@example.com',
+            'email' => 'john'.uniqid().'@example.com',
             'contact_number' => '+639170000000',
             'emergency_contact_name' => 'Jane Doe',
             'emergency_contact_number' => '+639170000001',
             'address' => '123 Main St, City',
-            'status' => \App\Enums\TenantStatus::ACTIVE->value,
+            'status' => TenantStatus::ACTIVE->value,
         ], $overrides);
     }
 }

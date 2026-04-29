@@ -3,8 +3,8 @@
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
-use App\Http\Controllers\Api\MeterController;
 use App\Http\Controllers\Api\ContractController;
+use App\Http\Controllers\Api\MeterController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoomController;
@@ -158,13 +158,14 @@ Route::middleware(['auth:sanctum', 'auth.check'])->group(function (): void {
 
 Route::get('/health', function () {
     try {
-        \DB::connection()->getPdo();
+        DB::connection()->getPdo();
+
         return response()->json([
             'status' => 'ok',
             'database' => 'connected',
             'service' => 'havenstay-backend',
         ]);
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
         return response()->json([
             'status' => 'error',
             'database' => 'disconnected',

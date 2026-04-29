@@ -16,6 +16,7 @@ class OccupyBedSpaceRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanManageRooms($this->user());
+
         return true;
     }
 

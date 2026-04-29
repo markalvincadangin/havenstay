@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthCheck;
+use App\Http\Middleware\HandleIdempotency;
 use App\Http\Middleware\SetAuditContext;
 use App\Services\Core\AuditService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -34,7 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->appendToGroup('api', [
             SetAuditContext::class,
-            \App\Http\Middleware\HandleIdempotency::class,
+            HandleIdempotency::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

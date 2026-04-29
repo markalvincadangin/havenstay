@@ -2,23 +2,23 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use App\Enums\BedSpaceStatus;
 use App\Enums\ContractStatus;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * BedSpace Model
- * 
+ *
  * Represents a specific bed within a room.
- * 
+ *
  * @property int $bed_space_id
  * @property int $room_id
  * @property string $bed_label
- * @property \App\Enums\BedSpaceStatus $status
+ * @property BedSpaceStatus $status
  */
 class BedSpace extends Model
 {
@@ -33,7 +33,6 @@ class BedSpace extends Model
         'bed_label',
         'status',
     ];
-
 
     protected function casts(): array
     {

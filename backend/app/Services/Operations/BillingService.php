@@ -2,25 +2,25 @@
 
 namespace App\Services\Operations;
 
-use App\Services\Concerns\ManagesWorkflows;
+use App\Enums\BillingStatus;
+use App\Enums\ContractStatus;
+use App\Enums\LineItemType;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
 use App\Models\Contract;
 use App\Models\Meter;
 use App\Models\MeterReading;
 use App\Models\User;
-use App\Enums\BillingStatus;
-use App\Enums\LineItemType;
-use App\Enums\ContractStatus;
+use App\Services\Concerns\ManagesWorkflows;
 use App\Support\Financials;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Manages the generation of monthly billing cycles, itemization of charges 
+ * Manages the generation of monthly billing cycles, itemization of charges
  * (rent, utilities), and status reconciliation.
  */
 class BillingService
@@ -29,17 +29,17 @@ class BillingService
 
     /**
      * Generate a new billing cycle record.
-     * 
-     * @param User $actor The staff member generating the bill.
-     * @param array $data Input details (contract_id, periods, line_items, readings).
-     * @return Billing
+     *
+     * @param  User  $actor  The staff member generating the bill.
+     * @param  array  $data  Input details (contract_id, periods, line_items, readings).
+     *
      * @throws ValidationException
      */
     public static function create(User $actor, array $data): Billing
     {
         self::validateCreateInput($data);
 
-        $contract = Contract::with(['bedSpace.room'])->findOrFail((int)$data['contract_id']);
+        $contract = Contract::with(['bedSpace.room'])->findOrFail((int) $data['contract_id']);
         $baseRent = $contract->monthly_rate_override ?? $contract->monthly_rate;
 
         return self::runWriteWorkflow(
@@ -47,7 +47,7 @@ class BillingService
             action: 'GENERATE_BILLING',
             payload: [
                 'contract_id' => $data['contract_id'],
-                'billing_period' => ($data['billing_period_from'] ?? 'N/A') . ' to ' . ($data['billing_period_to'] ?? 'N/A'),
+                'billing_period' => ($data['billing_period_from'] ?? 'N/A').' to '.($data['billing_period_to'] ?? 'N/A'),
                 'base_rent_fact' => $baseRent,
                 'reading_ids' => Arr::get($data, 'reading_ids', []),
             ],
@@ -70,7 +70,7 @@ class BillingService
                 ]);
 
                 // 2. Process Manual Line Items
-                if (!empty($data['line_items'])) {
+                if (! empty($data['line_items'])) {
                     foreach ($data['line_items'] as $item) {
                         BillingLineItem::create([
                             'billing_id' => $billing->billing_id,
@@ -82,7 +82,7 @@ class BillingService
                 }
 
                 // 3. Process Meter Readings (Utilities)
-                if (!empty($data['reading_ids'])) {
+                if (! empty($data['reading_ids'])) {
                     $activeContracts = Contract::whereHas('bedSpace', function ($q) use ($contract) {
                         $q->where('room_id', $contract->room->room_id);
                     })
@@ -113,7 +113,7 @@ class BillingService
                                 'utility_id' => $meter->utility_id,
                                 'reading_id' => $reading->reading_id,
                                 'item_type' => LineItemType::UTILITY,
-                                'item_description' => "{$meter->utility->name} (Meter: {$meter->serial_number}) - Share {$sharedAmount} / " . count($occupantIds),
+                                'item_description' => "{$meter->utility->name} (Meter: {$meter->serial_number}) - Share {$sharedAmount} / ".count($occupantIds),
                                 'amount' => $sharedAmount,
                             ]);
                         }
@@ -174,10 +174,12 @@ class BillingService
                 payload: ['billing_id' => $billing->billing_id, 'new_status' => $billing->status->value],
                 operation: function () use ($billing): Billing {
                     $billing->save();
+
                     return $billing->fresh();
                 }
             );
         }
+
         return $billing;
     }
 
@@ -195,6 +197,7 @@ class BillingService
         }
 
         $billing->status = $newStatus;
+
         return $billing->save();
     }
 
@@ -213,29 +216,32 @@ class BillingService
     {
         $query = Billing::query()
             ->with([
-                'contract' => fn($q) => $q->withTrashed(),
-                'contract.tenant' => fn($q) => $q->withTrashed(),
-                'contract.room' => fn($q) => $q->withTrashed()
+                'contract' => fn ($q) => $q->withTrashed(),
+                'contract.tenant' => fn ($q) => $q->withTrashed(),
+                'contract.room' => fn ($q) => $q->withTrashed(),
             ])
             ->withSum([
                 'lineItems as total_amount' => function ($q) {
                     $q->select(DB::raw('COALESCE(SUM(amount), 0)'));
-                }
+                },
             ], 'amount')
             ->withSum([
                 'payments as total_paid' => function ($q) {
                     $q->select(DB::raw('COALESCE(SUM(amount_paid), 0)'))->whereNull('voided_at');
-                }
+                },
             ], 'amount_paid');
 
-        if (!empty($filters['contract_id']))
+        if (! empty($filters['contract_id'])) {
             $query->where('contract_id', $filters['contract_id']);
-        if (!empty($filters['tenant_id']))
-            $query->whereHas('contract', fn($q) => $q->where('tenant_id', $filters['tenant_id']));
-        if (!empty($filters['status']))
+        }
+        if (! empty($filters['tenant_id'])) {
+            $query->whereHas('contract', fn ($q) => $q->where('tenant_id', $filters['tenant_id']));
+        }
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
+        }
 
-        if (!empty($filters['past_due'])) {
+        if (! empty($filters['past_due'])) {
             $query->where('due_date', '<', now()->toDateString())
                 ->where('status', '!=', BillingStatus::PAID->value);
         }
@@ -252,22 +258,22 @@ class BillingService
     {
         return Billing::useWritePdo()
             ->with([
-                'contract' => fn($q) => $q->withTrashed(),
-                'contract.tenant' => fn($q) => $q->withTrashed(),
-                'contract.room' => fn($q) => $q->withTrashed(),
+                'contract' => fn ($q) => $q->withTrashed(),
+                'contract.tenant' => fn ($q) => $q->withTrashed(),
+                'contract.room' => fn ($q) => $q->withTrashed(),
                 'contract.bedSpace',
                 'lineItems.utility',
-                'payments.processor'
+                'payments.processor',
             ])
             ->withSum([
                 'lineItems as total_amount' => function ($q) {
                     $q->select(DB::raw('COALESCE(SUM(amount), 0)'));
-                }
+                },
             ], 'amount')
             ->withSum([
                 'payments as total_paid' => function ($q) {
                     $q->select(DB::raw('COALESCE(SUM(amount_paid), 0)'))->whereNull('voided_at');
-                }
+                },
             ], 'amount_paid')
             ->find($billingId);
     }
@@ -278,7 +284,7 @@ class BillingService
     private static function validateCreateInput(array $data): void
     {
         $contract = Contract::find((int) $data['contract_id']);
-        if (!$contract || !in_array($contract->status, [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])) {
+        if (! $contract || ! in_array($contract->status, [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])) {
             throw ValidationException::withMessages(['contract_id' => ['Contract missing/inactive.']]);
         }
 
@@ -288,9 +294,9 @@ class BillingService
         $newTo = Carbon::parse($data['billing_period_to'])->toDateString();
 
         $exists = Billing::where('contract_id', (int) $data['contract_id'])
-            ->where(function($q) use ($newFrom, $newTo) {
+            ->where(function ($q) use ($newFrom, $newTo) {
                 $q->whereDate('billing_period_from', '<=', $newTo)
-                  ->whereDate('billing_period_to', '>=', $newFrom);
+                    ->whereDate('billing_period_to', '>=', $newFrom);
             })
             ->exists();
 

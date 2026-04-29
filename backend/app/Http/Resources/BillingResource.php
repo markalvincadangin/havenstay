@@ -7,7 +7,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * BillingResource
- * 
+ *
  * API transformer for billing cycle records.
  * Optimized for HavenStay Forensic v5.0.
  */
@@ -28,7 +28,7 @@ class BillingResource extends JsonResource
             'due_date' => $this->due_date,
             'status' => $this->status,
 
-            // Forensic Rule: Use pre-computed sums or explicit relations. 
+            // Forensic Rule: Use pre-computed sums or explicit relations.
             // Resources must not execute direct database sum() queries.
             'total_amount' => (float) ($this->total_amount ?? 0),
             'total_paid' => (float) ($this->total_paid ?? 0),

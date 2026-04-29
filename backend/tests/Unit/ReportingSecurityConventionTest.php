@@ -31,7 +31,7 @@ class ReportingSecurityConventionTest extends TestCase
         $audit = (string) file_get_contents($auditPath);
 
         $this->assertTrue(
-            str_contains($audit, 'AuthorizationService::ensureCanViewReports(') || 
+            str_contains($audit, 'AuthorizationService::ensureCanViewReports(') ||
             str_contains($audit, 'AuthorizationService::ensureCanManageUsers(') ||
             str_contains($audit, 'AuthorizationService::ensureCanViewAuditLogs(')
         );
@@ -39,4 +39,3 @@ class ReportingSecurityConventionTest extends TestCase
         $this->assertStringNotContainsString('$this->forbiddenExport(', $audit);
     }
 }
-

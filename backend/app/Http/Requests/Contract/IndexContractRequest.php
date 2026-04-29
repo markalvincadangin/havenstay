@@ -17,6 +17,7 @@ class IndexContractRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanViewContracts($this->user());
+
         return true;
     }
 

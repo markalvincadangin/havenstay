@@ -33,4 +33,3 @@ class RoomArchitectureConventionTest extends TestCase
         $this->assertStringNotContainsString('$this->forbidden(', $content);
     }
 }
-

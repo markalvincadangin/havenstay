@@ -20,27 +20,27 @@ trait HasReportingFilters
      */
     public static function applyDateRange(Builder|QueryBuilder $query, array $filters, string $column = 'created_at'): Builder|QueryBuilder
     {
-        if (!empty($filters['start_date'])) {
+        if (! empty($filters['start_date'])) {
             $query->whereDate($column, '>=', Carbon::parse($filters['start_date']));
         }
 
-        if (!empty($filters['end_date'])) {
+        if (! empty($filters['end_date'])) {
             $query->whereDate($column, '<=', Carbon::parse($filters['end_date']));
         }
 
-        if (!empty($filters['from'])) {
+        if (! empty($filters['from'])) {
             $query->whereDate($column, '>=', Carbon::parse($filters['from']));
         }
 
-        if (!empty($filters['to'])) {
+        if (! empty($filters['to'])) {
             $query->whereDate($column, '<=', Carbon::parse($filters['to']));
         }
 
-        if (!empty($filters['due_from'])) {
+        if (! empty($filters['due_from'])) {
             $query->whereDate($column, '>=', Carbon::parse($filters['due_from']));
         }
 
-        if (!empty($filters['due_to'])) {
+        if (! empty($filters['due_to'])) {
             $query->whereDate($column, '<=', Carbon::parse($filters['due_to']));
         }
 
@@ -70,7 +70,7 @@ trait HasReportingFilters
      */
     public static function applyStatus(Builder|QueryBuilder $query, array $filters, string $column = 'status'): Builder|QueryBuilder
     {
-        if (!empty($filters['status']) && $filters['status'] !== 'all') {
+        if (! empty($filters['status']) && $filters['status'] !== 'all') {
             $query->where($column, $filters['status']);
         }
 

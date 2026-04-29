@@ -2,6 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Enums\BedSpaceStatus;
+use App\Enums\BillingStatus;
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -59,11 +65,11 @@ class ContractManagementTest extends TestCase
     public function test_create_contract(): void
     {
         $tenant = $this->createTenant('active');
-        $room = $this->createRoom(\App\Enums\RoomType::SHARED->value, 'R301', 2, \App\Enums\RoomStatus::AVAILABLE->value);
+        $room = $this->createRoom(RoomType::SHARED->value, 'R301', 2, RoomStatus::AVAILABLE->value);
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Bed A',
-            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
+            'status' => BedSpaceStatus::VACANT->value,
         ]);
 
         $response = $this->actingAs($this->adminUser)->postJson('/api/contracts', [
@@ -81,13 +87,13 @@ class ContractManagementTest extends TestCase
         $this->assertDatabaseHas('contracts', [
             'tenant_id' => $tenant->tenant_id,
             'bed_space_id' => $bedSpace->bed_space_id,
-            'status' => \App\Enums\ContractStatus::PENDING_PAYMENT->value,
+            'status' => ContractStatus::PENDING_PAYMENT->value,
         ]);
 
         // Verify bed space status update
         $this->assertDatabaseHas('bed_spaces', [
             'bed_space_id' => $bedSpace->bed_space_id,
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         // Verify audit log entry (Trigger handles INSERT)
@@ -101,11 +107,11 @@ class ContractManagementTest extends TestCase
     public function test_create_contract_allows_null_expected_move_out_and_persists_rate_override(): void
     {
         $tenant = $this->createTenant('active');
-        $room = $this->createRoom(\App\Enums\RoomType::SHARED->value, 'R302', 2, \App\Enums\RoomStatus::AVAILABLE->value);
+        $room = $this->createRoom(RoomType::SHARED->value, 'R302', 2, RoomStatus::AVAILABLE->value);
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Bed A',
-            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
+            'status' => BedSpaceStatus::VACANT->value,
         ]);
 
         $response = $this->actingAs($this->adminUser)->postJson('/api/contracts', [
@@ -135,11 +141,11 @@ class ContractManagementTest extends TestCase
     public function test_move_out_success(): void
     {
         $tenant = $this->createTenant('active');
-        $room = $this->createRoom(\App\Enums\RoomType::PRIVATE->value, 'R501', 1, \App\Enums\RoomStatus::UNAVAILABLE->value);
+        $room = $this->createRoom(RoomType::PRIVATE->value, 'R501', 1, RoomStatus::UNAVAILABLE->value);
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Solo Bed',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -150,8 +156,8 @@ class ContractManagementTest extends TestCase
             'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 900,
             'monthly_rate' => 3500,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
 
         $response = $this->actingAs($this->staffUser)->postJson("/api/contracts/{$contract->contract_id}/move-out", [
@@ -162,14 +168,14 @@ class ContractManagementTest extends TestCase
         $response->assertOk();
         $this->assertDatabaseHas('contracts', [
             'contract_id' => $contract->contract_id,
-            'status' => \App\Enums\ContractStatus::COMPLETED->value,
+            'status' => ContractStatus::COMPLETED->value,
             'actual_move_out_date' => '2026-03-15 00:00:00',
         ]);
 
         // Verify bed space becomes vacant
         $this->assertDatabaseHas('bed_spaces', [
             'bed_space_id' => $bedSpace->bed_space_id,
-            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
+            'status' => BedSpaceStatus::VACANT->value,
         ]);
 
         // Verify audit log entry for UPDATE
@@ -194,11 +200,11 @@ class ContractManagementTest extends TestCase
     public function test_move_out_invalid_date_does_not_create_tenant_move_out_log(): void
     {
         $tenant = $this->createTenant('active');
-        $room = $this->createRoom(\App\Enums\RoomType::PRIVATE->value, 'R503', 1, \App\Enums\RoomStatus::UNAVAILABLE->value);
+        $room = $this->createRoom(RoomType::PRIVATE->value, 'R503', 1, RoomStatus::UNAVAILABLE->value);
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Solo Bed',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -209,8 +215,8 @@ class ContractManagementTest extends TestCase
             'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 900,
             'monthly_rate' => 3500,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
 
         $countBefore = DB::table('transaction_logs')->where('action', 'TENANT_MOVEOUT')->count();
@@ -230,11 +236,11 @@ class ContractManagementTest extends TestCase
     public function test_move_out_does_not_mutate_existing_billing_records(): void
     {
         $tenant = $this->createTenant('active');
-        $room = $this->createRoom(\App\Enums\RoomType::PRIVATE->value, 'R504', 1, \App\Enums\RoomStatus::UNAVAILABLE->value);
+        $room = $this->createRoom(RoomType::PRIVATE->value, 'R504', 1, RoomStatus::UNAVAILABLE->value);
         $bedSpace = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'Solo Bed',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -245,8 +251,8 @@ class ContractManagementTest extends TestCase
             'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 900,
             'monthly_rate' => 3500,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
 
         $billing = Billing::create([
@@ -254,7 +260,7 @@ class ContractManagementTest extends TestCase
             'billing_period_from' => '2026-03-01',
             'billing_period_to' => '2026-03-31',
             'due_date' => '2026-04-05',
-            'status' => \App\Enums\BillingStatus::UNPAID->value,
+            'status' => BillingStatus::UNPAID->value,
         ]);
 
         BillingLineItem::create([
@@ -281,7 +287,7 @@ class ContractManagementTest extends TestCase
         $this->assertDatabaseHas('billing', [
             'billing_id' => $billing->billing_id,
             'contract_id' => $contract->contract_id,
-            'status' => \App\Enums\BillingStatus::PAID->value,
+            'status' => BillingStatus::PAID->value,
         ]);
     }
 
@@ -291,11 +297,11 @@ class ContractManagementTest extends TestCase
     public function test_tc_contract_002_tenant_overlap_prevention(): void
     {
         $tenant = $this->createTenant('active');
-        $roomA = $this->createRoom(\App\Enums\RoomType::SHARED->value, 'R-TC002-A', 2, \App\Enums\RoomStatus::AVAILABLE->value);
+        $roomA = $this->createRoom(RoomType::SHARED->value, 'R-TC002-A', 2, RoomStatus::AVAILABLE->value);
         $bedA = BedSpace::create([
             'room_id' => $roomA->room_id,
             'bed_label' => 'A1',
-            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
+            'status' => BedSpaceStatus::VACANT->value,
         ]);
 
         $this->actingAs($this->adminUser)->postJson('/api/contracts', [
@@ -306,11 +312,11 @@ class ContractManagementTest extends TestCase
             'expected_move_out' => '2026-06-01',
         ])->assertCreated();
 
-        $roomB = $this->createRoom(\App\Enums\RoomType::SHARED->value, 'R-TC002-B', 2, \App\Enums\RoomStatus::AVAILABLE->value);
+        $roomB = $this->createRoom(RoomType::SHARED->value, 'R-TC002-B', 2, RoomStatus::AVAILABLE->value);
         $bedB = BedSpace::create([
             'room_id' => $roomB->room_id,
             'bed_label' => 'B1',
-            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
+            'status' => BedSpaceStatus::VACANT->value,
         ]);
 
         $response = $this->actingAs($this->staffUser)->postJson('/api/contracts', [
@@ -332,11 +338,11 @@ class ContractManagementTest extends TestCase
     {
         $tenantA = $this->createTenant('active');
         $tenantB = $this->createTenant('active');
-        $room = $this->createRoom(\App\Enums\RoomType::SHARED->value, 'R-TC004', 2, \App\Enums\RoomStatus::AVAILABLE->value);
+        $room = $this->createRoom(RoomType::SHARED->value, 'R-TC004', 2, RoomStatus::AVAILABLE->value);
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'X1',
-            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
+            'status' => BedSpaceStatus::VACANT->value,
         ]);
 
         $this->actingAs($this->adminUser)->postJson('/api/contracts', [
@@ -386,7 +392,7 @@ class ContractManagementTest extends TestCase
         return array_merge([
             'first_name' => 'John',
             'last_name' => 'Doe',
-            'email' => 'john' . uniqid() . '@example.com',
+            'email' => 'john'.uniqid().'@example.com',
             'contact_number' => '+639170000000',
             'emergency_contact_name' => 'Jane Doe',
             'emergency_contact_number' => '+639170000001',

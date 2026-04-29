@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 
 /**
  * TenantController
- * 
+ *
  * Manages tenant profiles and state reconciliation.
  * Optimized for HavenStay Forensic v5.0 with API Resource serialization.
  */
@@ -52,7 +52,7 @@ class TenantController extends Controller
     {
         $query = $request->query('q', '');
         $status = $request->query('status', '');
-        
+
         $results = TenantService::searchRichBuilder($query, $status)->limit(20)->get();
 
         return $this->success('Search results retrieved.', TenantResource::collection($results));
@@ -64,7 +64,7 @@ class TenantController extends Controller
     public function show(ManageTenantRequest $request, Tenant $tenant): JsonResponse
     {
         $loaded = TenantService::getById((int) $tenant->tenant_id);
-        if (!$loaded) {
+        if (! $loaded) {
             return $this->error('Tenant not found.', 404);
         }
 

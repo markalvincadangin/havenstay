@@ -2,8 +2,8 @@
 
 namespace App\Services\Analytics;
 
-use App\Models\User;
 use App\Enums\RoleEnum;
+use App\Models\User;
 
 /**
  * Data privacy service. Handles masking of PII (names, emails, phones)
@@ -13,7 +13,7 @@ class PiiMaskingService
 {
     public static function shouldMaskTenantPii(?User $user): bool
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -44,7 +44,7 @@ class PiiMaskingService
      */
     public static function maybeMaskTenantArray(?User $user, array $tenant): array
     {
-        if (!self::shouldMaskTenantPii($user)) {
+        if (! self::shouldMaskTenantPii($user)) {
             return $tenant;
         }
 
@@ -56,7 +56,7 @@ class PiiMaskingService
      */
     public static function maskedTenantDirectoryLabel(int $tenantId): string
     {
-        return 'Tenant #' . $tenantId;
+        return 'Tenant #'.$tenantId;
     }
 
     public static function maskPhone(?string $value): string
@@ -67,7 +67,7 @@ class PiiMaskingService
 
         $digits = preg_replace('/\D+/', '', $value) ?? '';
         if (strlen($digits) >= 4) {
-            return '***-***-' . substr($digits, -4);
+            return '***-***-'.substr($digits, -4);
         }
 
         return '***';
@@ -87,7 +87,7 @@ class PiiMaskingService
         $local = $parts[0];
         $first = $local !== '' ? $local[0] : 'x';
 
-        return $first . '***@' . $parts[1];
+        return $first.'***@'.$parts[1];
     }
 
     /**
@@ -96,7 +96,7 @@ class PiiMaskingService
      */
     public static function maskReportForViewer(?User $user, string $reportKey, array $report): array
     {
-        if (!self::shouldMaskTenantPii($user)) {
+        if (! self::shouldMaskTenantPii($user)) {
             return $report;
         }
 
@@ -118,7 +118,7 @@ class PiiMaskingService
      */
     public static function maskBillingNestedTenant(?User $user, array $billing): array
     {
-        if (!self::shouldMaskTenantPii($user)) {
+        if (! self::shouldMaskTenantPii($user)) {
             return $billing;
         }
 
@@ -135,7 +135,7 @@ class PiiMaskingService
      */
     public static function maskPaymentNestedTenant(?User $user, array $payment): array
     {
-        if (!self::shouldMaskTenantPii($user)) {
+        if (! self::shouldMaskTenantPii($user)) {
             return $payment;
         }
 
@@ -152,7 +152,7 @@ class PiiMaskingService
      */
     public static function maskContractNestedTenant(?User $user, array $contract): array
     {
-        if (!self::shouldMaskTenantPii($user)) {
+        if (! self::shouldMaskTenantPii($user)) {
             return $contract;
         }
 
@@ -169,13 +169,13 @@ class PiiMaskingService
      */
     private static function maskRowsWithTenantName(array $report): array
     {
-        if (!isset($report['rows']) || !is_iterable($report['rows'])) {
+        if (! isset($report['rows']) || ! is_iterable($report['rows'])) {
             return $report;
         }
 
         $rows = [];
         foreach ($report['rows'] as $row) {
-            if (!is_array($row)) {
+            if (! is_array($row)) {
                 $rows[] = $row;
 
                 continue;
@@ -197,13 +197,13 @@ class PiiMaskingService
      */
     private static function maskActiveContractsReport(array $report): array
     {
-        if (!isset($report['rows']) || !is_iterable($report['rows'])) {
+        if (! isset($report['rows']) || ! is_iterable($report['rows'])) {
             return $report;
         }
 
         $rows = [];
         foreach ($report['rows'] as $row) {
-            if (!is_array($row)) {
+            if (! is_array($row)) {
                 $rows[] = $row;
 
                 continue;
@@ -227,13 +227,13 @@ class PiiMaskingService
      */
     private static function maskCollectionsReport(array $report): array
     {
-        if (!isset($report['rows']) || !is_iterable($report['rows'])) {
+        if (! isset($report['rows']) || ! is_iterable($report['rows'])) {
             return $report;
         }
 
         $rows = [];
         foreach ($report['rows'] as $row) {
-            if (!is_array($row)) {
+            if (! is_array($row)) {
                 $rows[] = $row;
 
                 continue;
@@ -255,13 +255,13 @@ class PiiMaskingService
      */
     private static function maskTenantHistoryReport(array $report): array
     {
-        if (!isset($report['rows']) || !is_iterable($report['rows'])) {
+        if (! isset($report['rows']) || ! is_iterable($report['rows'])) {
             return $report;
         }
 
         $rows = [];
         foreach ($report['rows'] as $row) {
-            if (!is_array($row)) {
+            if (! is_array($row)) {
                 $rows[] = $row;
 
                 continue;
@@ -298,13 +298,13 @@ class PiiMaskingService
      */
     private static function maskOccupancyStatusReport(array $report): array
     {
-        if (!isset($report['rows']) || !is_iterable($report['rows'])) {
+        if (! isset($report['rows']) || ! is_iterable($report['rows'])) {
             return $report;
         }
 
         $rows = [];
         foreach ($report['rows'] as $row) {
-            if (!is_array($row)) {
+            if (! is_array($row)) {
                 $rows[] = $row;
 
                 continue;

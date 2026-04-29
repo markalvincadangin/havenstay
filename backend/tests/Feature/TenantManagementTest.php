@@ -2,17 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Enums\BedSpaceStatus;
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
+use App\Enums\TenantStatus;
 use App\Models\BedSpace;
 use App\Models\Contract;
 use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Enums\TenantStatus;
-use App\Enums\RoomStatus;
-use App\Enums\RoomType;
-use App\Enums\ContractStatus;
-use App\Enums\BedSpaceStatus;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -501,7 +502,7 @@ class TenantManagementTest extends TestCase
             'deposit_amount' => 5000.00,
             'monthly_rate' => 5000.00,
             'monthly_rate_override' => 5000.00,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
             'status' => ContractStatus::ACTIVE->value,
         ]);
     }

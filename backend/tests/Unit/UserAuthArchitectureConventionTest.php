@@ -35,4 +35,3 @@ class UserAuthArchitectureConventionTest extends TestCase
         $this->assertStringNotContainsString('Auth::attempt(', $content);
     }
 }
-

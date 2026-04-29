@@ -5,14 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * UtilityRate Model
- * 
+ *
  * @property int $rate_id
  * @property int $utility_id
  * @property float $base_rate
- * @property \Illuminate\Support\Carbon $effective_from
+ * @property Carbon $effective_from
  */
 class UtilityRate extends Model
 {

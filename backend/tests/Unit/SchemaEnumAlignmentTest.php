@@ -58,12 +58,12 @@ class SchemaEnumAlignmentTest extends TestCase
         $content = (string) file_get_contents($path);
         $hasEnum = preg_match("/Rule::enum\(\w+::class\)/", $content);
         $hasInRule = preg_match($fieldPattern, $content, $m);
-        
+
         $this->assertTrue(
             $hasInRule || $hasEnum,
             $relativePath.' validation vs schema (expected '.$fieldPattern.' or Rule::enum)'
         );
-        
+
         if (empty($m)) {
             return;
         }
@@ -145,7 +145,7 @@ class SchemaEnumAlignmentTest extends TestCase
 
         $hasType = preg_match("/'room_type'\s*=>\s*\[[^\]]*('in:([^']+)'|Rule::enum\(RoomType::class\))/", $content, $m);
         $this->assertTrue($hasType !== false && $hasType > 0);
-        if (!empty($m[2])) {
+        if (! empty($m[2])) {
             $a = explode(',', $m[2]);
             sort($a);
             $this->assertSame($type, $a);
@@ -153,7 +153,7 @@ class SchemaEnumAlignmentTest extends TestCase
 
         $hasStatus = preg_match("/'status'\s*=>\s*\[[^\]]*('in:([^']+)'|Rule::enum\(RoomStatus::class\))/", $content, $m2);
         $this->assertTrue($hasStatus !== false && $hasStatus > 0);
-        if (!empty($m2[2])) {
+        if (! empty($m2[2])) {
             $b = explode(',', $m2[2]);
             sort($b);
             $this->assertSame($status, $b);
@@ -161,7 +161,7 @@ class SchemaEnumAlignmentTest extends TestCase
 
         $hasBed = preg_match("/'bed_spaces\.\*\.status'\s*=>\s*\[[^\]]*('in:([^']+)'|Rule::enum\(BedSpaceStatus::class\))/", $content, $m3);
         $this->assertTrue($hasBed !== false && $hasBed > 0);
-        if (!empty($m3[2])) {
+        if (! empty($m3[2])) {
             $c = explode(',', $m3[2]);
             sort($c);
             $this->assertSame($bed, $c);

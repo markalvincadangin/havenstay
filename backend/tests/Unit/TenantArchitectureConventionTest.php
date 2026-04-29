@@ -44,4 +44,3 @@ class TenantArchitectureConventionTest extends TestCase
         $this->assertStringNotContainsString('Auth::user(', $content);
     }
 }
-

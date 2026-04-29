@@ -2,30 +2,31 @@
 
 namespace App\Services\Operations;
 
-use App\Services\Concerns\ManagesWorkflows;
-use App\Models\BedSpace;
-use App\Models\Contract;
-use App\Models\Room;
-use App\Models\User;
+use App\Enums\BedSpaceStatus;
+use App\Enums\BillingStatus;
 use App\Enums\ContractStatus;
 use App\Enums\ContractType;
 use App\Enums\RoomType;
-use App\Enums\BedSpaceStatus;
-use App\Services\Operations\BillingService;
-use App\Services\Operations\RoomService;
-use App\Services\Operations\TenantService;
+use App\Enums\TenantStatus;
+use App\Models\BedSpace;
+use App\Models\Contract;
+use App\Models\MeterReading;
+use App\Models\Room;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Services\Concerns\ManagesWorkflows;
 use App\Support\Financials;
 use App\Support\Inventory;
 use App\Support\OperationalHardening;
-use App\Models\MeterReading;
-use App\Enums\BillingStatus;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
- * Handles the rental agreement lifecycle, including check-in, activation, 
+ * Handles the rental agreement lifecycle, including check-in, activation,
  * and move-out workflows.
  */
 class ContractService
@@ -34,22 +35,22 @@ class ContractService
 
     /**
      * Create a new contract with overlap prevention.
-     * 
+     *
      * Implementation details:
      * - Sets bed status to 'occupied' upon creation.
      * - Uses contract_id for relational mapping.
      * - Sets initial status to 'pending_payment'.
-     * 
-     * @param User $actor The staff member performing the action.
-     * @param array $data Input details (tenant_id, bed_space_id, dates, monthly_rate).
-     * @return Contract
+     *
+     * @param  User  $actor  The staff member performing the action.
+     * @param  array  $data  Input details (tenant_id, bed_space_id, dates, monthly_rate).
+     *
      * @throws ValidationException
      */
     public static function create(User $actor, array $data): Contract
     {
         // Compatibility fallback: if bed_space_id is missing but room_id is provided,
         // auto-pick a vacant bed if it's a private/solo room.
-        if (empty($data['bed_space_id']) && !empty($data['room_id'])) {
+        if (empty($data['bed_space_id']) && ! empty($data['room_id'])) {
             $room = Room::find((int) $data['room_id']);
             if ($room && $room->room_type === RoomType::PRIVATE) {
                 $bed = $room->bedSpaces()->where('status', BedSpaceStatus::VACANT)->first();
@@ -104,7 +105,7 @@ class ContractService
 
                 return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator', 'latestBilling']);
             },
-            resultDetails: fn(Contract $contract): array => [
+            resultDetails: fn (Contract $contract): array => [
                 'contract_id' => $contract->contract_id,
                 'bed_space_id' => $contract->bed_space_id,
             ]
@@ -117,31 +118,28 @@ class ContractService
 
     /**
      * Paginated contract list with optional filters.
-     * 
-     * @param array $filters
-     * @param int $page
-     * @param int $perPage
-     * @return LengthAwarePaginator<\App\Models\Contract>
+     *
+     * @return LengthAwarePaginator<Contract>
      */
     public static function listPaginated(array $filters, int $page, int $perPage): LengthAwarePaginator
     {
         $query = Contract::query()->with([
-            'tenant' => fn($q) => $q->withTrashed(),
+            'tenant' => fn ($q) => $q->withTrashed(),
             'room',
             'bedSpace',
             'creator',
-            'latestBilling'
+            'latestBilling',
         ]);
 
-        if (!empty($filters['tenant_id'])) {
+        if (! empty($filters['tenant_id'])) {
             $query->where('tenant_id', (int) $filters['tenant_id']);
         }
 
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
-        if (!empty($filters['q'])) {
+        if (! empty($filters['q'])) {
             $needle = trim((string) $filters['q']);
             $query->where(function ($w) use ($needle): void {
                 $w->where('contracts.contract_id', 'like', "%{$needle}%")
@@ -172,11 +170,11 @@ class ContractService
     public static function getById(int $id): ?Contract
     {
         $contract = Contract::with([
-            'tenant' => fn($q) => $q->withTrashed(),
+            'tenant' => fn ($q) => $q->withTrashed(),
             'room',
             'bedSpace',
             'creator',
-            'latestBilling'
+            'latestBilling',
         ])
             ->find($id);
 
@@ -190,10 +188,11 @@ class ContractService
     /**
      * Retrieve readings that haven't been associated with a billing record yet.
      */
-    public static function getUnbilledReadings(Contract $contract): \Illuminate\Support\Collection
+    public static function getUnbilledReadings(Contract $contract): Collection
     {
         $contractId = $contract->contract_id;
-        return Cache::remember("contracts:unbilled:{$contractId}", 300, function() use ($contract) {
+
+        return Cache::remember("contracts:unbilled:{$contractId}", 300, function () use ($contract) {
             $roomId = $contract->room->room_id;
 
             // Find meters currently or previously assigned to this room
@@ -213,13 +212,14 @@ class ContractService
                 })
                 ->orderBy('reading_date', 'desc')
                 ->get()
-                ->map(function (MeterReading $reading) use ($contract) {
+                ->map(function (MeterReading $reading) {
                     // Flatten for frontend consumption
                     $r = $reading->toArray();
                     $r['utility_name'] = $reading->meter->utility->name;
                     $r['utility_type'] = strtolower($reading->meter->utility->name); // for legacy FE compatibility
                     $r['unit'] = $reading->meter->utility->unit_of_measurement;
                     $r['calculated_amount'] = Financials::computeUtilityCost($reading->meter_id, (float) $reading->reading_value);
+
                     return $r;
                 });
         });
@@ -248,6 +248,7 @@ class ContractService
                 }
 
                 $contract->update($data);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace']);
             }
         );
@@ -276,7 +277,7 @@ class ContractService
             ]);
         }
 
-        if (\Illuminate\Support\Carbon::parse($actualMoveOut)->lt(\Illuminate\Support\Carbon::parse($contract->move_in_date))) {
+        if (Carbon::parse($actualMoveOut)->lt(Carbon::parse($contract->move_in_date))) {
             throw ValidationException::withMessages([
                 'actual_move_out' => ['Actual move-out date cannot be before move-in date.'],
             ]);
@@ -288,7 +289,7 @@ class ContractService
         if ($totalOwed > 0.01) {
             throw ValidationException::withMessages([
                 'contract' => [
-                    sprintf('Tenant has an outstanding balance of %s. All bills must be settled before move-out.', Financials::formatCurrency($totalOwed))
+                    sprintf('Tenant has an outstanding balance of %s. All bills must be settled before move-out.', Financials::formatCurrency($totalOwed)),
                 ],
             ]);
         }
@@ -340,7 +341,7 @@ class ContractService
                         'Required settlement (Rent + Deposit) is %s. Total paid: %s.',
                         Financials::formatCurrency($minRequired),
                         Financials::formatCurrency($totalPaid)
-                    )
+                    ),
                 ],
             ]);
         }
@@ -351,6 +352,7 @@ class ContractService
             payload: ['contract_id' => $contract->contract_id, 'total_paid_fact' => $totalPaid],
             operation: function () use ($contract): Contract {
                 $contract->update(['status' => ContractStatus::ACTIVE]);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace']);
             }
         );
@@ -399,7 +401,7 @@ class ContractService
 
                 $contract->update([
                     'status' => ContractStatus::VOIDED,
-                    'notes' => ($reason ?: 'Contract voided by admin.') . ($contract->notes ? "\n" . $contract->notes : ''),
+                    'notes' => ($reason ?: 'Contract voided by admin.').($contract->notes ? "\n".$contract->notes : ''),
                 ]);
 
                 return $contract->fresh(['tenant', 'room', 'bedSpace']);
@@ -424,6 +426,7 @@ class ContractService
             payload: ['contract_id' => $contract->contract_id],
             operation: function () use ($contract): Contract {
                 $contract->delete();
+
                 return $contract;
             }
         );
@@ -431,10 +434,9 @@ class ContractService
 
     /**
      * Restore an archived contract record.
-     * 
-     * @param User $actor The staff member performing the action.
-     * @param int $id The ID of the archived contract.
-     * @return Contract
+     *
+     * @param  User  $actor  The staff member performing the action.
+     * @param  int  $id  The ID of the archived contract.
      */
     public static function restore(User $actor, int $id): Contract
     {
@@ -456,15 +458,15 @@ class ContractService
      */
     private static function validateCreateInput(array $data): void
     {
-        $tenant = \App\Models\Tenant::find((int) $data['tenant_id']);
-        if ($tenant && $tenant->status === \App\Enums\TenantStatus::ARCHIVED) {
+        $tenant = Tenant::find((int) $data['tenant_id']);
+        if ($tenant && $tenant->status === TenantStatus::ARCHIVED) {
             throw ValidationException::withMessages([
                 'tenant_id' => ['Archived tenants cannot be assigned to new contracts.'],
             ]);
         }
 
         $bedSpace = BedSpace::with('room')->find((int) $data['bed_space_id']);
-        if (!$bedSpace) {
+        if (! $bedSpace) {
             throw ValidationException::withMessages([
                 'bed_space_id' => ['Bed space does not exist.'],
             ]);
@@ -476,8 +478,8 @@ class ContractService
             $activeContract = Contract::where('bed_space_id', $bedSpace->bed_space_id)
                 ->where('status', ContractStatus::ACTIVE)
                 ->first();
-            
-            if ($activeContract && (int)$activeContract->tenant_id === (int)$data['tenant_id']) {
+
+            if ($activeContract && (int) $activeContract->tenant_id === (int) $data['tenant_id']) {
                 $isRenewal = true;
             } else {
                 throw ValidationException::withMessages([
@@ -486,13 +488,13 @@ class ContractService
             }
         }
 
-        if (!$isRenewal && $bedSpace->status !== BedSpaceStatus::VACANT) {
+        if (! $isRenewal && $bedSpace->status !== BedSpaceStatus::VACANT) {
             throw ValidationException::withMessages([
                 'bed_space_id' => ['Bed space is not vacant or available for new registration.'],
             ]);
         }
 
-        if (!empty($data['room_id']) && (int) $bedSpace->room_id !== (int) $data['room_id']) {
+        if (! empty($data['room_id']) && (int) $bedSpace->room_id !== (int) $data['room_id']) {
             throw ValidationException::withMessages([
                 'bed_space_id' => ['Selected bed space does not belong to the selected room.'],
             ]);
@@ -504,7 +506,7 @@ class ContractService
                 ->where('room_id', $bedSpace->room_id)
                 ->whereNull('valid_to')
                 ->count();
-            
+
             if ($meterCount === 0) {
                 throw ValidationException::withMessages([
                     'room_id' => ['This room is configured as "Metered" but has no active meters assigned.'],
@@ -524,7 +526,7 @@ class ContractService
         if ($contractId) {
             Cache::forget("contracts:unbilled:{$contractId}");
         }
-        
+
         // Trigger clear in TenantService as well since contract changes affect tenant summary
         TenantService::clearCache();
     }

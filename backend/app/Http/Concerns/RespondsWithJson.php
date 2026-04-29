@@ -2,9 +2,9 @@
 
 namespace App\Http\Concerns;
 
+use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
-use App\Support\Pagination;
 
 /**
  * RespondsWithJsonTrait
@@ -22,7 +22,7 @@ trait RespondsWithJson
     {
         return response()->json([
             'message' => $message,
-            'data'    => $data,
+            'data' => $data,
         ], $status);
     }
 
@@ -49,7 +49,7 @@ trait RespondsWithJson
     {
         $payload = ['message' => $message];
 
-        if (!empty($errors)) {
+        if (! empty($errors)) {
             $payload['errors'] = $errors;
         }
 
@@ -66,6 +66,7 @@ trait RespondsWithJson
                 collect($resourceClass::collection($paginator->getCollection()))
             );
         }
+
         return Pagination::fromPaginator($paginator, $extraMeta, $message);
     }
 }

@@ -16,6 +16,7 @@ class MoveOutRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanManageContracts($this->user());
+
         return true;
     }
 

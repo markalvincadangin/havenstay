@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -17,11 +16,11 @@ return new class extends Migration
     {
         if (DB::getDriverName() === 'mysql') {
             $sql = file_get_contents(database_path('sql/havenstay_schema.sql'));
-            
+
             // Clean up DELIMITER statements which are not supported by the PDO driver
             // Handles $$, //, or other custom delimiters
             $sql = preg_replace('/DELIMITER\s+\S+/i', '', $sql);
-            
+
             // Replace trigger/procedure delimiters with standard semicolons
             $sql = str_replace('$$', ';', $sql);
             $sql = str_replace('//', ';', $sql);
@@ -30,13 +29,11 @@ return new class extends Migration
 
             try {
                 DB::statement('SET GLOBAL log_bin_trust_function_creators = 1');
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Ignore if not permitted
             }
-            
 
-
-            DB::statement("DROP VIEW IF EXISTS vw_billing_summary");
+            DB::statement('DROP VIEW IF EXISTS vw_billing_summary');
             DB::statement("CREATE VIEW vw_billing_summary AS
                 SELECT 
                     b.billing_id,
@@ -279,7 +276,7 @@ return new class extends Migration
 
     private function createViews(): void
     {
-        DB::statement("DROP VIEW IF EXISTS vw_billing_summary");
+        DB::statement('DROP VIEW IF EXISTS vw_billing_summary');
         DB::statement("CREATE VIEW vw_billing_summary AS
             SELECT
                 b.billing_id,
@@ -300,7 +297,7 @@ return new class extends Migration
             JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
             JOIN rooms      r  ON bs.room_id      = r.room_id");
 
-        DB::statement("DROP VIEW IF EXISTS vw_active_contracts");
+        DB::statement('DROP VIEW IF EXISTS vw_active_contracts');
         DB::statement("CREATE VIEW vw_active_contracts AS
             SELECT
                 c.contract_id,
@@ -325,7 +322,7 @@ return new class extends Migration
             WHERE c.status     IN ('active', 'pending_payment') 
               AND c.deleted_at IS NULL");
 
-        DB::statement("DROP VIEW IF EXISTS vw_room_occupancy");
+        DB::statement('DROP VIEW IF EXISTS vw_room_occupancy');
         DB::statement("CREATE VIEW vw_room_occupancy AS
             SELECT
                 r.room_id,
@@ -341,7 +338,7 @@ return new class extends Migration
             WHERE r.deleted_at IS NULL
             GROUP BY r.room_id, r.room_code, r.capacity, r.room_type, r.status");
 
-        DB::statement("DROP VIEW IF EXISTS vw_occupancy_status");
+        DB::statement('DROP VIEW IF EXISTS vw_occupancy_status');
         DB::statement("CREATE VIEW vw_occupancy_status AS
             SELECT
                 bs.bed_space_id,
@@ -359,7 +356,7 @@ return new class extends Migration
             LEFT JOIN tenants t ON c.tenant_id = t.tenant_id
             WHERE r.deleted_at IS NULL");
 
-        DB::statement("DROP VIEW IF EXISTS vw_collections_summary");
+        DB::statement('DROP VIEW IF EXISTS vw_collections_summary');
         DB::statement("CREATE VIEW vw_collections_summary AS
             SELECT
                 p.payment_id,
@@ -381,7 +378,7 @@ return new class extends Migration
             JOIN rooms      r ON bs.room_id     = r.room_id
             WHERE p.voided_at IS NULL");
 
-        DB::statement("DROP VIEW IF EXISTS vw_tenant_contract_history");
+        DB::statement('DROP VIEW IF EXISTS vw_tenant_contract_history');
         DB::statement("CREATE VIEW vw_tenant_contract_history AS
             SELECT
                 c.contract_id,

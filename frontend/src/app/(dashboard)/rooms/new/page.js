@@ -238,7 +238,7 @@ export default function NewRoomPage() {
               <div>
                 <div className="text-sm font-bold text-stone-900">Enable Utility Metering</div>
                 <div className="text-xs text-stone-500 mt-1 font-medium leading-relaxed">
-                  Check this if the room has individual electric/water sub-meters. If unchecked, the room will be treated as 'All-Inclusive' during billing.
+                  Check this if the room has individual electric/water sub-meters. If unchecked, the room will be treated as &apos;All-Inclusive&apos; during billing.
                 </div>
               </div>
             </label>

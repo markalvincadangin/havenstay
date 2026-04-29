@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\BedSpace;
+use App\Models\Contract;
+use App\Models\Payment;
+use App\Observers\BedSpaceObserver;
+use App\Observers\ContractObserver;
+use App\Observers\PaymentObserver;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,8 +25,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        \App\Models\Contract::observe(\App\Observers\ContractObserver::class);
-        \App\Models\BedSpace::observe(\App\Observers\BedSpaceObserver::class);
-        \App\Models\Payment::observe(\App\Observers\PaymentObserver::class);
+        Contract::observe(ContractObserver::class);
+        BedSpace::observe(BedSpaceObserver::class);
+        Payment::observe(PaymentObserver::class);
     }
 }

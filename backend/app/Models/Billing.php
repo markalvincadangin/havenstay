@@ -2,24 +2,25 @@
 
 namespace App\Models;
 
+use App\Enums\BillingStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Enums\BillingStatus;
+use Illuminate\Support\Carbon;
 
 /**
  * Billing Model
- * 
- * Monthly billing cycle header. Connects contracts to itemized line items 
+ *
+ * Monthly billing cycle header. Connects contracts to itemized line items
  * and payment transactions.
- * 
+ *
  * @property int $billing_id
  * @property int $contract_id
- * @property \Illuminate\Support\Carbon $billing_period_from
- * @property \Illuminate\Support\Carbon $billing_period_to
- * @property \Illuminate\Support\Carbon $due_date
- * @property \App\Enums\BillingStatus $status
+ * @property Carbon $billing_period_from
+ * @property Carbon $billing_period_to
+ * @property Carbon $due_date
+ * @property BillingStatus $status
  */
 class Billing extends Model
 {
@@ -37,7 +38,6 @@ class Billing extends Model
         'status',
         'idempotency_key',
     ];
-
 
     protected function casts(): array
     {

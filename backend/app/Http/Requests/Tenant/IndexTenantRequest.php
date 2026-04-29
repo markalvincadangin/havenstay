@@ -17,6 +17,7 @@ class IndexTenantRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanViewTenants($this->user());
+
         return true;
     }
 

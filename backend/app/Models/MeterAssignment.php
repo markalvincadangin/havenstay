@@ -5,15 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * MeterAssignment Model
- * 
+ *
  * @property int $assignment_id
  * @property int $meter_id
  * @property int $room_id
- * @property \Illuminate\Support\Carbon $valid_from
- * @property \Illuminate\Support\Carbon|null $valid_to
+ * @property Carbon $valid_from
+ * @property Carbon|null $valid_to
  */
 class MeterAssignment extends Model
 {

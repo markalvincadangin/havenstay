@@ -2,16 +2,13 @@
 
 namespace Tests;
 
-use App\Models\Role;
-use App\Models\Room;
-use App\Models\Tenant;
-use App\Models\BedSpace;
-use App\Models\Contract;
-use App\Enums\RoomStatus;
-use App\Enums\RoomType;
 use App\Enums\BedSpaceStatus;
 use App\Enums\ContractStatus;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
 use App\Enums\TenantStatus;
+use App\Models\Role;
+use App\Models\Tenant;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\DB;
 

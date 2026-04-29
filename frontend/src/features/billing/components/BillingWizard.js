@@ -874,7 +874,7 @@ export default function BillingWizard() {
               <div className="flex items-center gap-3 rounded-2xl bg-teal-50/50 border border-teal-100 p-6 text-teal-800 mt-6">
                 <ShieldCheck size={20} className="text-teal-400 shrink-0" />
                 <p className="hs-strip-title text-teal-800 leading-relaxed font-bold">
-                  Please verify all amounts. Once generated, these bills will be immediately posted to the tenants' ledgers.
+                  Please verify all amounts. Once generated, these bills will be immediately posted to the tenants&apos; ledgers.
                 </p>
               </div>
             </div>

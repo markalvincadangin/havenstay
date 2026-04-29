@@ -17,17 +17,17 @@ class StoreMeterReadingRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanManageMetrology($this->user());
+
         return true;
     }
-
 
     public function rules(): array
     {
         return [
-            'reading_date'  => ['required', 'date', 'before_or_equal:today'],
+            'reading_date' => ['required', 'date', 'before_or_equal:today'],
             'reading_value' => ['required', 'numeric', 'min:0'],
-            'is_rollover'   => ['required', 'boolean'],
-            'billing_id'    => ['nullable', 'exists:billing,billing_id'],
+            'is_rollover' => ['required', 'boolean'],
+            'billing_id' => ['nullable', 'exists:billing,billing_id'],
         ];
     }
 }

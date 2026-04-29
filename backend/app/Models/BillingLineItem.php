@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
+use App\Enums\LineItemType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Enums\LineItemType;
 
 /**
  * BillingLineItem Model
- * 
+ *
  * @property int $line_item_id
  * @property int $billing_id
  * @property int|null $utility_id
  * @property int|null $reading_id
- * @property \App\Enums\LineItemType $item_type
+ * @property LineItemType $item_type
  * @property string $item_description
  * @property float $amount
  */
@@ -23,6 +23,7 @@ class BillingLineItem extends Model
     use HasFactory;
 
     protected $table = 'billing_line_items';
+
     protected $primaryKey = 'line_item_id';
 
     protected $fillable = [

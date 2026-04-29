@@ -2,6 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Enums\BedSpaceStatus;
+use App\Enums\ContractStatus;
+use App\Enums\ContractType;
+use App\Enums\RoomStatus;
+use App\Enums\RoomType;
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -62,18 +67,18 @@ class ReportsExportTest extends TestCase
     {
         $occupiedSoloRoom = Room::create([
             'room_code' => 'R801',
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5000,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value, // status updated via bed space usually but we set here
+            'status' => RoomStatus::AVAILABLE->value, // status updated via bed space usually but we set here
         ]);
 
         Room::create([
             'room_code' => 'R802',
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4800,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         $sharedRoom = Room::create([
@@ -81,19 +86,19 @@ class ReportsExportTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3200,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         BedSpace::create([
             'room_id' => $sharedRoom->room_id,
             'bed_label' => 'A',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         BedSpace::create([
             'room_id' => $sharedRoom->room_id,
             'bed_label' => 'B',
-            'status' => \App\Enums\BedSpaceStatus::VACANT->value,
+            'status' => BedSpaceStatus::VACANT->value,
         ]);
 
         $response = $this->actingAs($this->adminUser)->getJson('/api/reports/occupancy');
@@ -105,10 +110,10 @@ class ReportsExportTest extends TestCase
     {
         Room::create([
             'room_code' => 'RT_SOLO',
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         Room::create([
@@ -116,19 +121,19 @@ class ReportsExportTest extends TestCase
             'room_type' => 'shared',
             'capacity' => 2,
             'monthly_rate' => 3000,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         $soloOnly = $this->actingAs($this->adminUser)
-            ->getJson('/api/reports/occupancy?room_type='.\App\Enums\RoomType::PRIVATE->value.'&page=1&per_page=25')
+            ->getJson('/api/reports/occupancy?room_type='.RoomType::PRIVATE->value.'&page=1&per_page=25')
             ->assertOk();
 
         foreach ($soloOnly->json()['data']['rows'] as $row) {
-            $this->assertSame(\App\Enums\RoomType::PRIVATE->value, $row['room_type']);
+            $this->assertSame(RoomType::PRIVATE->value, $row['room_type']);
         }
 
         $sharedOnly = $this->actingAs($this->adminUser)
-            ->getJson('/api/reports/occupancy?room_type='.\App\Enums\RoomType::SHARED->value.'&page=1&per_page=25')
+            ->getJson('/api/reports/occupancy?room_type='.RoomType::SHARED->value.'&page=1&per_page=25')
             ->assertOk();
 
         foreach ($sharedOnly->json()['data']['rows'] as $row) {
@@ -147,16 +152,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'R900',
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -167,8 +172,8 @@ class ReportsExportTest extends TestCase
             'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 0,
             'monthly_rate' => 4000,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
 
         $this->createBillingRecord($contract->contract_id, '2026-01-01', '2026-01-31', '2020-01-15', 5000, 'unpaid');
@@ -208,16 +213,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'R804',
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 5500,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -228,8 +233,8 @@ class ReportsExportTest extends TestCase
             'expected_move_out_date' => '2026-10-31',
             'deposit_amount' => 1000,
             'monthly_rate' => 5500,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
 
         $this->createBillingRecord($contract->contract_id, '2026-06-01', '2026-06-30', '2026-07-05', 5200, 'unpaid');
@@ -259,16 +264,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'TH-100',
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4000,
-            'status' => \App\Enums\RoomStatus::UNAVAILABLE->value,
+            'status' => RoomStatus::UNAVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         Contract::create([
@@ -280,8 +285,8 @@ class ReportsExportTest extends TestCase
             'deposit_amount' => 0,
             'monthly_rate' => 4000,
             'monthly_rate_override' => 4000,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
 
         $this->actingAs($this->adminUser)
@@ -306,16 +311,16 @@ class ReportsExportTest extends TestCase
 
         $room = Room::create([
             'room_code' => 'COL-101',
-            'room_type' => \App\Enums\RoomType::PRIVATE->value,
+            'room_type' => RoomType::PRIVATE->value,
             'capacity' => 1,
             'monthly_rate' => 4500,
-            'status' => \App\Enums\RoomStatus::AVAILABLE->value,
+            'status' => RoomStatus::AVAILABLE->value,
         ]);
 
         $bed = BedSpace::create([
             'room_id' => $room->room_id,
             'bed_label' => 'A',
-            'status' => \App\Enums\BedSpaceStatus::OCCUPIED->value,
+            'status' => BedSpaceStatus::OCCUPIED->value,
         ]);
 
         $contract = Contract::create([
@@ -326,8 +331,8 @@ class ReportsExportTest extends TestCase
             'expected_move_out_date' => '2026-12-31',
             'deposit_amount' => 0,
             'monthly_rate' => 4500,
-            'contract_type' => \App\Enums\ContractType::FIXED_TERM->value,
-            'status' => \App\Enums\ContractStatus::ACTIVE->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
+            'status' => ContractStatus::ACTIVE->value,
         ]);
 
         $billing = $this->createBillingRecord($contract->contract_id, '2026-04-01', '2026-04-30', '2026-05-05', 4500, 'unpaid');

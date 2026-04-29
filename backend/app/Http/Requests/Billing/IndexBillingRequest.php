@@ -17,6 +17,7 @@ class IndexBillingRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanViewBilling($this->user());
+
         return true;
     }
 

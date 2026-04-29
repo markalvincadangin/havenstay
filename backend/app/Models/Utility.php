@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Utility Model
- * 
+ *
  * @property int $utility_id
  * @property string $name
  * @property string $unit_of_measurement

@@ -2,15 +2,15 @@
 
 namespace App\Services\Operations;
 
-use Illuminate\Support\Facades\Cache;
-use App\Services\Concerns\ManagesWorkflows;
+use App\Enums\ContractStatus;
 use App\Models\Billing;
 use App\Models\Contract;
 use App\Models\Payment;
 use App\Models\User;
-use App\Enums\ContractStatus;
+use App\Services\Concerns\ManagesWorkflows;
 use App\Support\Financials;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -23,9 +23,6 @@ class PaymentService
 
     /**
      * Retrieve a payment by ID with full relationship context.
-     * 
-     * @param int $paymentId
-     * @return Payment|null
      */
     public static function getById(int $paymentId): ?Payment
     {
@@ -34,14 +31,14 @@ class PaymentService
 
     /**
      * Record a new payment.
-     * 
+     *
      * Implementation details:
      * - Ensures payment targets either a billing_id OR contract_id.
      * - Triggers contract activation if the total paid (Rent + Deposit) meets requirements.
-     * 
-     * @param User $actor The staff member recording the payment.
-     * @param array $data Input details (amount, category, method, targets).
-     * @return Payment
+     *
+     * @param  User  $actor  The staff member recording the payment.
+     * @param  array  $data  Input details (amount, category, method, targets).
+     *
      * @throws ValidationException
      */
     public static function record(User $actor, array $data): Payment
@@ -56,7 +53,7 @@ class PaymentService
         if ($billingId && $contractId) {
             throw ValidationException::withMessages(['billing_id' => ['Payment cannot target both a bill and a contract directly.']]);
         }
-        if (!$billingId && !$contractId) {
+        if (! $billingId && ! $contractId) {
             throw ValidationException::withMessages(['billing_id' => ['Target (billing or contract) is required.']]);
         }
 
@@ -126,11 +123,9 @@ class PaymentService
 
     /**
      * Void a payment and reverse financial impacts.
-     * 
-     * @param User $actor The staff member voiding the payment.
-     * @param Payment $payment
-     * @param string|null $reason
-     * @return Payment
+     *
+     * @param  User  $actor  The staff member voiding the payment.
+     *
      * @throws ValidationException
      */
     public static function void(User $actor, Payment $payment, ?string $reason = null): Payment
@@ -141,7 +136,7 @@ class PaymentService
             payload: [
                 'payment_id' => $payment->payment_id,
                 'void_amount_fact' => $payment->amount_paid,
-                'reason_fact' => $reason ?: 'N/A'
+                'reason_fact' => $reason ?: 'N/A',
             ],
             operation: function () use ($actor, $payment, $reason): Payment {
                 if ($payment->voided_at !== null) {
@@ -189,9 +184,8 @@ class PaymentService
 
     /**
      * List payment history with forensic filters.
-     * 
-     * @param array $filters
-     * @return Builder<\App\Models\Payment>
+     *
+     * @return Builder<Payment>
      */
     public static function listHistoryQuery(array $filters = []): Builder
     {
@@ -200,23 +194,23 @@ class PaymentService
             ->orderByDesc('payment_date')
             ->orderByDesc('payment_id');
 
-        if (!empty($filters['contract_id'])) {
+        if (! empty($filters['contract_id'])) {
             $query->where('contract_id', (int) $filters['contract_id']);
         }
 
-        if (!empty($filters['billing_id'])) {
+        if (! empty($filters['billing_id'])) {
             $query->where('billing_id', (int) $filters['billing_id']);
         }
 
-        if (!empty($filters['tenant_id'])) {
-            $query->whereHas('contract', fn($q) => $q->where('tenant_id', $filters['tenant_id']));
+        if (! empty($filters['tenant_id'])) {
+            $query->whereHas('contract', fn ($q) => $q->where('tenant_id', $filters['tenant_id']));
         }
 
-        if (!empty($filters['payment_category'])) {
+        if (! empty($filters['payment_category'])) {
             $query->where('payment_category', $filters['payment_category']);
         }
 
-        if (!empty($filters['q'])) {
+        if (! empty($filters['q'])) {
             $needle = trim($filters['q']);
             $query->where(function ($w) use ($needle): void {
                 $w->where('payment_id', 'like', "%{$needle}%")

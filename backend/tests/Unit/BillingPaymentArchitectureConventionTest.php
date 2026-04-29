@@ -31,4 +31,3 @@ class BillingPaymentArchitectureConventionTest extends TestCase
         $this->assertStringContainsString('AuthorizationService::ensureCan', $content);
     }
 }
-

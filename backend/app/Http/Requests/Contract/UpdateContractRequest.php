@@ -2,10 +2,10 @@
 
 namespace App\Http\Requests\Contract;
 
+use App\Enums\ContractStatus;
 use App\Services\Core\AuthorizationService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use App\Enums\ContractStatus;
 
 /**
  * Validates data for updating an existing tenant lease.
@@ -18,6 +18,7 @@ class UpdateContractRequest extends FormRequest
     public function authorize(): bool
     {
         AuthorizationService::ensureCanManageContracts($this->user());
+
         return true;
     }
 

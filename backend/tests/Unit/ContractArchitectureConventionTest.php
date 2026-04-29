@@ -30,4 +30,3 @@ class ContractArchitectureConventionTest extends TestCase
         $this->assertStringContainsString('RoomService::occupyBedSpace($actor, $bedSpace);', $content);
     }
 }
-

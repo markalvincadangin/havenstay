@@ -5,13 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * MeterReading Model
- * 
+ *
  * @property int $reading_id
  * @property int $meter_id
- * @property \Illuminate\Support\Carbon $reading_date
+ * @property Carbon $reading_date
  * @property float $reading_value
  * @property bool $is_rollover
  * @property int $recorded_by

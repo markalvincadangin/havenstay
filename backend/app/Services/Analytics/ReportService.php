@@ -2,10 +2,9 @@
 
 namespace App\Services\Analytics;
 
+use App\Models\Contract;
 use App\Services\Concerns\HasReportingFilters;
 use App\Support\Financials;
-use App\Models\Contract;
-use App\Enums\ContractStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 class ReportService
 {
     use HasReportingFilters;
+
     /**
      * Generate an occupancy report by room and bed.
      *
@@ -40,7 +40,7 @@ class ReportService
 
         // 3. Paginated Rows
         $rowQuery = $query->orderBy('room_code');
-        
+
         $paginator = null;
         if ($page !== null && $perPage !== null) {
             $paginator = $rowQuery->paginate($perPage, ['*'], 'page', $page);
@@ -103,7 +103,7 @@ class ReportService
                 'vos.tenant_id',
                 'vos.tenant_name',
                 'vos.contract_id',
-                'c.deposit_amount as deposit_amount'
+                'c.deposit_amount as deposit_amount',
             ]);
 
         if (! empty($filters['room_id'])) {
@@ -124,7 +124,7 @@ class ReportService
 
         // 2. Paginated Rows
         $rowQuery = $query->orderBy('room_code')->orderBy('bed_label');
-        
+
         $paginator = null;
         if ($page !== null && $perPage !== null) {
             $paginator = $rowQuery->paginate($perPage, ['*'], 'page', $page);
@@ -171,7 +171,7 @@ class ReportService
     /**
      * Tenant distribution and onboarding metrics.
      * Aligned with SRS FR-008.
-     * 
+     *
      * @return array{total_records: int, active_tenants: int, new_onboarded_mtd: int, archived_count: int}
      */
     public static function tenantSummary(): array
@@ -191,7 +191,7 @@ class ReportService
                 ->whereNotNull('expected_move_out_date')
                 ->whereBetween('expected_move_out_date', [
                     $now->toDateTimeString(),
-                    $now->copy()->addDays(30)->toDateTimeString()
+                    $now->copy()->addDays(30)->toDateTimeString(),
                 ])
                 ->count(),
             'archived_count' => DB::table('tenants')->whereNotNull('deleted_at')->count(),
@@ -221,7 +221,7 @@ class ReportService
 
         // 2. Paginated Rows
         $rowQuery = $query->orderBy('room_code')->orderBy('bed_label');
-        
+
         $paginator = null;
         if ($page !== null && $perPage !== null) {
             $paginator = $rowQuery->paginate($perPage, ['*'], 'page', $page);
@@ -297,9 +297,9 @@ class ReportService
 
         // 2. Paginated Rows
         $rowQuery = $query->select(
-                'vw_billing_summary.*',
-                DB::raw('(SELECT MAX(payment_date) FROM payments WHERE payments.billing_id = vw_billing_summary.billing_id) AS last_payment_date')
-            )
+            'vw_billing_summary.*',
+            DB::raw('(SELECT MAX(payment_date) FROM payments WHERE payments.billing_id = vw_billing_summary.billing_id) AS last_payment_date')
+        )
             ->orderByDesc('billing_period_from')
             ->orderByDesc('billing_id');
 
@@ -388,7 +388,7 @@ class ReportService
 
         // 2. Paginated Rows
         $rowQuery = $query->orderByDesc(DB::raw('total_amount - total_paid'));
-        
+
         $paginator = null;
         if ($page !== null && $perPage !== null) {
             $paginator = $rowQuery->paginate($perPage, ['*'], 'page', $page);
@@ -607,7 +607,7 @@ class ReportService
     public static function meterSummary(): array
     {
         $totalMeters = DB::table('meters')->count();
-        
+
         // Coverage = Meters with readings in the current billing cycle (this month)
         $monthStart = now()->startOfMonth()->toDateTimeString();
         $coveredMeters = DB::table('meter_readings')
@@ -901,6 +901,7 @@ class ReportService
             ])->all(),
         ];
     }
+
     /**
      * Dashboard Summary Stats.
      */
@@ -928,7 +929,7 @@ class ReportService
             'rows' => $query->get()->all(),
             'summary' => [
                 'total' => Financials::roundToCent($query->get()->sum('total_collected')),
-            ]
+            ],
         ];
     }
 
@@ -942,6 +943,7 @@ class ReportService
             ->get()
             ->map(function ($row) {
                 $days = Carbon::parse($row->due_date)->diffInDays(Carbon::now(), false);
+
                 return [
                     'tenant_id' => $row->tenant_id,
                     'tenant_name' => $row->tenant_name,
@@ -957,7 +959,7 @@ class ReportService
                 '1_30_days' => $rows->whereBetween('days_overdue', [1, 30])->sum('amount'),
                 '31_60_days' => $rows->whereBetween('days_overdue', [31, 60])->sum('amount'),
                 '61_plus_days' => $rows->where('days_overdue', '>', 60)->sum('amount'),
-            ]
+            ],
         ];
     }
 
@@ -1010,6 +1012,7 @@ class ReportService
     public static function revenueProjection(): array
     {
         $currentMonthly = (float) DB::table('contracts')->where('status', 'active')->sum('monthly_rate');
+
         return [
             'projected_monthly_revenue' => $currentMonthly,
             'projected_annual_revenue' => $currentMonthly * 12,
@@ -1035,8 +1038,11 @@ class ReportService
     private static function calculateGlobalOccupancyRate(): float
     {
         $totalBeds = DB::table('bed_spaces')->count();
-        if ($totalBeds === 0) return 0.0;
+        if ($totalBeds === 0) {
+            return 0.0;
+        }
         $occupied = DB::table('bed_spaces')->where('status', 'occupied')->count();
+
         return round(($occupied / $totalBeds) * 100, 2);
     }
 }

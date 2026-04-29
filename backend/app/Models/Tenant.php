@@ -2,18 +2,18 @@
 
 namespace App\Models;
 
+use App\Enums\TenantStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Enums\TenantStatus;
 
 /**
  * Tenant Model
- * 
+ *
  * Profile for a boarding house resident. Tracks personal information,
  * status, and rental history.
- * 
+ *
  * @property int $tenant_id
  * @property string $first_name
  * @property string $last_name
@@ -22,7 +22,7 @@ use App\Enums\TenantStatus;
  * @property string $emergency_contact_name
  * @property string $emergency_contact_number
  * @property string $address
- * @property \App\Enums\TenantStatus $status
+ * @property TenantStatus $status
  * @property string|null $active_email
  */
 class Tenant extends Model
@@ -44,7 +44,6 @@ class Tenant extends Model
         'status',
     ];
 
-
     protected function casts(): array
     {
         return [
@@ -59,5 +58,4 @@ class Tenant extends Model
     {
         return $this->hasMany(Contract::class, 'tenant_id', 'tenant_id');
     }
-
 }

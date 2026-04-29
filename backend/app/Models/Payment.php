@@ -2,25 +2,26 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentCategory;
+use App\Enums\PaymentMethod;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Enums\PaymentMethod;
-use App\Enums\PaymentCategory;
+use Illuminate\Support\Carbon;
 
 /**
  * Payment Model
- * 
+ *
  * @property int $payment_id
  * @property int|null $billing_id
  * @property int|null $contract_id
- * @property \App\Enums\PaymentCategory $payment_category
+ * @property PaymentCategory $payment_category
  * @property float $amount_paid
- * @property \Illuminate\Support\Carbon $payment_date
- * @property \App\Enums\PaymentMethod $payment_method
+ * @property Carbon $payment_date
+ * @property PaymentMethod $payment_method
  * @property string|null $reference_number
  * @property int $processed_by
- * @property \Illuminate\Support\Carbon|null $voided_at
+ * @property Carbon|null $voided_at
  * @property int|null $voided_by
  * @property string|null $void_reason
  */
@@ -29,6 +30,7 @@ class Payment extends Model
     use HasFactory;
 
     protected $table = 'payments';
+
     protected $primaryKey = 'payment_id';
 
     protected $fillable = [
@@ -85,6 +87,6 @@ class Payment extends Model
 
     public function isVoided(): bool
     {
-        return !is_null($this->voided_at);
+        return ! is_null($this->voided_at);
     }
 }

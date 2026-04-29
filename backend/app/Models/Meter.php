@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
+use App\Enums\MeterStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Enums\MeterStatus;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Meter Model
- * 
+ *
  * @property int $meter_id
  * @property int $utility_id
  * @property string $serial_number
- * @property \App\Enums\MeterStatus $status
+ * @property MeterStatus $status
  */
 class Meter extends Model
 {

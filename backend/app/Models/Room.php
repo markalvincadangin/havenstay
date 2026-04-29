@@ -2,24 +2,24 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Enums\RoomStatus;
 use App\Enums\RoomType;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Room Model
- * 
+ *
  * Represents a physical room in the boarding house.
- * 
+ *
  * @property int $room_id
  * @property string $room_code
- * @property \App\Enums\RoomType $room_type
+ * @property RoomType $room_type
  * @property int $capacity
  * @property float $monthly_rate
- * @property \App\Enums\RoomStatus $status
+ * @property RoomStatus $status
  * @property array|null $amenities
  */
 class Room extends Model
