@@ -176,6 +176,10 @@ class TenantService
             return [
                 'total_records' => Tenant::count(),
                 'active_tenants' => Tenant::where('status', TenantStatus::ACTIVE)->count(),
+                'new_onboarded_mtd' => Tenant::whereBetween('created_at', [
+                    now()->startOfMonth()->toDateTimeString(),
+                    now()->endOfMonth()->toDateTimeString(),
+                ])->count(),
                 'pending_move_outs' => Contract::where('status', ContractStatus::ACTIVE)
                     ->whereNotNull('expected_move_out_date')
                     ->whereBetween('expected_move_out_date', [
@@ -184,7 +188,7 @@ class TenantService
                     ])
                     ->count(),
                 'moved_out' => Tenant::where('status', TenantStatus::MOVED_OUT)->count(),
-                'archived' => Tenant::onlyTrashed()->count(),
+                'archived_count' => Tenant::onlyTrashed()->count(),
             ];
         });
     }

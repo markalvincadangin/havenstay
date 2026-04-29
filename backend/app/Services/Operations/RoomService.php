@@ -518,7 +518,7 @@ class RoomService
     private static function hasActiveContracts(Room $room): bool
     {
         return Contract::query()
-            ->where('status', ContractStatus::ACTIVE)
+            ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])
             ->whereNull('deleted_at')
             ->whereHas('bedSpace', function ($q) use ($room): void {
                 $q->where('room_id', $room->room_id);

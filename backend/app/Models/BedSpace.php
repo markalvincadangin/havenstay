@@ -63,7 +63,7 @@ class BedSpace extends Model
     public function activeContract(): HasOne
     {
         return $this->hasOne(Contract::class, 'bed_space_id', 'bed_space_id')
-            ->where('status', ContractStatus::ACTIVE)
+            ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])
             ->whereNull('deleted_at');
     }
 }

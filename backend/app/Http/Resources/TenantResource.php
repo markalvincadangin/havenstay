@@ -27,6 +27,11 @@ class TenantResource extends JsonResource
             'status' => $this->status,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+
+            // Computed/Join fields
+            'room_code' => $this->room_code,
+            'bed_label' => $this->bed_label,
+            'outstanding_balance' => (float) $this->outstanding_balance,
         ];
 
         // Forensic v5.0: Relocate PII masking logic into the Resource layer

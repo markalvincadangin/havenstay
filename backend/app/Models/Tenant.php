@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\ContractStatus;
 use App\Enums\TenantStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -57,5 +59,15 @@ class Tenant extends Model
     public function contracts(): HasMany
     {
         return $this->hasMany(Contract::class, 'tenant_id', 'tenant_id');
+    }
+
+    /**
+     * The active contract for this tenant.
+     */
+    public function activeContract(): HasOne
+    {
+        return $this->hasOne(Contract::class, 'tenant_id', 'tenant_id')
+            ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])
+            ->whereNull('deleted_at');
     }
 }
