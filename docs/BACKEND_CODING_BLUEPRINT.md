@@ -1,7 +1,7 @@
 # HavenStay — Backend Architecture & Coding Standards Blueprint
 
-**Version:** 5.0  
-**Last Updated:** April 22, 2026  
+**Version:** 6.1  
+**Last Updated:** April 29, 2026  
 **Status:** Authoritative Standard  
 **Scope:** `backend/app` — Laravel 14 / PHP 8.3+  
 
@@ -101,6 +101,7 @@ Every **public and protected method** must have a PHPDoc block detailing the `WH
   - Call `AuthorizationService::ensure*()` for RBAC before any action.
   - Use `RespondsWithJson` trait (`$this->success()`).
   - **API Resources:** Endpoints must return data formatted via classes in `app/Http/Resources/` (do not return raw `toArray()`).
+  - **Idempotency Protection:** All write endpoints (`POST`, `PUT`, `PATCH`) for financial or contractual entities MUST enforce idempotency. Use the `Idempotency-Key` header and verify uniqueness via `AuditService::checkIdempotency()` or a shared `AtomicLock` within the service workflow to prevent duplicate record creation during network retries.
 - **Forbidden:** Inline `$request->validate(...)` (use `FormRequest`), business logic, DB queries.
 
 ### Tier 3: Services (`app/Services`)
@@ -138,13 +139,18 @@ Every **public and protected method** must have a PHPDoc block detailing the `WH
 ## 6. Domain-Specific Conventions
 
 * **Utility Handling:** Never hardcode `'electric'` or `'water'`. Always relate via `utility_id`.
-* **Temporal Pricing:** Never update an existing `UtilityRate`. Insert a new record with a future `effective_from` date. Lookups must use the `billing_period_from` date — **not** `now()` (BR-MET-007).
+* **Temporal Pricing:** Never update an existing `UtilityRate`. Insert a new record with a future `effective_from` date. Lookups must use the `billing_period_from` date — **not** `now()` (BR-MET-006).
 * **Billing Rate Resolution:** Line items must resolve base rent using the override if present:
   ```php
   $rate = $contract->monthly_rate_override ?? $contract->monthly_rate;
   ```
   **Warning:** The `??` operator passes `0.00` if the override is `0`. Guard against non-positive overrides.
 * **Contract Navigation:** Room context is derived through the bed space: `$contract->bedSpace->room_id`.
+* **Dual-Path Forensic Resolution (Payments):** Because payments have an XOR target (`billing_id` XOR `contract_id`), all logic resolving tenant or room details MUST check both paths. 
+  - **Rent:** `payment->billing->contract->tenant`
+  - **Deposits:** `payment->contract->tenant`
+  Failure to implement this dual-path resolution results in "orphan" records in the UI.
+* **Resilient Batch Workflows:** Room-level batch operations (e.g. utility billing) MUST be non-blocking. Individual contract failures (overlaps, validation) should be trapped within the loop via `try-catch`, logged to the response context, and allowed to "fail open" so other eligible tenants in the room are processed. 
 
 > [!NOTE]
 > Legacy `transaction_logs` have been decommissioned. Forensic integrity is handled exclusively by the 45 unified trigger-based `audit_logs` and the `AuditService` context. The `ManagesWorkflows` trait no longer writes to `transaction_logs`.
@@ -160,11 +166,13 @@ Code containing these anti-patterns will be automatically rejected:
 | `DB::table('audit_logs')->insert(...)` | Infinite Loop / Rule Violation | Let the **45 DB Triggers** handle auditing. |
 | `$request->validate(...)` in Controller | Leaks validation into routing | Use `public function store(CreateRoomRequest $request)` |
 | `return response()->json(...)` | Inconsistent envelope | `return $this->success($data);` |
-| Updating an invoice total manually | Violates BR-BIL-006 (Derived) | Compute balance dynamically via Views/Support. |
+| Updating an invoice total manually | Violates BR-ANL-001 (Derived) | Compute balance dynamically via Views/Support. |
 | Hardcoding `['role' => 'admin']` | Bypasses central auth | Use `RoleEnum::ADMIN` and `AuthorizationService`. |
 | `->where('effective_from', '<=', now())` | Applies today's rate to history | Use billing period's `billing_period_from` date. |
 | `Contract::where('room_id', $id)` | Column doesn't exist | `Contract::whereHas('bedSpace', fn($q) => $q->where('room_id', $id))` |
 | `BillingLineItem::create(['item_type' => 'utility'])` without `utility_id` | Triggers DB constraint violation | Always pass `utility_id` and `reading_id` for utilities. |
+| Single-Tenant Batch Failure | Stalls entire room billing | Implement non-blocking `try-catch` inside the batch loop. |
+| `payment->billing->tenant` | Fails for Security Deposits | Resolve via dual-path (Billing XOR Contract) per BR-PAY-011. |
 
 ---
 
@@ -175,4 +183,6 @@ Code containing these anti-patterns will be automatically rejected:
 | v4.0 | Apr 19, 2026 | Initial blueprint. Service-layer transactions, audit context. |
 | v4.1 | Apr 20, 2026 | Domain-specific conventions for utilities and state machines. |
 | v4.2 | Apr 21, 2026 | Corrected trigger count (45). Added billing rate resolution rule. |
-| **v5.0** | **Apr 22, 2026** | **Major Architecture Update. Formalized 5-Tier Extended MVC (added Support tier). Mandated strict PHPDoc and native typing. Mandated API Resources for all output. Fixed `transaction_logs` references. Corrected `Requests/Meter/` singular naming convention.** |
+| v5.0 | Apr 22, 2026 | Major Architecture Update. Formalized 5-Tier Extended MVC (added Support tier). Mandated strict PHPDoc and native typing. Mandated API Resources for all output. Fixed `transaction_logs` references. Corrected `Requests/Meter/` singular naming convention. |
+| v6.0 | Apr 29, 2026 | Major Stabilization: Mandated Idempotency-Key protection for financial writes. Standardized Dual-Path Forensic Resolution for XOR relationships (Payments). Codified Resilient Batch Workflow patterns (Non-blocking loops). |
+| **v6.1** | **Apr 29, 2026** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |

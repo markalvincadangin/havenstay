@@ -338,8 +338,8 @@ export default function ContractDetailsPage() {
       <ConfirmationDialog
         open={showArchiveConfirm}
         title="Confirm Archive"
-        description="Are you sure you want to archive this agreement? This action will immediately release the bed space into available inventory and clear it from active listings."
-        confirmLabel="Archive History"
+        description="Are you sure you want to archive this contract?"
+        confirmLabel="Archive Contract"
         isDanger
         isLoading={isArchiving}
         onConfirm={handleArchive}
@@ -552,7 +552,7 @@ export default function ContractDetailsPage() {
                     onClick={() => setShowArchiveConfirm(true)}
                     disabled={!contract.is_cleared}
                   >
-                    Archive Agreement
+                    Archive Contract
                   </Button>
                   {!contract.is_cleared && (
                     <p className="mt-2 text-[9px] font-bold text-rose-400 uppercase tracking-tighter text-center">

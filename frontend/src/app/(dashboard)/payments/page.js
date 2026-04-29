@@ -118,8 +118,8 @@ export default function PaymentsListPage() {
       const list = [...payments];
       const dir = sortDirection === "asc" ? 1 : -1;
       list.sort((a, b) => {
-        const ta = a?.billing?.contract?.tenant;
-        const tb = b?.billing?.contract?.tenant;
+        const ta = a?.billing?.contract?.tenant || a?.contract?.tenant;
+        const tb = b?.billing?.contract?.tenant || b?.contract?.tenant;
         if (!ta && !tb) return 0;
         if (!ta) return 1;
         if (!tb) return -1;
@@ -191,10 +191,10 @@ export default function PaymentsListPage() {
             className="hs-glass-effect"
           />
           <KpiCard
-            label="Voided (MTD)"
+            label="Voided Payments"
             icon={FileX}
             value={voidedThisMonth}
-            sub="FORENSIC OVERVIEW"
+            sub="VOIDED THIS MONTH"
             isDanger={voidedThisMonth > 0}
             isNeutral={voidedThisMonth === 0}
             isLoading={!todayRepData && !monthRepData}
@@ -303,7 +303,7 @@ export default function PaymentsListPage() {
               sortDirection={sortDirection}
               onSortChange={onSortChange}
               rows={sortedFiltered.map((payment) => {
-                const tenant = payment?.billing?.contract?.tenant;
+                const tenant = payment?.billing?.contract?.tenant || payment?.contract?.tenant;
                 const tenantName = tenant ? formatTenantDirectoryName(tenant) : "—";
                 const rowStatus = paymentRowStatus(payment);
                 const isVoided = rowStatus === "voided";
@@ -347,9 +347,9 @@ export default function PaymentsListPage() {
                       </div>
                     </td>
                     <td className="py-5 text-right">
-                      <CurrencyDisplay 
-                        amount={payment.amount_paid} 
-                        className={`text-sm font-bold ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`} 
+                      <CurrencyDisplay
+                        amount={payment.amount_paid}
+                        className={`text-sm font-bold ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`}
                       />
                     </td>
                     <td className="py-5 text-center">

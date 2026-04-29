@@ -1,8 +1,8 @@
 # HavenStay Database Documentation
 
-**Version:** 4.8  
-**Last Updated:** April 20, 2026  
-**Status:** Canonical schema specification and forensic data design
+**Version:** 5.2  
+**Last Updated:** April 29, 2026  
+**Status:** Canonical integration contract for backend services; forensic alignment baseline (v5.0 engine)
 
 ---
 
@@ -54,8 +54,8 @@ The database consists of **15 Normalized Tables** (14 operational + 1 forensic) 
 | `utility_rates` | Dynamic Utility Pricing | Temporal |
 | `billing` | Monthly Cycle Headers | Immutable |
 | `billing_line_items`| Itemized Ledger Charges (with Utility Link) | Immutable |
-| `payments` | Financial Transaction Records (Billing/Deposit) | Soft Void |
-| `audit_logs` | Trigger‑driven DML History | Immutable |
+| `payments` | Financial Transaction Records (Billing/Deposit) | XOR Constraint (`billing_id` XOR `contract_id`). Supports dual-path context resolution. |
+| `audit_logs` | Trigger‑driven DML History | Immutable. Includes `correlation_id` for workflow grouping. |
 
 ### 4.2 Monetary Standards (BR-BIL-004, BR-PAY-001)
 To ensure financial integrity across all operational modules, the following standards are enforced in the schema:
@@ -124,5 +124,5 @@ erDiagram
 
 ---
 
-*Aligned to: SRS.md v4.7 · SDD.md v4.7 · BUSINESS_RULES.md v1.9 · havenstay_schema.sql (v4.7) · API_REFERENCE.md*  
-*Last Updated: April 21, 2026 (v4.9 — Corrected constraint names, dual-path schema authority, archival patterns for meter_assignments and billing_line_items. Aligned to SRS v4.7 / BR v1.9.)*
+*Aligned to: SRS.md v5.2 · SDD.md v5.2 · BUSINESS_RULES.md v2.2 · havenstay_schema.sql (v5.0) · API_REFERENCE.md*  
+*Last Updated: April 29, 2026 (v5.2 — Clean State Release: Synchronized all references to match the new continuous Business Rule numbering v2.2.)*

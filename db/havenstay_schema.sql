@@ -107,6 +107,7 @@ CREATE TABLE rooms (
     status       ENUM('available','unavailable','maintenance') DEFAULT 'available',
     amenities    TEXT          NULL,
     description  TEXT          NULL,
+    is_metered   TINYINT(1)    DEFAULT 1,
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at   DATETIME NULL,
@@ -194,6 +195,7 @@ CREATE TABLE meter_readings (
     recorded_by   INT           NOT NULL,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_meter_reading_forensic (meter_id, reading_date, reading_value),
     CONSTRAINT fk_mr_meter FOREIGN KEY (meter_id) REFERENCES meters (meter_id),
     CONSTRAINT fk_mr_actor FOREIGN KEY (recorded_by) REFERENCES users (user_id)
 ) ENGINE=InnoDB;
@@ -285,7 +287,12 @@ CREATE TABLE audit_logs (
     new_value      JSON            NULL,
     changed_by     INT             NULL,
     correlation_id VARCHAR(64)     NULL,
-    changed_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+    changed_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Performance Hardening
+    INDEX idx_audit_timestamp (changed_at),
+    INDEX idx_audit_resource  (target_table, record_id),
+    INDEX idx_audit_action    (action),
+    INDEX idx_audit_correlation (correlation_id)
 ) ENGINE=InnoDB;
 
 -- ── SECTION 3: REFERENCE DATA ──
@@ -420,9 +427,9 @@ END//
 CREATE TRIGGER trg_meter_readings_ai AFTER INSERT ON meter_readings FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'meter_readings', NEW.reading_id, JSON_OBJECT('val', NEW.reading_value, 'date', NEW.reading_date, 'mtr', NEW.meter_id), @current_user_id, @current_correlation_id)//
 CREATE TRIGGER trg_meter_readings_au AFTER UPDATE ON meter_readings FOR EACH ROW 
 BEGIN
-    IF NOT (OLD.reading_value <=> NEW.reading_value) OR NOT (OLD.reading_date <=> NEW.reading_date) THEN
+    IF NOT (OLD.reading_value <=> NEW.reading_value) OR NOT (OLD.reading_date <=> NEW.reading_date) OR NOT (OLD.is_rollover <=> NEW.is_rollover) THEN
         INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'meter_readings', NEW.reading_id, JSON_OBJECT('val', OLD.reading_value, 'date', OLD.reading_date), JSON_OBJECT('val', NEW.reading_value, 'date', NEW.reading_date), @current_user_id, @current_correlation_id);
+        VALUES ('UPDATE', 'meter_readings', NEW.reading_id, JSON_OBJECT('val', OLD.reading_value, 'date', OLD.reading_date, 'rollover', OLD.is_rollover), JSON_OBJECT('val', NEW.reading_value, 'date', NEW.reading_date, 'rollover', NEW.is_rollover), @current_user_id, @current_correlation_id);
     END IF;
 END//
 CREATE TRIGGER trg_meter_readings_ad AFTER DELETE ON meter_readings FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'meter_readings', OLD.reading_id, JSON_OBJECT('date', OLD.reading_date, 'mtr', OLD.meter_id), @current_user_id, @current_correlation_id)//
@@ -513,6 +520,7 @@ SELECT
     bs.bed_space_id,
     bs.bed_label,
     bs.status AS bed_status,
+    c.status AS contract_status,
     c.move_in_date,
     c.expected_move_out_date
 FROM contracts c
@@ -546,7 +554,8 @@ SELECT
     r.room_code,
     t.tenant_id,
     CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
-    c.contract_id
+    c.contract_id,
+    c.deposit_amount
 FROM bed_spaces bs
 JOIN rooms r ON bs.room_id = r.room_id
 LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status IN ('active', 'pending_payment')
@@ -578,11 +587,15 @@ CREATE VIEW vw_tenant_contract_history AS
 SELECT
     c.contract_id,
     t.tenant_id,
+    t.email,
     CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
     c.move_in_date,
-    c.actual_move_out_date,
-    c.status AS contract_status,
-    r.room_code,
+    c.actual_move_out_date AS move_out_date,
+    c.status AS status,
+    c.is_cleared,
+    r.room_id,
+    r.room_code AS room_label,
+    bs.bed_space_id,
     bs.bed_label
 FROM contracts c
 JOIN tenants t ON c.tenant_id = t.tenant_id

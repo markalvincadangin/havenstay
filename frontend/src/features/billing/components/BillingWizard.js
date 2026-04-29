@@ -32,6 +32,21 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
   const selectedIdx = readings.findIndex(r => r.meter_id === meter.meter_id);
   const selectedConfig = selectedIdx > -1 ? readings[selectedIdx] : { previous_reading_id: "", current_reading_id: "" };
 
+  const [lastBilled, setLastBilled] = useState(null);
+
+  // Fetch forensic baseline (last billed)
+  useEffect(() => {
+    const fetchBaseline = async () => {
+      try {
+        const res = await fetcher(`/api/meters/${meter.meter_id}/last-billed`);
+        if (res && res.data) setLastBilled(res.data);
+      } catch (e) {
+        console.error("Failed to fetch baseline for meter", meter.serial_number);
+      }
+    };
+    fetchBaseline();
+  }, [meter.meter_id]);
+
   const meterReadings = useMemo(() => {
     return (readingsData || []).filter(r => r.meter_id === meter.meter_id)
       .sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
@@ -40,7 +55,15 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
   const prevRead = meterReadings.find(r => String(r.reading_id) === String(selectedConfig.previous_reading_id));
   const currRead = meterReadings.find(r => String(r.reading_id) === String(selectedConfig.current_reading_id));
 
-  // Smart Suggestion Logic
+  // Consumption Preview Logic
+  const consumption = useMemo(() => {
+    if (!prevRead || !currRead) return null;
+    let diff = parseFloat(currRead.reading_value) - parseFloat(prevRead.reading_value);
+    if (diff < 0) diff = 10000 - parseFloat(prevRead.reading_value) + parseFloat(currRead.reading_value);
+    return diff;
+  }, [prevRead, currRead]);
+
+  // Smart Suggestion Logic: Forensically continuous
   useEffect(() => {
     if (meterReadings.length === 0) return;
 
@@ -49,34 +72,29 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
     const hasConfig = tIdx > -1 && (currentReadings[tIdx].previous_reading_id || currentReadings[tIdx].current_reading_id);
 
     if (!hasConfig) {
+      // Suggestion Logic: Start = Last Billed, End = Most Recent
+      const suggestedStart = lastBilled?.reading_id || meterReadings[1]?.reading_id || meterReadings[0]?.reading_id;
       const suggestedEnd = meterReadings[0]?.reading_id;
-      const suggestedStart = meterReadings[1]?.reading_id;
 
       if (suggestedEnd && suggestedStart) {
-        if (tIdx === -1) {
-          currentReadings.push({
-            meter_id: meter.meter_id,
-            previous_reading_id: String(suggestedStart),
-            current_reading_id: String(suggestedEnd)
-          });
-        } else {
-          currentReadings[tIdx] = {
-            ...currentReadings[tIdx],
-            previous_reading_id: String(suggestedStart),
-            current_reading_id: String(suggestedEnd)
-          };
-        }
+        const payload = {
+          meter_id: meter.meter_id,
+          previous_reading_id: String(suggestedStart),
+          current_reading_id: String(suggestedEnd)
+        };
+        if (tIdx === -1) currentReadings.push(payload);
+        else currentReadings[tIdx] = payload;
+        
         setValue("readings", currentReadings, { shouldDirty: true });
       }
     } else if (lastRecordedId) {
-      // If we just recorded a reading for THIS meter, auto-select it as current
       const isForThisMeter = meterReadings.some(r => String(r.reading_id) === String(lastRecordedId));
       if (isForThisMeter && currentReadings[tIdx].current_reading_id !== String(lastRecordedId)) {
         currentReadings[tIdx] = { ...currentReadings[tIdx], current_reading_id: String(lastRecordedId) };
         setValue("readings", currentReadings, { shouldDirty: true });
       }
     }
-  }, [meterReadings, lastRecordedId, meter.meter_id, setValue, getValues]);
+  }, [meterReadings, lastBilled, lastRecordedId, meter.meter_id, setValue, getValues]);
 
   const validEndReadings = meterReadings.filter(r => {
     if (!prevRead) return true;
@@ -91,20 +109,13 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
       tIdx = currentReadings.length - 1;
     }
     currentReadings[tIdx] = { ...currentReadings[tIdx], [field]: value };
-
-    // Auto-reset end reading if logically impossible now
-    if (field === 'previous_reading_id') {
-      const nrPrev = meterReadings.find(r => String(r.reading_id) === String(value));
-      const nrCurr = meterReadings.find(r => String(r.reading_id) === String(currentReadings[tIdx].current_reading_id));
-      if (nrPrev && nrCurr && new Date(nrCurr.reading_date) <= new Date(nrPrev.reading_date)) {
-        currentReadings[tIdx].current_reading_id = "";
-      }
-    }
     setValue("readings", currentReadings, { shouldDirty: true });
   };
 
+  const isContinuous = lastBilled && String(selectedConfig.previous_reading_id) === String(lastBilled.reading_id);
+
   return (
-    <div className="border border-stone-200 rounded-xl overflow-hidden mb-6 last:mb-0 bg-white shadow-sm">
+    <div className="border border-stone-200 rounded-xl overflow-hidden mb-6 last:mb-0 bg-white shadow-sm transition-all hover:shadow-md">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-stone-50 border-b border-stone-100 gap-4">
         <div className="flex items-center gap-3">
           <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-sm border ${isElectric ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-sky-50 text-sky-600 border-sky-100'}`}>
@@ -115,20 +126,37 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
             <div className="font-mono text-sm font-bold text-stone-900 tracking-wider uppercase">SN-{meter.serial_number}</div>
           </div>
         </div>
-        {canRecord && (
-          <button
-            type="button"
-            onClick={() => onRecordReading(meter)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 transition-all text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95"
-          >
-            <Plus size={14} strokeWidth={3} />
-            Record Reading
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {consumption !== null && (
+            <div className="px-3 py-1.5 rounded-lg bg-teal-500 text-white flex items-center gap-2 animate-in zoom-in duration-300 shadow-sm shadow-teal-200">
+              <Zap size={12} className={isElectric ? "text-amber-200" : "text-sky-200"} />
+              <span className="text-[10px] font-black tracking-widest uppercase">{consumption.toFixed(2)} {isElectric ? 'kWh' : 'm³'}</span>
+            </div>
+          )}
+          {canRecord && (
+            <button
+              type="button"
+              onClick={() => onRecordReading(meter)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-stone-600 hover:text-teal-600 border border-stone-200 hover:border-teal-200 transition-all text-[10px] font-black uppercase tracking-widest shadow-sm active:scale-95"
+            >
+              <Plus size={14} strokeWidth={3} />
+              Record Reading
+            </button>
+          )}
+        </div>
       </div>
       <div className="p-6 grid gap-6 md:grid-cols-2">
         <Field
-          label="Start Baseline Reading"
+          label={
+            <div className="flex items-center justify-between">
+              <span>Start Baseline Reading</span>
+              {isContinuous && (
+                <span className="text-[9px] font-black text-teal-600 uppercase flex items-center gap-1">
+                  <ShieldCheck size={10} /> Forensic Continuity Verified
+                </span>
+              )}
+            </div>
+          }
           required
           helpText={prevRead ? `Recorded on ${formatDateString(prevRead.reading_date)}` : "Select the starting reference reading"}
         >
@@ -138,7 +166,7 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
               readOnly
               value={prevRead ? Number(prevRead.reading_value).toFixed(2) : ""}
               placeholder="0.00"
-              className="!h-10 text-sm border-stone-200 font-bold focus:border-teal-500/50 bg-white"
+              className={`!h-10 text-sm border-stone-200 font-bold focus:border-teal-500/50 bg-white ${isContinuous ? 'ring-2 ring-teal-500/10' : ''}`}
             />
             <Select
               value={selectedConfig.previous_reading_id}
@@ -148,7 +176,7 @@ const MeterReadingSelector = ({ meter, readingsData, control, setValue, getValue
               <option value="">Select reading...</option>
               {meterReadings.map(r => (
                 <option key={r.reading_id} value={r.reading_id}>
-                  {Number(r.reading_value).toFixed(2)} — {formatDateString(r.reading_date)}
+                  {Number(r.reading_value).toFixed(2)} — {formatDateString(r.reading_date)} {lastBilled?.reading_id === r.reading_id ? '(LAST BILLED)' : ''}
                 </option>
               ))}
             </Select>
@@ -603,7 +631,12 @@ export default function BillingWizard() {
                         <div className="flex flex-col gap-1">
                           <ResourceIdCell type="contract" id={app.contract_id} />
                           <div className="text-sm font-bold text-stone-900 mt-1">{app.tenant_name}</div>
-                          {receivedOrphanCent && (
+                          {app.already_billed && (
+                            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-[9px] uppercase font-black tracking-widest text-amber-700 border border-amber-100 shadow-sm animate-in shake duration-500">
+                              <ShieldCheck size={11} className="text-amber-600" /> <span>Already Billed (Overlap)</span>
+                            </div>
+                          )}
+                          {receivedOrphanCent && !app.already_billed && (
                             <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-100 text-[10px] uppercase font-black tracking-widest text-stone-500">
                               <Info size={11} className="text-stone-400" /> <span>Differential applied</span>
                             </div>
@@ -641,7 +674,7 @@ export default function BillingWizard() {
                         </div>
                       </div>
                       <div className="w-full lg:w-2/3 border-t lg:border-t-0 lg:border-l border-dashed border-stone-200 pt-4 lg:pt-0 lg:pl-6 space-y-4">
-                        <Field label="Utility Override (₱)">
+                        <Field label="Utility Override (₱)" helpText={app.already_billed ? "This tenant already has an active bill. New charges will be appended or skipped based on policy." : null}>
                           <Input
                             type="number"
                             step="0.01"
@@ -654,7 +687,7 @@ export default function BillingWizard() {
                                 [app.contract_id]: { ...orv, amount: e.target.value }
                               }, { shouldDirty: true });
                             }}
-                            className={`!h-10 border-stone-200 font-bold font-mono text-sm tracking-wider tabular-nums ${isOverridden ? 'bg-amber-50 text-amber-900 border-amber-300' : ''}`}
+                            className={`!h-10 border-stone-200 font-bold font-mono text-sm tracking-wider tabular-nums ${isOverridden ? 'bg-amber-50 text-amber-900 border-amber-300' : ''} ${app.already_billed ? 'border-amber-400 shadow-sm shadow-amber-100' : ''}`}
                           />
                         </Field>
                         {isOverridden && (

@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## Business Rules (BR)
 
-**Version:** 1.8  
-**Last Updated:** April 20, 2026  
+**Version:** 2.2  
+**Last Updated:** April 29, 2026  
 **Status:** Authoritative logic and behavioral constraints
 
 ---
@@ -21,6 +21,7 @@ Rules are identified using the format **BR-[Category]-[###]**:
 - **BIL**: Billing Rules
 - **PAY**: Payment Rules
 - **MET**: Meter and Utility Rules
+- **ANL**: Analytical and Reporting Rules
 - **AUD**: Audit and Forensics
 
 ---
@@ -245,12 +246,6 @@ previous cycle. A negative total indicates a system-wide credit balance
 for the tenant.
 
 **BR-BIL-006**
-The outstanding balance of a billing cycle is computed as:
-  balance = SUM(line_item amounts) - SUM(non-voided payment amounts)
-There is no stored balance column. Balance is always computed
-dynamically.
-
-**BR-BIL-007**
 Billing cycle status is maintained automatically and must not be
 set manually. The maintenance logic is:
 - `paid`    — total_paid >= total_amount AND total_amount >= 0
@@ -262,20 +257,23 @@ When both `overdue` and `partial` conditions are true
 (some payment made but due date has passed), the status
 is `overdue`. Overdue takes precedence over partial.
 
-**BR-BIL-008**
+**BR-BIL-007**
 Billing status must be recalculated immediately after every
 payment post and every payment void. No other operation
 may leave billing status stale.
 
-**BR-BIL-009**
+**BR-BIL-008**
 A billing cycle may only be generated for an active contract.
 Generating a billing cycle for a completed or terminated
 contract is not permitted.
 
-**BR-BIL-010**
+**BR-BIL-009**
 Billing generation is performed manually by Admin or Staff.
 A future automatic scheduling feature is planned but not
 in scope for the current release.
+
+**BR-BIL-010**
+Generating billing for a room is a non-blocking batch operation. If a specific contract within the room fails validation (e.g., due to an overlapping period per BR-BIL-002), the system must skip that contract, log the reason, and continue processing all other eligible contracts in the room. This ensures room-level utility distribution remains resilient even when individual contract dates are in flux.
 
 ---
 
@@ -339,6 +337,9 @@ same atomic transaction. A completed or terminated contract where
 `is_cleared = FALSE` indicates an unsettled deposit that requires
 resolution before the tenant's financial ledger is closed.
 
+**BR-PAY-011**
+To maintain financial transparency, every payment record must be visually resolvable to a tenant and room. For payments linked to a bill (Rent), the context is resolved via the billing record. For payments linked directly to a contract (Deposits/Refunds), the context is resolved via the contract record. UI layers must support this dual-path resolution to prevent "orphan" financial records.
+
 ---
 
 ## 8. Meter and Utility Rules
@@ -369,13 +370,9 @@ default to 9,999.9999 units as the rollover threshold. Readings that violate
 the monotonicity rule without the rollover flag are rejected.
 
 **BR-MET-006**
-Consumption for a billing period is calculated as:
-  consumption = current_reading_value - previous_reading_value
-
-**BR-MET-007**
 The unit rate for a utility type is defined by a utility rate. Each utility rate has an effective-from date. The applicable rate for a billing period is the most recent utility rate whose effective-from date is on or before the billing period start date.
 
-**BR-MET-008**
+**BR-MET-007**
 The utility charge for a billing period is calculated as:
   charge = consumption × applicable_unit_rate
 
@@ -385,18 +382,18 @@ The system provides the calculated amount as a reference;
 staff may override it with a manually entered amount
 and must record the reason for any deviation.
 
-**BR-MET-009**
+**BR-MET-008**
 A meter reading must be linked to its corresponding utility 
 billing line item to create a traceable audit trail connecting 
 consumption data to the charge it produced.
 
-**BR-MET-010**
+**BR-MET-009**
 When a meter is decommissioned or replaced, its status is set
 to `replaced`. Historical readings on a replaced meter are
 retained and remain queryable for audit purposes.
 
-**BR-MET-011**
-For shared rooms, the total calculated utility charge for the room (as per BR-MET-008) must be automatically divided equally among all active contracts assigned to bed spaces within that room during the billing period. This evenly apportioned amount is then added as the utility line item on each respective tenant's billing cycle. Rounding differentials resulting from the division (e.g., ₱0.01) shall be applied to the earliest created active contract in the group to ensure the sum of line items exactly matches the total room consumption charge. For private rooms, the single active contract absorbs 100% of the calculated utility charge.
+**BR-MET-010**
+For shared rooms, the total calculated utility charge for the room (as per BR-MET-007) must be automatically divided equally among all active contracts assigned to bed spaces within that room during the billing period. This evenly apportioned amount is then added as the utility line item on each respective tenant's billing cycle. Rounding differentials resulting from the division (e.g., ₱0.01) shall be applied to the earliest created active contract in the group to ensure the sum of line items exactly matches the total room consumption charge. For private rooms, the single active contract absorbs 100% of the calculated utility charge.
 
 ---
 
@@ -422,10 +419,29 @@ A correlation ID shall be included in each audit log entry to group mutations pr
 
 ---
 
-## 10. Revision History
+## 11. Analytical and Reporting Rules
+
+**BR-ANL-001**
+The outstanding balance of a billing cycle is computed dynamically. There is no stored balance column in the database.
+**Formula:** `Balance = SUM(Line Item Amounts) - SUM(Non-voided Payment Amounts)`
+
+**BR-ANL-002**
+Consumption for a billing period is derived from paired meter readings.
+**Formula:** `Consumption = Current Reading Value - Previous Reading Value`
+
+**BR-ANL-003**
+The Collection Rate KPI measures performance efficiency by comparing cash inflow against expected receivables. Because collections include non-billed items (Security Deposits, Advance Rent), a rate exceeding 100% is mathematically valid and represents high operational efficiency.
+**Formula:** `Collection Rate = (Total Collected Payments in Period / Total Amount Billed in Period) * 100`
+
+---
+
+## 12. Revision History
 
 | Version | Date | Changes |
 | :--- | :--- | :--- |
 | v1.0–v1.7 | Mar–Apr 2026 | Prior iterations (see git history) |
 | v1.8 | Apr 20, 2026 | Consolidated meter and utility rules; deposit rollover rules added. |
-| **v1.9** | **Apr 21, 2026** | **Added BR-CON-012 (voided contract), BR-CON-013 (monthly_rate_override), BR-PAY-010 (is_cleared). Amended BR-MET-005 rollover max default. Corrected BR-TEN-004, BR-ROM-003, BR-BIL-007 wording from "derived" to "maintained automatically".** |
+| v1.9 | Apr 21, 2026 | Added BR-CON-012 (voided contract), BR-CON-013 (monthly_rate_override), BR-PAY-010 (is_cleared). Amended BR-MET-005 rollover max default. Corrected BR-TEN-004, BR-ROM-003, BR-BIL-007 wording from "derived" to "maintained automatically". |
+| **v2.0** | **Apr 29, 2026** | **Major Stabilization: Added BR-BIL-011 (Resilient Batch Billing), BR-PAY-011 (Forensic Context Resolution), and BR-PAY-012 (Collection Rate Logic).** |
+| **v2.1** | **Apr 29, 2026** | **Reorganized formulas into a new Analytical Rules (ANL) category for reporting transparency. Migrated Balance, Consumption, and Collection Rate formulas.** |
+| **v2.2** | **Apr 29, 2026** | **Clean State Release: Fully removed migrated placeholders and renumbered all rules to be continuous.** |

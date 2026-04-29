@@ -13,11 +13,8 @@
  use Illuminate\Validation\ValidationException;
  
  /**
-  * TenantService
-  * 
-  * Orchestrates tenant lifecycle management, identity search, and 
-  * status state machine logic.
-  * Optimized for HavenStay Forensic v5.0.
+  * Manages tenant lifecycle, profile updates, and status synchronization 
+  * based on contract history.
   */
  class TenantService
  {
@@ -47,9 +44,9 @@
      /**
       * Update an existing tenant profile.
       * 
-      * Forensic Rules:
-      * - BR-TEN-004: 'moved_out' state is system-managed; manual setting is blocked.
-      * - Constraint: Status cannot be changed while an active lease is linked.
+      * Implementation details:
+      * - 'moved_out' status is system-managed and cannot be set manually.
+      * - Status cannot be changed if the tenant has an active contract.
       * 
       * @param User $actor The staff member performing the update.
       * @param Tenant $tenant
@@ -91,7 +88,7 @@
      }
  
      /**
-      * Archive a tenant for forensic history.
+      * Archive a tenant record (soft-delete).
       * 
       * @param User $actor
       * @param Tenant $tenant
@@ -184,7 +181,7 @@
      }
  
      /**
-      * List tenants with pagination and forensic context.
+      * List tenants with pagination and related metadata.
       * 
       * @param array $filters
       * @param int $page
@@ -200,7 +197,7 @@
      }
  
      /**
-      * Retrieve a single tenant record by ID with forensic context.
+      * Retrieve a single tenant record by ID.
       */
      public static function getById(int $id): ?Tenant
      {
@@ -208,8 +205,7 @@
      }
  
      /**
-      * Search tenants with richness (including room/bed context and balance).
-      * Thin Model Compliance: Query logic migrated from model scopes to service.
+      * Search tenants including room/bed context and balance.
       * 
       * @return Builder<Tenant>
       */
@@ -217,7 +213,7 @@
      {
          $q = Tenant::withTrashed();
  
-         // Forensic Rich Context (Joins and Aggregates)
+         // Include room, bed, and balance context
          $driver = DB::getDriverName();
          $nowExpr = $driver === 'sqlite' ? "datetime('now')" : 'NOW()';
          $upperExpr = $driver === 'sqlite' ? "datetime('now','+30 day')" : 'DATE_ADD(NOW(), INTERVAL 30 DAY)';

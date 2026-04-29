@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## System Design Document (SDD)
 
-**Version:** 4.6  
-**Last Updated:** April 20, 2026  
+**Version:** 5.2  
+**Last Updated:** April 29, 2026  
 **Status:** Canonical architectural design and forensic implementation patterns
 
 ---
@@ -115,6 +115,7 @@ The database is normalized to the 3rd Normal Form (3NF) where operationally prac
 - **Bed-Centric Occupancy:** All contracts are linked to a `bed_space_id`. Room context is derived via `bed_spaces.room_id`. This prevents data anomalies where a tenant might be assigned to a room but not a specific bed space.
 - **Derived Financials:** The `billing` table does not store total amounts. Instead, `total_amount`, `total_paid`, and `balance` are computed dynamically from the `billing_line_items` and `payments` relationships to ensure data consistency.
 - **Forensic Linkage:** All audit records are linked via a `correlation_id` across the session, allowing an Admin to trace a single UI action (e.g., Check-in) to multiple row‑level changes in the audit log.
+- **Dual-Path Payment Transparency:** To prevent orphan financial records, the system implements a dual-path resolution strategy for payments. The `payments` table utilizes an XOR constraint (`billing_id` XOR `contract_id`). API resources and reporting views (`vw_collections_summary`) are architected to resolve tenant and room context through either path, ensuring that both Rent (Billing-linked) and Deposits (Contract-linked) are fully traceable.
 - **Billing Rate Resolution:** When generating a `base_rent` line item, the system resolves the effective rate as `COALESCE(contracts.monthly_rate_override, contracts.monthly_rate)`. The override is Admin-set and locked at contract creation (BR-CON-013).
 
 ### 4.4 Status Synchronization Logic
@@ -123,14 +124,15 @@ The system enforces strict status transitions to maintain occupancy integrity:
 - **Bed Status:** "vacant", "occupied", "maintenance". Contracts can only be created for "vacant" beds, with a strict system exception allowing contiguous renewals on "occupied" beds (BR-CON-011).
 - **Sync Authority:** `RoomService::syncStatusAndCapacity()` is the authoritative service method for reconciling these states during check‑in and move‑out workflows.
 
-### 4.5 Financial Recalculation (BR-BIL-007, BR-BIL-008)
+### 4.5 Financial Recalculation (BR-BIL-006, BR-BIL-007)
 - **Void Support:** Payments utilize a `voided_at` timestamp. All balance computations must use a `whereNull('voided_at')` filter.
 - **Voided Contracts:** Contracts in `voided` status are creation-error corrections (BR-CON-012). They are excluded from all active tenant/room occupancy queries identically to `completed` and `terminated` contracts.
 - **Balance Logic:** 
     - `total_amount` = `SUM(billing_line_items.amount)`
     - `total_paid` = `SUM(payments.amount_paid)` (non‑voided)
     - `balance` = `total_amount - total_paid`
-- **Recalculation Authority:** `BillingService::syncBillingStatus()` is the single source of truth for evaluating billing status priority in sequence: `paid` > `overdue` > `partial` > `unpaid`.
+- **Recalculation Authority:** `BillingService::syncBillingStatus()` is the single source of truth for evaluating billing status priority in sequence: `paid` > `overdue` > `partial` > `unpaid`. (Ref: BR-BIL-006)
+- **Fail-Safe Batch Processing:** Room-level billing operations are architected as resilient batch workflows. The `BatchBillingProcessor` implements a non-blocking loop that traps validation exceptions (e.g., overlapping periods) for individual contracts, logging the failure while allowing the rest of the room to be processed. This prevents local data conflicts from stalling global utility distribution.
 
 ---
 
@@ -256,8 +258,11 @@ The following design decisions satisfy the binding constraints of the Informatio
 | v3.5 | 2026-04-18 | Forensic Lock. Synchronized to 15 tables and 45 triggers. |
 | v4.4 | 2026-04-19 | Level 4 Forensic Hardening. Established physical reading-to-bill traceability; resolved overpayment credit deadlock; authorized security bond refunds; enforced line item polarity. |
 | v4.6 | 2026-04-20 | Retire Transaction Log CCR; Consolidate forensic trail under trigger-based Audit Logs (CCR-007). Verified 45-trigger engine parity. |
-| **v4.7** | **2026-04-21** | **Fixed §3.2 technology stack (Vanilla CSS). Corrected schema authority to dual-path. Added billing rate resolution and voided contract notes. Fixed FR-057 → FR-055 in §12. Aligned to SRS v4.7 and BUSINESS_RULES v1.9.** |
+| v4.7 | 2026-04-21 | Fixed §3.2 technology stack (Vanilla CSS). Corrected schema authority to dual-path. Added billing rate resolution and voided contract notes. Fixed FR-057 → FR-055 in §12. Aligned to SRS v4.7 and BUSINESS_RULES v1.9. |
+| v5.0 | 2026-04-29 | Major Stabilization: Documented Resilient Batch Billing (FR-036) and Dual-Path Forensic Context (BR-PAY-011). Updated Section 10 with stabilization decisions. Aligned to v5.0 Documentation Suite. |
+| v5.1 | 2026-04-29 | Realigned Analytical Rule references and footer synchronization. Aligned to SRS v5.1 / BR v2.1. |
+| **v5.2** | **2026-04-29** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |
 
 ---
 
-*Aligned to: SRS.md v4.7 · BUSINESS_RULES.md v1.9 · db/havenstay_schema.sql (v4.7) · API_REFERENCE.md · OPERATIONS_RUNBOOK.md · TEST_PLAN.md*
+*Aligned to: SRS.md v5.2 · BUSINESS_RULES.md v2.2 · db/havenstay_schema.sql (v5.0) · API_REFERENCE.md · OPERATIONS_RUNBOOK.md · TEST_PLAN.md*

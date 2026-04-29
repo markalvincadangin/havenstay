@@ -136,6 +136,7 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('meters')->group(funct
 
     // Meter Readings
     Route::get('{meter}/readings', [MeterController::class, 'listReadings']);
+    Route::get('{meter}/last-billed', [MeterController::class, 'lastBilled']);
     Route::post('{meter}/readings', [MeterController::class, 'recordReading']);
 });
 

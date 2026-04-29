@@ -22,7 +22,7 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
   const latestValue = latestR ? Number(latestR.reading_value) : 0;
   const onFormSubmit = async (data) => {
     const val = parseFloat(data.reading_value);
-    
+
     // Monotonicity Check (BR-MET-004) vs Rollover (BR-MET-005)
     if (!data.is_rollover && val < latestValue) {
       showToast(`Reading must be ≥ the last recorded value (${latestValue}) unless this is a rollover event.`, "error");
@@ -79,7 +79,7 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
               step="0.0001"
               autoFocus
               placeholder={latestValue ? `≥ ${latestValue}` : "Current reading"}
-              {...register("reading_value", { 
+              {...register("reading_value", {
                 required: "Reading value is required.",
                 min: { value: 0, message: "Reading cannot be negative." }
               })}
@@ -113,10 +113,34 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
           <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-100 flex gap-3">
             <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-[10px] font-medium text-amber-800 leading-relaxed uppercase">
-              Meter readings must be monotonic. Dropping below the last record will cause forensic reconciliation failure.
+              Meter readings must be monotonic. Dropping below the last record will cause an error.
             </p>
           </div>
         )}
+
+        {/* Month Guard Warning */}
+        {(() => {
+          const selectedDate = watch("reading_date");
+          if (!selectedDate || !meter?.readings) return null;
+          const selectedMonth = selectedDate.substring(0, 7); // YYYY-MM
+          const hasExisting = meter.readings.some(r => r.reading_date.substring(0, 7) === selectedMonth);
+
+          if (hasExisting) {
+            return (
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-100 flex gap-3 animate-in shake duration-500">
+                <AlertTriangle className="size-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] font-black text-rose-800 uppercase tracking-tight">Existing Month Reading</p>
+                  <p className="text-[9px] font-medium text-rose-600 mt-1 uppercase leading-tight">
+                    A reading for {new Date(selectedDate).toLocaleString('default', { month: 'long', year: 'numeric' })} already exists.
+                    Recording this will create a second reading for the same cycle.
+                  </p>
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
     </QuickEditFormShell>
   );

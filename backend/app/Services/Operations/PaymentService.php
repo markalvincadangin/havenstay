@@ -13,11 +13,8 @@
  use Illuminate\Validation\ValidationException;
  
  /**
-  * PaymentService
-  * 
-  * Handles the posting, validation, and voiding of financial transactions.
-  * Supports XOR targeting (Billing Cycle vs. Contract-linked Deposits).
-  * Optimized for HavenStay Forensic v5.0.
+  * Handles the recording, validation, and voiding of financial transactions.
+  * Supports targeting either a specific billing cycle or a contract (for deposits).
   */
  class PaymentService
  {
@@ -31,15 +28,15 @@
       */
      public static function getById(int $paymentId): ?Payment
      {
-         return Payment::with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'processor'])->find($paymentId);
+         return Payment::with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'contract.room', 'contract.bedSpace', 'processor'])->find($paymentId);
      }
  
      /**
-      * Record a new payment with XOR targeting and forensic atomic logic.
+      * Record a new payment.
       * 
-      * Forensic Rules:
-      * - XOR: Payment must link to EITHER billing_id OR contract_id (for deposits).
-      * - Activation: Trigger contract activation if total paid (Rent + Deposit) is met.
+      * Implementation details:
+      * - Ensures payment targets either a billing_id OR contract_id.
+      * - Triggers contract activation if the total paid (Rent + Deposit) meets requirements.
       * 
       * @param User $actor The staff member recording the payment.
       * @param array $data Input details (amount, category, method, targets).
@@ -54,7 +51,7 @@
          $amount = round((float)($data['amount_paid'] ?? 0), 2);
          $method = $data['payment_method'] ?? 'cash';
  
-         // XOR Validation (BR-PAY-001)
+         // Validation
          if ($billingId && $contractId) {
              throw ValidationException::withMessages(['billing_id' => ['Payment cannot target both a bill and a contract directly.']]);
          }
@@ -74,7 +71,7 @@
              ],
              operation: function () use ($actor, $data, $category, $billingId, $contractId, $amount, $method): Payment {
                  
-                 // If targeting a bill, we also need the contract_id for the forensic payment record
+                 // If targeting a bill, resolve the contract context for the payment record
                  if ($billingId) {
                      $billing = Billing::findOrFail($billingId);
                      $contractId = $billing->contract_id;
@@ -99,10 +96,10 @@
                      BillingService::syncBillingStatus($actor, $billing);
                  }
  
-                 // 2. Forensic Hook: Auto-activate contract if pending_payment and settled
+                 // Auto-activate contract if pending_payment and required amount is reached
                  $contract = Contract::find($contractId);
                  if ($contract) {
-                     // Update is_cleared if this is a refund or rollover (BR-PAY-010)
+                     // Set deposit as cleared if this is a refund or rollover
                      if (in_array($category, ['refund', 'rollover'])) {
                          $contract->update(['is_cleared' => true]);
                      }
@@ -179,7 +176,7 @@
      public static function listHistoryQuery(array $filters = []): Builder
      {
          $query = Payment::query()
-             ->with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'processor'])
+             ->with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'contract.room', 'contract.bedSpace', 'processor'])
              ->orderByDesc('payment_date')
              ->orderByDesc('payment_id');
  

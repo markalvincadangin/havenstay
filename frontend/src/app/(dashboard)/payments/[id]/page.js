@@ -94,11 +94,11 @@ export default function PaymentDetailPage() {
   };
 
   const title = payment ? `#PAY-${String(paymentId).padStart(6, "0")}` : "Payment Detail";
-  const tenant = payment?.billing?.contract?.tenant;
+  const tenant = payment?.billing?.contract?.tenant || payment?.contract?.tenant;
   const tenantName = tenant ? `${tenant.last_name}, ${tenant.first_name}`.trim() : "—";
-  const room = payment?.billing?.contract?.room;
+  const room = payment?.billing?.contract?.room || payment?.contract?.room;
   const roomCode = room?.room_code || "—";
-  const bedLabel = payment?.billing?.contract?.bed_space?.bed_label || "—";
+  const bedLabel = (payment?.billing?.contract?.bed_space?.bed_label || payment?.contract?.bed_space?.bed_label) || "—";
   const status = paymentStatus(payment);
   const methodKey = String(payment?.payment_method || "").toLowerCase();
   const methodLabel = METHOD_LABELS[methodKey] || payment?.payment_method || "—";
@@ -174,7 +174,7 @@ export default function PaymentDetailPage() {
           <ConfirmationDialog
             open={isVoiding}
             title="Void Payment Record"
-            message="This action will reverse the collection and restore the balance on the linked billing record. This transaction will be permanently marked as voided."
+            description="Are you sure you want to void this payment? This action will reverse the collection, restore the balance on the linked billing record, and permanently mark this transaction as voided in the financial ledger."
             confirmLabel="Confirm Void"
             isDanger
             isLoading={voidLoading}
@@ -282,8 +282,14 @@ export default function PaymentDetailPage() {
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Billing ID</p>
                         <div className="mt-1.5 flex items-center gap-2">
-                          <ResourceIdCell id={payment?.billing_id} type="billing" />
-                          <CorrelationIdCell value={payment?.billing?.correlation_id} className="opacity-60 scale-90" />
+                          {payment?.billing_id ? (
+                            <>
+                              <ResourceIdCell id={payment?.billing_id} type="billing" />
+                              <CorrelationIdCell value={payment?.billing?.correlation_id} className="opacity-60 scale-90" />
+                            </>
+                          ) : (
+                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">N/A (Contract Direct)</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -292,9 +298,9 @@ export default function PaymentDetailPage() {
                         <Receipt size={18} className="text-stone-400" />
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Billing Period</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Payment Nature</p>
                         <p className="text-sm font-black text-stone-900 mt-0.5">
-                          {formatDateRange(payment?.billing?.billing_period_from, payment?.billing?.billing_period_to)}
+                          {payment?.billing_id ? "Rent Settlement" : (payment?.payment_category === 'deposit' ? "Security Deposit" : "Direct Contract Payment")}
                         </p>
                       </div>
                     </div>

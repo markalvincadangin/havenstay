@@ -153,8 +153,8 @@ export default function UtilityDetailPage({ params }) {
     >
       <ConfirmationDialog
         open={showArchiveModal}
-        title="Archive Utility?"
-        message="This will hide the utility from future registrations. Historical billing and consumption records will be preserved for auditing. All assigned meters must be decommissioned first."
+        title="Archive Utility Service"
+        description="Are you sure you want to archive this utility category? This will hide the service from future registrations and prevent new meters from being assigned. All historical billing and consumption records will remain available for forensic audits, but active meters must be decommissioned first."
         confirmLabel="Confirm Archive"
         isDanger
         isLoading={busyAction === "archive"}

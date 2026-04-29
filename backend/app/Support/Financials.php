@@ -10,40 +10,40 @@
  use Illuminate\Support\Facades\DB;
  
  /**
-  * Financials
-  * 
-  * Centralizes complex financial calculations, currency formatting, 
-  * and balance reconciliation across the system.
-  * Optimized for HavenStay Forensic v5.0.
+  * Provides centralized logic for financial calculations, currency formatting, 
+  * and balance reconciliation.
   */
  class Financials
  {
      /**
-      * Compute utility cost based on sub-meter reading.
+      * Compute utility cost based on meter reading.
       * 
-      * Forensic Rule BR-MET-007: Utility rate lookups must use the billing period's 
-      * starting date, never the current date, to ensure temporal consistency.
+      * Implementation details:
+      * - Rate lookups use the billing period's starting date to ensure consistency.
+      * - Handles dial rollover (BR-MET-005).
       * 
       * @param int $meterId
       * @param float $currentReading
-      * @param string|null $lookupDate The date for rate resolution (mandated per v5.0 blueprint).
+      * @param string|null $lookupDate The date for rate resolution.
+      * @param float|null $baseValue Explicit starting value. If null, uses last billed reading.
       * @return float total_cost
       */
      public static function computeUtilityCost(int $meterId, float $currentReading, ?string $lookupDate = null, ?float $baseValue = null): float
      {
          $meter = Meter::with('utility')->findOrFail($meterId);
          
-         // Forensic Guard: Defaulting to now() is a risk, but maintained for API compatibility
-         // with a warning comment.
          $lookupDate = $lookupDate ?: now()->toDateString();
  
-         // Find previous reading for this meter
-         $lastReading = MeterReading::where('meter_id', $meterId)
-             ->orderBy('reading_date', 'desc')
-             ->orderBy('reading_id', 'desc')
-             ->first();
+         // 1. Resolve starting reference value
+         if ($baseValue !== null) {
+             $prevValue = $baseValue;
+         } else {
+             // Fallback to the value from the last billed reading
+             $lastBilled = self::getLastBilledReading($meterId);
+             $prevValue = $lastBilled ? (float) $lastBilled->reading_value : 0;
+         }
  
-         // Find active rate for the utility (BR-MET-007)
+         // 2. Resolve active rate
          $rate = UtilityRate::where('utility_id', $meter->utility_id)
              ->where('effective_from', '<=', $lookupDate)
              ->orderBy('effective_from', 'desc')
@@ -51,20 +51,16 @@
  
          if (!$rate) {
              throw \Illuminate\Validation\ValidationException::withMessages([
-                 'utility_rate' => ["Forensic Audit Failure: No effective utility rate found for {$meter->utility->name} on or before {$lookupDate}."]
+                 'utility_rate' => ["No effective utility rate found for {$meter->utility->name} on or before {$lookupDate}."]
              ]);
          }
  
          $unitRate = (float) $rate->base_rate;
-         $prevValue = $baseValue !== null ? $baseValue : ($lastReading ? (float) $lastReading->reading_value : 0);
- 
          $consumption = $currentReading - $prevValue;
  
          // Implement BR-MET-005: Rollover Handling
-         // If consumption is negative, assume a rollover event.
-         // Default dial capacity is 9,999.9999 as per BR-MET-005.
          if ($consumption < 0) {
-             $dialCapacity = 10000.0; // Rollover threshold (max display + 1 segment)
+             $dialCapacity = 10000.0;
              $consumption = ($dialCapacity - $prevValue) + $currentReading;
          }
  
@@ -72,7 +68,26 @@
      }
  
      /**
-      * Reconcile Billing Status based on authoritative balance logic.
+      * Retrieve the most recent reading for a meter that has been committed to a bill.
+      * 
+      * @param int $meterId
+      * @return MeterReading|null
+      */
+     public static function getLastBilledReading(int $meterId): ?MeterReading
+     {
+         return MeterReading::where('meter_id', $meterId)
+             ->whereIn('reading_id', function($query) {
+                 $query->select('reading_id')
+                     ->from('billing_line_items')
+                     ->whereNotNull('reading_id');
+             })
+             ->orderBy('reading_date', 'desc')
+             ->orderBy('reading_id', 'desc')
+             ->first();
+     }
+ 
+     /**
+      * Derive the status of a billing record based on the amount paid and due date.
       * 
       * @param float $amountDue
       * @param float $amountPaid
@@ -96,7 +111,7 @@
      }
  
      /**
-      * Authoritative check for outstanding billing balance on a contract.
+      * Get the outstanding balance for a specific contract.
       * 
       * @param int $contractId
       * @return float
@@ -119,8 +134,8 @@
       */
      public static function getTotalPaid(int $contractId): float
      {
-         // Forensic Rule: Total paid includes both direct contract payments (Deposits) 
-         // and payments made against billings belonging to this contract.
+         // Total paid includes both direct contract payments (Deposits) 
+         // and payments made against related billings.
          return (float) Payment::where(function($q) use ($contractId) {
              $q->where('contract_id', $contractId)
                ->orWhereHas('billing', function($sub) use ($contractId) {

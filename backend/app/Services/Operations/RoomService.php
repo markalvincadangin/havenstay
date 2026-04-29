@@ -16,22 +16,20 @@
  use Illuminate\Validation\ValidationException;
  
  /**
-  * RoomService
-  * 
-  * Orchestrates room inventory, capacity management, and bed space lifecycle.
-  * Ensures data integrity between rooms and their underlying bed occupancy facts.
+  * Manages room inventory, capacity, and bed space lifecycle.
+  * Ensures synchronization between room status and underlying bed occupancy.
   */
  class RoomService
  {
      use ManagesWorkflows;
  
      /**
-      * Create a new room record with integrated bed spaces.
+      * Create a new room record with bed spaces.
       * 
-      * Forensic Rules:
-      * - BR-018: Solo rooms are automatically capped at 1 capacity.
-      * - Validation: Shared rooms must have >= 2 bed spaces.
-      * - Atomicity: Room and initial bed spaces created in a single transaction.
+      * Implementation details:
+      * - Private rooms are capped at 1 capacity.
+      * - Shared rooms must have at least 2 bed spaces.
+      * - Room and bed spaces are created within a single transaction.
       * 
       * @param User $actor The staff member performing the creation.
       * @param array $data Input including room_code, capacity, and bed_spaces.
@@ -46,7 +44,7 @@
              action: 'CREATE_ROOM',
              payload: ['room_code' => $roomData['room_code'] ?? 'ERR'],
              operation: function () use ($roomData, $data) {
-                 // BR-018: Private room manual bed management bypass
+                 // Private room bed management bypass
                  if (($roomData['room_type'] ?? null) === RoomType::PRIVATE->value) {
                      $roomData['capacity'] = 1;
                  }
@@ -56,7 +54,7 @@
                  // Create initial bed spaces if provided
                  if ($room->room_type === RoomType::SHARED) {
                      if (isset($data['bed_spaces']) && is_array($data['bed_spaces'])) {
-                         // User constraint: Shared rooms must have >= 2 beds
+                         // Validation: Shared rooms must have >= 2 beds
                          if (count($data['bed_spaces']) < 2) {
                              throw ValidationException::withMessages([
                                  'bed_spaces' => ['Shared rooms must have at least 2 bed spaces.'],
@@ -77,14 +75,14 @@
                          ]);
                      }
                  } elseif ($room->room_type === RoomType::PRIVATE) {
-                     // Ensure private rooms have exactly one bed space (SDD Sec. 10 Decision 2)
+                     // Ensure private rooms have exactly one bed space
                      $room->bedSpaces()->create([
                          'bed_label' => 'Standard Bed',
                          'status' => BedSpaceStatus::VACANT,
                      ]);
                  }
  
-                 // Atomic Sync: Compute state and update in one final call
+                 // Sync: Compute state and update in one final call
                  $room->load('bedSpaces');
                  $state = Inventory::computeRoomState($room);
                  $room->update($state);
@@ -96,12 +94,12 @@
      }
  
      /**
-      * Update an existing room record with integrated bed space management.
+      * Update an existing room record and its bed spaces.
       * 
-      * Forensic Rules:
-      * - Constraint: Cannot delete bed spaces that are currently occupied.
-      * - Constraint: Cannot delete bed spaces with historical contract references.
-      * - Sync: Re-computes room status after every modification.
+      * Implementation details:
+      * - Prevents deletion of occupied bed spaces.
+      * - Prevents deletion of bed spaces with historical contract references.
+      * - Re-computes room status after modification.
       * 
       * @param User $actor The staff member performing the update.
       * @param Room $room The existing room entity.
@@ -181,7 +179,7 @@
  
                  $room->update($roomData);
  
-                 // Atomic Sync: Re-load and update derived facts
+                 // Sync: Re-load and update derived facts
                  $room->load('bedSpaces');
                  $state = Inventory::computeRoomState($room);
                  $room->update($state);
@@ -237,7 +235,7 @@
      }
  
      /**
-      * Add bed spaces to a shared room (Atomic legacy support).
+      * Add bed spaces to a shared room.
       * 
       * @param User $actor The staff member performing the action.
       * @param Room $room The target room.
@@ -431,7 +429,7 @@
      }
  
      /**
-      * Archive a room for forensic retention (FR-012a).
+      * Archive a room for historical retention.
       * 
       * @param User $actor The staff member performing the action.
       * @param Room $room The target room entity.
@@ -457,7 +455,7 @@
              action: 'ARCHIVE_ROOM',
              payload: ['room_id' => $room->room_id],
              operation: function () use ($room) {
-                 // Forensic Rule: Mark as unavailable (archived) before soft-deletion
+                 // Set status to unavailable before soft-deletion
                  $room->status = RoomStatus::UNAVAILABLE;
                  $room->save();
  

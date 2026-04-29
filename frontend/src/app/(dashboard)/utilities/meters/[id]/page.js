@@ -56,7 +56,7 @@ export default function MeterDetailPage({ params }) {
   };
   const loading = !meter && !meterError;
   if (isUnauthorized) return null;
-  const title = meter ? `Meter Asset ${meter.serial_number}` : "Meter Record";
+  const title = meter ? `Meter #${meter.meter_id} (${meter.serial_number})` : "Meter Record";
   const isElectric = meter?.utility?.name?.toLowerCase().includes("electric");
   const UtilityIcon = isElectric ? Zap : Droplet;
   const assignments = meter?.assignments ? [...meter.assignments].sort((a, b) => new Date(b.valid_from) - new Date(a.valid_from)) : [];
@@ -68,9 +68,8 @@ export default function MeterDetailPage({ params }) {
       breadcrumbs={
         <Breadcrumbs
           items={[
-            { label: "Dashboard", href: "/dashboard" },
             { label: "Utilities", href: "/utilities" },
-            { label: "Hardware", href: "/utilities/meters" },
+            { label: "Meters", href: "/utilities/meters" },
             { label: title },
           ]}
         />
@@ -113,8 +112,8 @@ export default function MeterDetailPage({ params }) {
     >
       <ConfirmationDialog
         open={showArchiveModal}
-        title="Archive Hardware"
-        message="This will remove the unit from active assignment. History is preserved."
+        title="Archive Meter"
+        description="Are you sure you want to archive this meter? This will remove the unit from active room assignments and prevent new readings, though all historical consumption data will be preserved for forensic audits."
         confirmLabel="Confirm Archive"
         isDanger
         isLoading={busyAction === "archive"}

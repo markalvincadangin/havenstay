@@ -54,7 +54,6 @@ export function UtilityQuickEditForm({ utility, onSuccess, onCancel }) {
         {/* Forensic Identity Header */}
         <div className="flex items-center justify-between border-b border-stone-100 pb-6">
           <div className="space-y-1">
-            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Contextual Label</p>
             <h4 className="text-lg font-black text-stone-900">{utility?.name}</h4>
           </div>
           <div className="flex flex-col items-end gap-2">

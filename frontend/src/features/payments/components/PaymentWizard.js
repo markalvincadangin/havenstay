@@ -189,12 +189,21 @@ export default function PaymentWizard() {
   const pendingContracts = useMemo(() => normalizePaginatedList(pendingContractsData).rows, [pendingContractsData]);
 
   const residentName = useMemo(() => {
+    // 1. Check direct contract fetch (detailed context)
     if ((isRefundMode || isDepositMode) && contractData) {
       const t = contractData.data?.tenant || contractData.tenant;
       if (t) return `${t.last_name}, ${t.first_name}`.trim();
     }
+    // 2. Check pending contracts list (immediate fallback for dropdown selection)
+    if (isDepositMode && contractId) {
+      const selected = pendingContracts.find(c => String(c.contract_id) === String(contractId));
+      if (selected && selected.tenant) {
+        return `${selected.tenant.last_name}, ${selected.tenant.first_name}`.trim();
+      }
+    }
+    // 3. Fallback to billing link
     return selectedBilling?.tenant_name || "";
-  }, [isRefundMode, isDepositMode, contractData, selectedBilling]);
+  }, [isRefundMode, isDepositMode, contractData, selectedBilling, pendingContracts, contractId]);
 
   useEffect(() => {
     if (billingError) {
@@ -375,13 +384,8 @@ export default function PaymentWizard() {
                           <ShieldCheck className="text-amber-600" size={20} />
                        </div>
                        
-                       {/* Show editable dropdown/input if not provided via deep link, otherwise show read-only */}
-                       {searchParams.get("contract_id") ? (
-                          <div className="flex flex-col">
-                             <span className="text-sm font-bold text-stone-900">Contract #{watch("contract_id")}</span>
-                             <input type="hidden" {...register("contract_id", { required: "Contract ID is required." })} />
-                          </div>
-                       ) : isDepositMode ? (
+                       {/* CCR-012: Unified Target Selection (Editable even if deep-linked) */}
+                       {isDepositMode ? (
                           <Select 
                             className="!h-11 border-amber-200 font-bold focus:ring-amber-500"
                             {...register("contract_id", { 

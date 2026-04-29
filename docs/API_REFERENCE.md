@@ -1,8 +1,8 @@
 # HavenStay API Reference
 
-**Version:** 3.8  
-**Last Updated:** April 20, 2026  
-**Status:** Canonical integration contract for backend services; forensic alignment baseline (v4.8 engine)
+**Version:** 5.2  
+**Last Updated:** April 29, 2026  
+**Status:** Canonical integration contract for backend services; forensic alignment baseline (v5.0 engine)
 
 REST API for HavenStay BHMS (Laravel, Sanctum). Base path: **`/api`**.
 
@@ -30,6 +30,11 @@ This document defines the technical interface contract between the HavenStay pre
 - **Scheme:** Bearer Token via Laravel Sanctum.
 - **Header:** `Authorization: Bearer <token>`
 - **Role Enforcement:** Access is validated via `AuthorizationService`.
+
+### 2.5 Idempotency Protection
+- **Header:** `Idempotency-Key: <UUID>`
+- **Scope:** Required for all write operations (`POST`, `PUT`, `PATCH`) on Contracts, Billings, and Payments.
+- **Behavior:** Ensures that if a request is retried due to network lag, the system will not create duplicate financial or contractual records. Valid for 24 hours per key.
 
 | Role | Operational Scope |
 | :--- | :--- |
@@ -119,9 +124,9 @@ In accordance with **NFR-015**, PII (Personally Identifiable Information) maskin
 ### 3.8 Transaction Processing (Payments)
 | Method | Path | Access | FR | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/payments` | All | FR-044 | Global payment ledger (filter by void status) |
-| `POST` | `/api/payments` | Staff | FR-039 | Post individual payment to a bill cycle |
-| `GET` | `/api/payments/{id}` | All | FR-039 | View posted payment details |
+| `GET` | `/api/payments` | All | FR-044 | Global payment ledger (Dual-path context resolution) |
+| `POST` | `/api/payments` | Staff | FR-039 | Post individual payment (XOR Target support) |
+| `GET` | `/api/payments/{id}` | All | FR-039 | View payment details (with Tenant/Room resolution) |
 | `POST` | `/api/payments/{id}/void` | Staff | FR-043 | Soft‑void payment (requires `void_reason`) |
 
 ### 3.9 Analytical Reports (Admin Only)
@@ -183,7 +188,7 @@ In accordance with **NFR-015**, PII (Personally Identifiable Information) maskin
   ]
 }
 ```
-*Note: `reading_ids` are for forensic linkage; amounts are calculated per BR-MET-008 and BR-MET-011.*
+*Note: `reading_ids` are for forensic linkage; amounts are calculated per BR-MET-007 and BR-MET-010.*
 
 ### 5.3 Configure a Utility Rate
 `POST /api/utility-rates`
@@ -207,5 +212,5 @@ In accordance with **NFR-015**, PII (Personally Identifiable Information) maskin
 
 ---
 
-*Aligned to: SRS.md v4.6 · SDD.md v4.6 · DATABASE.md v4.8*  
-*Last Updated: April 20, 2026 (v3.8 — 44-trigger forensic hardening pass)*
+*Aligned to: SRS.md v5.2 · SDD.md v5.2 · DATABASE.md v5.2 · BUSINESS_RULES.md v2.2*  
+*Last Updated: April 29, 2026 (v5.2 — Clean State Release: Synchronized all references to match the new continuous Business Rule numbering v2.2.)*

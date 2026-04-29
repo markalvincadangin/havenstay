@@ -91,6 +91,25 @@
      {
          $reading = MeterService::recordReading($request->user(), $meter->meter_id, $request->validated());
          
-         return $this->created('Meter reading recorded successfully.', new MeterReadingResource($reading));
+         $resource = new MeterReadingResource($reading);
+         if ($reading->getAttribute('warning')) {
+             return $this->success($reading->getAttribute('warning'), $resource, 201);
+         }
+ 
+         return $this->created('Meter reading recorded successfully.', $resource);
+     }
+ 
+     /**
+      * Retrieve the last reading that was committed to a bill.
+      */
+     public function lastBilled(Request $request, Meter $meter): JsonResponse
+     {
+         $reading = MeterService::getLastBilledReading((int) $meter->meter_id);
+         
+         if (!$reading) {
+             return $this->success('No billed readings found for this meter.', null);
+         }
+ 
+         return $this->success('Last billed reading retrieved.', new MeterReadingResource($reading));
      }
  }

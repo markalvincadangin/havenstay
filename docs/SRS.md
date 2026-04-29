@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## Software Requirements Specification (SRS)
 
-**Version:** 4.8  
-**Last Updated:** April 21, 2026  
+**Version:** 5.2  
+**Last Updated:** April 29, 2026  
 **Status:** Canonical behavioral baseline and forensic requirement specification
 
 ---
@@ -206,19 +206,19 @@ The system shall support assigning meters to rooms with an effective-from date. 
 Staff shall be able to record meter readings for an active meter. The system shall reject readings that violate the monotonicity rule. Ref: BR-MET-004, BR-MET-005.
 
 **FR-027**
-The system shall compute consumption for a billing period from paired meter readings per BR-MET-006.
+The system shall compute consumption for a billing period from paired meter readings per BR-ANL-002.
 
 **FR-028**
-The system shall maintain utility rates per utility type with effective-from dates and apply the correct rate per BR-MET-007.
+The system shall maintain utility rates per utility type with effective-from dates and apply the correct rate per BR-MET-006.
 
 **FR-029**
-When generating a billing cycle, the system shall calculate the total utility charge (consumption × applicable rate) per BR-MET-008. For shared rooms, the system shall automatically divide this charge equally among active contracts per BR-MET-011. Rounding differentials (e.g., ₱0.01) shall be reconciled by applying the orphan amount to the earliest created active contract in the group. The system shall present the calculated apportionment to the staff member as a reference amount. Staff may accept or override the calculated amount and must record a reason for any override.
+When generating a billing cycle, the system shall calculate the total utility charge (consumption × applicable rate) per BR-MET-007. For shared rooms, the system shall automatically divide this charge equally among active contracts per BR-MET-010. Rounding differentials (e.g., ₱0.01) shall be reconciled by applying the orphan amount to the earliest created active contract in the group. The system shall present the calculated apportionment to the staff member as a reference amount. Staff may accept or override the calculated amount and must record a reason for any override.
 
 **FR-030**
-A meter reading may be linked to a billing cycle to create a traceable audit trail per BR-MET-009.
+A meter reading may be linked to a billing cycle to create a traceable audit trail per BR-MET-008.
 
 **FR-031**
-The system shall support decommissioning a meter (status `replaced`) while retaining all historical readings. Ref: BR-MET-010.
+The system shall support decommissioning a meter (status `replaced`) while retaining all historical readings. Ref: BR-MET-009.
 
 ### 4.7 Billing Management
 **FR-032**
@@ -228,19 +228,19 @@ The system shall generate billing cycle records for active contracts per BR-BIL-
 Each billing cycle shall support itemized line items per BR-BIL-004 and BR-BIL-005.
 
 **FR-034**
-There is no stored balance or total amount column on billing records. Both values are computed dynamically per BR-BIL-006. (CCR-003: computed SELECT)
+There is no stored balance or total amount column on billing records. Both values are computed dynamically per BR-ANL-001. (CCR-003: computed SELECT)
 
 **FR-035**
-Billing status shall be derived automatically per BR-BIL-007. Manual status override is not permitted.
+Billing status shall be derived automatically per BR-BIL-006. Manual status override is not permitted.
 
 **FR-036**
-The system shall prevent duplicate billing cycles for the same contract and period. Ref: BR-BIL-002.
+The system shall prevent duplicate billing cycles for the same contract and period. Billing generation for a room must be a resilient, non-blocking batch operation: if one contract fails validation (e.g., due to an overlap), the system shall skip that contract, log the failure, and continue processing all other eligible contracts in the room. Ref: BR-BIL-002, BR-BIL-010.
 
 **FR-037**
-Billing may only be generated for active contracts. Ref: BR-BIL-009.
+Billing may only be generated for active contracts. Ref: BR-BIL-008.
 
 **FR-038**
-Billing generation is performed manually by Admin or Staff. Ref: BR-BIL-010.
+Billing generation is performed manually by Admin or Staff. Ref: BR-BIL-009.
 
 ### 4.8 Payment Processing
 **FR-039**
@@ -253,7 +253,7 @@ The system shall enforce payment method rules and reference number requirements 
 The system shall allow overpayments and display the resulting credit balance per BR-PAY-003.
 
 **FR-042**
-Billing status shall be recalculated after every payment post and void per BR-BIL-008. (CCR-003: UPDATE)
+Billing status shall be recalculated after every payment post and void per BR-BIL-007. (CCR-003: UPDATE)
 
 **FR-043**
 The system shall support soft-voiding a payment per BR-PAY-004 through BR-PAY-007. Voided records are never deleted. (CCR-003: UPDATE, not DELETE)
@@ -295,6 +295,12 @@ All INSERT, UPDATE, and DELETE operations on core tables shall be captured in `a
 
 **FR-055**
 A correlation ID shall be included in each audit log entry to group mutations produced during the same workflow run. Ref: BR-AUD-004.
+
+**FR-056**
+The system shall compute and display a Collection Rate KPI as a measure of performance efficiency, resolving payments against billed totals within overlapping periods. Collections shall include non-billed items like Security Deposits and advance rent per BR-ANL-003.
+
+**FR-057**
+To maintain forensic transparency, the system shall ensure that every payment record is visually resolvable to a tenant and room, using either the billing link or the direct contract link (for deposits). Ref: BR-PAY-011.
 
 ---
 
@@ -436,8 +442,8 @@ Critical test coverage required before release:
 | **Tenant** | Duplicate email rejection, status derivation |
 | **Contract** | Tenant overlap prevention, bed space overlap prevention, move-out atomicity |
 | **Meter** | Monotonicity violation rejection, correct utility rate selection |
-| **Billing** | Duplicate cycle rejection, zero line item rejection, status derivation for all four states |
-| **Payment** | Void idempotency (can't void twice), billing recalc after void |
+| **Payment** | Void idempotency (can't void twice), billing recalc after void, dual-path tenant/room resolution |
+| **Billing** | Duplicate cycle rejection, zero line item rejection, resilient batch generation (non-blocking skip) |
 | **CCR-006** | Rollback leaves no partial writes |
 | **CCR-007** | Triggers capture INSERT, UPDATE, DELETE on all core tables |
 
@@ -462,4 +468,7 @@ Critical test coverage required before release:
 | v1.0–v4.4 | Mar–Apr 2026 | Previous iterations (see git history) |
 | v4.5 | Apr 20, 2026 | Retire Transaction Log CCR; Consolidate forensic trail under trigger-based Audit Logs (CCR-007). |
 | v4.6 | Apr 20, 2026 | Forensic Normalization Pass. Aligned StatusBadge ENUMs and Resource ID prefixes (§6.3) with MASTER.md v6.6.0. |
-| **v4.7** | **Apr 21, 2026** | **Fixed §3.1 technology stack (Vanilla CSS). Fixed FR-025 wording contradiction with BR-MET-003. Added `voided` footnote to §6.3. Documented `monthly_rate_override` in constraints table. Added BR-CON-012/013, BR-PAY-010 references.** |
+| v4.7 | Apr 21, 2026 | Fixed §3.1 technology stack (Vanilla CSS). Fixed FR-025 wording contradiction with BR-MET-003. Added `voided` footnote to §6.3. Documented `monthly_rate_override` in constraints table. Added BR-CON-012/013, BR-PAY-010 references. |
+| **v5.0** | **Apr 29, 2026** | **Major Stabilization: Added FR-056/057 (KPI & Forensic Context). Updated FR-036 to specify Resilient Batch Billing (Non-blocking). Integrated BR-BIL-011, BR-PAY-011, and BR-PAY-012 references.** |
+| **v5.1** | **Apr 29, 2026** | **Realigned Analytical Rule references to point to the new ANL category in BUSINESS_RULES.md.** |
+| **v5.2** | **Apr 29, 2026** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |

@@ -24,22 +24,20 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
 
 /**
- * ContractService
- * 
- * Manages the rental agreement lifecycle, including check-in, activation, 
- * and move-out workflows. Optimized for HavenStay Forensic v5.0.
+ * Handles the rental agreement lifecycle, including check-in, activation, 
+ * and move-out workflows.
  */
 class ContractService
 {
     use ManagesWorkflows;
 
     /**
-     * Create contract with overlap prevention and transaction safety.
+     * Create a new contract with overlap prevention.
      * 
-     * Forensic Rules:
-     * - Immediate Reservation Lock: Bed status set to 'occupied' upon creation.
-     * - Rule: Primary key `contract_id` used for forensic mapping.
-     * - Rule: Initial status set to 'pending_payment'.
+     * Implementation details:
+     * - Sets bed status to 'occupied' upon creation.
+     * - Uses contract_id for relational mapping.
+     * - Sets initial status to 'pending_payment'.
      * 
      * @param User $actor The staff member performing the action.
      * @param array $data Input details (tenant_id, bed_space_id, dates, monthly_rate).
@@ -97,7 +95,7 @@ class ContractService
                     'idempotency_key' => $data['idempotency_key'] ?? null,
                 ]);
 
-                // Forensic Rule: Immediate Reservation Lock via specialized service
+                // Update bed space status to occupied
                 RoomService::occupyBedSpace($actor, $bedSpace);
 
                 // Auto-initialize first billing cycle (optional, but standard)
@@ -224,7 +222,7 @@ class ContractService
      */
     public static function update(User $actor, Contract $contract, array $data): Contract
     {
-        // Forensic Guard: Status and Dates cannot be modified via generic update
+        // Prevent status and date modification via generic update
         if (isset($data['status']) && $data['status'] !== $contract->status->value) {
             throw ValidationException::withMessages([
                 'status' => ['Contract status cannot be modified via generic update. Use specialized workflows.'],
@@ -278,7 +276,7 @@ class ContractService
         if ($totalOwed > 0.01) {
             throw ValidationException::withMessages([
                 'contract' => [
-                    sprintf('Gate Pass Denied: Tenant has an outstanding balance of %s. All bills must be settled before move-out.', Financials::formatCurrency($totalOwed))
+                    sprintf('Tenant has an outstanding balance of %s. All bills must be settled before move-out.', Financials::formatCurrency($totalOwed))
                 ],
             ]);
         }
@@ -323,7 +321,7 @@ class ContractService
             throw ValidationException::withMessages([
                 'contract' => [
                     sprintf(
-                        'Activation Denied: Required settlement (Rent + Deposit) is %s. Total paid: %s.',
+                        'Required settlement (Rent + Deposit) is %s. Total paid: %s.',
                         Financials::formatCurrency($minRequired),
                         Financials::formatCurrency($totalPaid)
                     )
@@ -358,15 +356,14 @@ class ContractService
 
         if ($paymentCount > 0) {
             throw ValidationException::withMessages([
-                'contract' => ['Gate Pass Denied: This contract has recorded payments. It cannot be voided, only terminated or archived.'],
+                'contract' => ['This contract has recorded payments and cannot be voided.'],
             ]);
         }
 
-        // Logic Rule: If there are paid billings, it also cannot be voided
         $paidBillingCount = $contract->billings()->whereIn('status', [BillingStatus::PAID, BillingStatus::PARTIAL])->count();
         if ($paidBillingCount > 0) {
             throw ValidationException::withMessages([
-                'contract' => ['Gate Pass Denied: This contract has settled or partially settled billings. It cannot be voided.'],
+                'contract' => ['This contract has settled or partially settled billings and cannot be voided.'],
             ]);
         }
 
@@ -375,7 +372,7 @@ class ContractService
             action: 'VOID_CONTRACT',
             payload: ['contract_id' => $contract->contract_id, 'void_reason_fact' => $reason],
             operation: function () use ($contract, $reason): Contract {
-                // Forensic Rule: Cascade voiding to all unpaid billings
+                // Cascade voiding to all unpaid billings
                 $contract->billings()->where('status', BillingStatus::UNPAID)->delete();
 
                 // Release the bed lock immediately (triggering BedSpaceObserver)
@@ -408,7 +405,7 @@ class ContractService
         return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'ARCHIVE_CONTRACT',
-            payload: ['contract_id' => $contract->contract_id, 'final_status_fact' => $contract->status->value],
+            payload: ['contract_id' => $contract->contract_id],
             operation: function () use ($contract): Contract {
                 $contract->delete();
                 return $contract;
@@ -494,7 +491,7 @@ class ContractService
             
             if ($meterCount === 0) {
                 throw ValidationException::withMessages([
-                    'room_id' => ['Forensic Guard Failure: This room is configured as "Metered" but has no active utility hardware assigned. Please assign meters before registration.'],
+                    'room_id' => ['This room is configured as "Metered" but has no active meters assigned.'],
                 ]);
             }
         }

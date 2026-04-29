@@ -157,8 +157,8 @@ export default function RoomDetailsPage() {
     >
       <ConfirmationDialog
         open={showArchiveModal}
-        title="Archive Inventory Room"
-        message={`Are you sure you want to archive Room ${room?.room_code}? This will remove the room from active inventory while keeping its forensic history.`}
+        title="Archive Room"
+        description={`Are you sure you want to archive Room ${room?.room_code}? This will remove the room from active inventory and prevent new bookings. All historical forensic data, including previous tenant contracts and payment records, will be preserved for auditing.`}
         confirmLabel="Archive Room"
         isDanger
         isLoading={busyAction === "archive"}

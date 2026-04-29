@@ -43,15 +43,21 @@
                      ->orderByDesc('created_at')
                      ->first();
  
-                 // Forensic Check: Duplicate Prevention
+                 // Forensic Check 1: Exact Duplicate Prevention (Idempotency)
                  $duplicate = MeterReading::where('meter_id', $meterId)
                      ->where('reading_date', $data['reading_date'])
                      ->where('reading_value', $data['reading_value'])
                      ->first();
                  
                  if ($duplicate) {
-                     return $duplicate; // Idempotent return
+                     return $duplicate; 
                  }
+ 
+                 // Forensic Check 2: Calendar Month Guard (Multiple readings in one month)
+                 $readingMonth = \Carbon\Carbon::parse($data['reading_date'])->format('Y-m');
+                 $existsInMonth = MeterReading::where('meter_id', $meterId)
+                     ->whereRaw("DATE_FORMAT(reading_date, '%Y-%m') = ?", [$readingMonth])
+                     ->exists();
  
                  // BR-MET-005 Monotonicity Check
                  if (!($data['is_rollover'] ?? false) && $lastReading && $data['reading_value'] < $lastReading->reading_value) {
@@ -66,7 +72,7 @@
                      ]);
                  }
  
-                 return MeterReading::create([
+                 $reading = MeterReading::create([
                      'meter_id' => $meterId,
                      'reading_date' => $data['reading_date'],
                      'reading_value' => $data['reading_value'],
@@ -74,8 +80,22 @@
                      'recorded_by' => $actor->user_id,
                      'billing_id' => $data['billing_id'] ?? null,
                  ]);
+ 
+                 if ($existsInMonth) {
+                     $reading->setAttribute('warning', 'Multiple readings recorded for this calendar month.');
+                 }
+ 
+                 return $reading;
              }
          );
+     }
+ 
+     /**
+      * Retrieve the last reading for a meter that was successfully billed.
+      */
+     public static function getLastBilledReading(int $meterId): ?MeterReading
+     {
+         return \App\Support\Financials::getLastBilledReading($meterId);
      }
  
      /**
