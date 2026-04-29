@@ -249,12 +249,15 @@ class UtilityApportionmentService
             // Manually add additional items for existing bills
             if (!empty($split['manual_items'])) {
                 foreach ($split['manual_items'] as $item) {
-                    BillingLineItem::create([
-                        'billing_id' => $billing->billing_id,
-                        'item_type' => $item['item_type'] ?? LineItemType::ADJUSTMENT,
-                        'item_description' => $item['description'],
-                        'amount' => (float) $item['amount'],
-                    ]);
+                    $itemAmount = (float) $item['amount'];
+                    if (abs($itemAmount) > 0.001) {
+                        BillingLineItem::create([
+                            'billing_id' => $billing->billing_id,
+                            'item_type' => $item['item_type'] ?? LineItemType::ADJUSTMENT,
+                            'item_description' => $item['description'],
+                            'amount' => $itemAmount,
+                        ]);
+                    }
                 }
             }
         }
@@ -279,14 +282,16 @@ class UtilityApportionmentService
             $meterShare = Financials::roundToCent($meterTotalCharge * $weight);
             $sumOfMeters += $meterShare;
 
-            BillingLineItem::create([
-                'billing_id' => $billing->billing_id,
-                'utility_id' => $prev->meter->utility_id,
-                'reading_id' => $curr->reading_id,
-                'item_type' => LineItemType::UTILITY,
-                'item_description' => "Utility: {$prev->meter->utility->name} (SN: {$prev->meter->serial_number})",
-                'amount' => $meterShare,
-            ]);
+            if (abs($meterShare) > 0.001) {
+                BillingLineItem::create([
+                    'billing_id' => $billing->billing_id,
+                    'utility_id' => $prev->meter->utility_id,
+                    'reading_id' => $curr->reading_id,
+                    'item_type' => LineItemType::UTILITY,
+                    'item_description' => "Utility: {$prev->meter->utility->name} (SN: {$prev->meter->serial_number})",
+                    'amount' => $meterShare,
+                ]);
+            }
         }
 
         // Bridge the gap between individual meter shares and the target total share (BR-MET-011)

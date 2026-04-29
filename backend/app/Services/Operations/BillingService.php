@@ -107,14 +107,16 @@ class BillingService
                         $apportionments = Financials::apportionUtilityCharge($totalCost, $occupantIds);
                         $sharedAmount = $apportionments[$contract->contract_id] ?? 0;
 
-                        BillingLineItem::create([
-                            'billing_id' => $billing->billing_id,
-                            'utility_id' => $meter->utility_id,
-                            'reading_id' => $reading->reading_id,
-                            'item_type' => LineItemType::UTILITY,
-                            'item_description' => "{$meter->utility->name} (Meter: {$meter->serial_number}) - Share {$sharedAmount} / " . count($occupantIds),
-                            'amount' => $sharedAmount,
-                        ]);
+                        if (abs($sharedAmount) > 0.001) {
+                            BillingLineItem::create([
+                                'billing_id' => $billing->billing_id,
+                                'utility_id' => $meter->utility_id,
+                                'reading_id' => $reading->reading_id,
+                                'item_type' => LineItemType::UTILITY,
+                                'item_description' => "{$meter->utility->name} (Meter: {$meter->serial_number}) - Share {$sharedAmount} / " . count($occupantIds),
+                                'amount' => $sharedAmount,
+                            ]);
+                        }
                     }
                 }
 
