@@ -34,7 +34,7 @@ export function CorrelationIdCell({
   const [copied, setCopied] = useState(false);
 
   if (value == null || String(value).trim() === "") {
-    return null;
+    return <span className="font-mono text-[10px] font-bold text-stone-300 uppercase tracking-widest">—</span>;
   }
 
   const str = String(value).trim();

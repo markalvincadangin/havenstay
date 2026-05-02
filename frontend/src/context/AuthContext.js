@@ -14,18 +14,21 @@ const AuthContext = createContext({
 export function AuthProvider({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState(() => {
-    if (typeof window !== "undefined") {
-      const cached = localStorage.getItem("havenstay_user");
+  // Initializing with null mounted state check
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+
+  // Sync hydration from localStorage safely
+  useEffect(() => {
+    const cached = localStorage.getItem("havenstay_user");
+    if (cached) {
       try {
-        return cached ? JSON.parse(cached) : null;
+        setUser(JSON.parse(cached));
       } catch {
-        return null;
+        localStorage.removeItem("havenstay_user");
       }
     }
-    return null;
-  });
-  const [loading, setLoading] = useState(true);
+  }, []);
 
   useEffect(() => {
     let isActive = true;

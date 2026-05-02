@@ -40,6 +40,7 @@ class AuditReportingService
             $q = $filters['q'];
             $query->where(function ($sub) use ($q) {
                 $sub->where('correlation_id', 'LIKE', "%{$q}%")
+                    ->orWhere('ip_address', 'LIKE', "%{$q}%")
                     ->orWhere('record_id', 'LIKE', "%{$q}%")
                     ->orWhereHas('user', function ($uq) use ($q) {
                         $uq->where('username', 'LIKE', "%{$q}%")
@@ -69,12 +70,12 @@ class AuditReportingService
 
     public static function countAccessDeniedMatchingFilters(array $filters = []): int
     {
-        if (! empty($filters['action']) && $filters['action'] !== 'access_denied') {
+        if (! empty($filters['action']) && $filters['action'] !== 'ACCESS_DENIED') {
             return 0;
         }
 
         $forDenied = $filters;
-        $forDenied['action'] = 'access_denied';
+        $forDenied['action'] = 'ACCESS_DENIED';
 
         return (int) self::auditLogsFilteredQuery($forDenied)->count();
     }
@@ -91,7 +92,7 @@ class AuditReportingService
     {
         $logs = self::auditLogsFilteredQuery($filters)->limit(self::MAX_EXPORT_LIMIT)->get();
 
-        $headers = ['ID', 'Timestamp', 'Actor', 'Action', 'Target', 'Record ID', 'Old Value', 'New Value'];
+        $headers = ['ID', 'Timestamp', 'Actor', 'Action', 'Target', 'Record ID', 'IP Address', 'Correlation ID', 'Old Value', 'New Value'];
 
         $rows = $logs->map(function ($log) {
             return [
@@ -101,6 +102,8 @@ class AuditReportingService
                 $log->action,
                 $log->target_table,
                 (string) $log->record_id,
+                $log->ip_address ?? 'N/A',
+                $log->correlation_id ?? 'N/A',
                 json_encode($log->old_value),
                 json_encode($log->new_value),
             ];

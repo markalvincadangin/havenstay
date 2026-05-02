@@ -79,35 +79,33 @@ class AuthService
      */
     public static function oauthLogin(array $data): array
     {
-        // Forensic Rule: OAuth logins must be mapped to existing identities or held for approval
+        // Resolve user
         $user = User::where('email', $data['email'])
             ->orWhere('google_id', $data['provider_id'])
             ->first();
 
         if (!$user) {
-            // Non-Destructive Auto-Registration: Create as inactive or basic role
-            // In a strict forensic environment, we might block this or assign 'viewer'
-            $user = User::create([
-                'role_id' => 3, // Default to 'Viewer'
-                'first_name' => $data['first_name'],
-                'last_name' => $data['last_name'],
-                'username' => explode('@', $data['email'])[0] . '_' . rand(100, 999),
-                'email' => $data['email'],
-                'password_hash' => \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(32)),
-                'google_id' => $data['provider_id'],
-                'avatar_url' => $data['avatar'] ?? null,
-                'oauth_provider' => $data['provider'],
-                'is_active' => true,
+            // Strict Forensic Rule: Do not auto-provision unknown OAuth identities.
+            // Users must be pre-registered by an administrator.
+            throw ValidationException::withMessages([
+                'oauth' => ['This account is not registered in the system. Please contact an administrator.'],
             ]);
         } else {
-            // Update provider info if missing
+            // Guard BEFORE updating: do not update a deactivated user's profile
+            if (!$user->isActive()) {
+                throw ValidationException::withMessages([
+                    'oauth' => ['This account has been deactivated.'],
+                ]);
+            }
+            // Update provider info only for active users
             $user->update([
-                'google_id' => $data['provider_id'],
-                'avatar_url' => $data['avatar'] ?? $user->avatar_url,
+                'google_id'      => $data['provider_id'],
+                'avatar_url'     => $data['avatar'] ?? $user->avatar_url,
                 'oauth_provider' => $data['provider'],
             ]);
         }
 
+        // Guard for auto-provisioned users (edge case: created as inactive)
         if (!$user->isActive()) {
             throw ValidationException::withMessages([
                 'oauth' => ['This account has been deactivated.'],
@@ -123,7 +121,7 @@ class AuthService
             }
         );
 
-        AuditService::logLogin($user);
+        AuditService::logLogin($user, ['auth_method' => 'oauth', 'provider' => $data['provider']]);
 
         return [
             'user' => $user,

@@ -38,12 +38,12 @@ class DemoSeeder extends Seeder
     public function run(): void
     {
         try {
+            AuditService::setSystemContext('demo-seeder');
+
             echo "[seeder] Starting users...\n";
             $users = $this->seedUsers();
             echo "[seeder] Users seeded.\n";
 
-            AuditService::setSystemContext();
-            echo "[seeder] Audit context set.\n";
 
             echo "[seeder] Starting utilities...\n";
             $this->seedUtilities();

@@ -33,27 +33,6 @@ return new class extends Migration
                 // Ignore if not permitted
             }
 
-            DB::statement('DROP VIEW IF EXISTS vw_billing_summary');
-            DB::statement("CREATE VIEW vw_billing_summary AS
-                SELECT 
-                    b.billing_id,
-                    b.contract_id,
-                    b.billing_period_from,
-                    b.billing_period_to,
-                    b.due_date,
-                    b.status AS billing_status,
-                    t.tenant_id,
-                    CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
-                    r.room_code,
-                    bs.bed_label,
-                    (SELECT COALESCE(SUM(amount), 0) FROM billing_line_items WHERE billing_id = b.billing_id) AS total_amount,
-                    (SELECT COALESCE(SUM(amount_paid), 0) FROM payments WHERE billing_id = b.billing_id AND voided_at IS NULL AND payment_category = 'billing') AS total_paid
-                FROM billing b
-                JOIN contracts  c  ON b.contract_id  = c.contract_id
-                JOIN tenants    t  ON c.tenant_id    = t.tenant_id
-                JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
-                JOIN rooms      r  ON bs.room_id      = r.room_id");
-
             return;
         }
 
@@ -255,13 +234,25 @@ return new class extends Migration
 
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('action', 32);
+            $table->string('action', 64);
+            $table->string('event_category', 32)->default('DATA');
             $table->string('target_table', 64);
             $table->unsignedBigInteger('record_id');
             $table->json('old_value')->nullable();
             $table->json('new_value')->nullable();
+            $table->json('changed_fields')->nullable();
+            $table->boolean('is_success')->default(true);
+            $table->text('error_message')->nullable();
             $table->unsignedInteger('changed_by')->nullable();
+            $table->json('actor_snapshot')->nullable();
             $table->string('correlation_id', 64)->nullable();
+            $table->string('request_id', 64)->nullable();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->text('endpoint')->nullable();
+            $table->string('http_method', 10)->nullable();
+            $table->integer('execution_time_ms')->nullable();
+            $table->json('metadata')->nullable();
             $table->timestamp('changed_at')->useCurrent();
 
             // Performance Hardening
@@ -269,6 +260,8 @@ return new class extends Migration
             $table->index(['target_table', 'record_id'], 'idx_audit_resource');
             $table->index('action', 'idx_audit_action');
             $table->index('correlation_id', 'idx_audit_correlation');
+            $table->index('event_category', 'idx_audit_category');
+            $table->index('request_id', 'idx_audit_request');
         });
 
         // Removed: transaction_logs (Consolidated into audit_logs per CCR-007 retirement)

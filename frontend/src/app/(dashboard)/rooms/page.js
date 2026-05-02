@@ -295,12 +295,12 @@ export default function RoomsPage() {
                       </span>
                       <div className="flex items-center gap-2.5">
                         <QuickEditRowAction
-                          disabled={!canManageRooms(currentUser)}
+                          disabled={!canManageRooms(currentUser) || room.status === 'decommissioned'}
                           onClick={(e) => {
                             e.preventDefault();
                             setEditingRoom(room);
                           }}
-                          title="Update Asset Config"
+                          title={room.status === 'decommissioned' ? "Decommissioned — restore to edit" : "Update Asset Config"}
                         />
                         <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-100 bg-white text-stone-300 transition-[border-color,background-color,color] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600">
                           <ArrowUpRight size={14} aria-hidden />

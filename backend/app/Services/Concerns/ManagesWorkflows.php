@@ -38,16 +38,26 @@ trait ManagesWorkflows
         callable $operation,
         ?callable $resultDetails = null
     ): mixed {
-        $correlationId = (string) Str::uuid();
+        $correlationId = request()->attributes->get('correlation_id') ?? (string) Str::uuid();
 
         // Set context for DB triggers (Forensic Integrity)
         AuditService::setAuditUserContext($actorId);
         AuditService::setCorrelationContext($correlationId);
+        
+        // IP Context is already handled by SetAuditContext middleware. 
+        // We only re-set it if we are in console mode (where middleware is bypassed).
+        if (app()->runningInConsole()) {
+            AuditService::setRequestContext(null, null, null, '127.0.0.1');
+        }
 
         try {
             return DB::transaction($operation);
         } finally {
-            AuditService::clearCorrelationContext();
+            // Context is cleared by SetAuditContext middleware for web requests.
+            // We only clear it here for console/Artisan jobs to prevent leakage.
+            if (app()->runningInConsole()) {
+                AuditService::clearCorrelationContext();
+            }
         }
     }
 }

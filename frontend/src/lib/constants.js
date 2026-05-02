@@ -129,6 +129,7 @@ export const AUDIT_ACTION_LABELS = {
   login: "Login",
   logout: "Logout",
   access_denied: "Access Denied",
+  failed_login: "Failed Login",
   status_change: "Status Change",
   archive: "Archive",
   restore: "Restore",
@@ -136,6 +137,10 @@ export const AUDIT_ACTION_LABELS = {
   INSERT: "Insert",
   UPDATE: "Update",
   DELETE: "Delete",
+  FAILED_LOGIN: "Failed Login",
+  ACCESS_DENIED: "Access Denied",
+  VOID: "Void",
+  void: "Void",
 };
 
 /** `audit_logs.target_table` display names (filters + table). */

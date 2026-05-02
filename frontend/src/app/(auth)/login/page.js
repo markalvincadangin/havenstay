@@ -39,6 +39,10 @@ export default function LoginPage() {
       setApiError("Google authentication failed. Please check your credentials or try again.");
     } else if (errorType === "access_denied") {
       setApiError("Access denied. You cancelled the authentication request.");
+    } else if (errorType === "account_not_found") {
+      setApiError("This Google account is not registered in our system. Please contact an administrator to request access.");
+    } else if (errorType === "account_deactivated") {
+      setApiError("This account has been deactivated. Please contact an administrator for assistance.");
     }
   }, [searchParams]);
 
@@ -279,7 +283,7 @@ export default function LoginPage() {
               <div className="mt-10 flex flex-col items-center gap-4 text-center opacity-40">
                 <div className="h-px w-8 bg-stone-200" />
                 <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                  HavenStay BHMS · v5.2
+                  HavenStay Management System · v5.0
                 </p>
               </div>
             </div>

@@ -193,7 +193,7 @@ export default function AuditLogsPage() {
                       </div>
                     </Field>
                   </div>
-                  <div className="md:col-span-6 lg:col-span-3">
+                    <div className="md:col-span-6 lg:col-span-3">
                     <Field label="Event Action">
                       <Select
                         value={filters.action}
@@ -201,12 +201,14 @@ export default function AuditLogsPage() {
                         className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                       >
                         <option value="all">All Actions</option>
-                        <option value="INSERT">INSERT</option>
-                        <option value="UPDATE">UPDATE</option>
-                        <option value="DELETE">DELETE</option>
-                        <option value="login">LOGIN</option>
-                        <option value="logout">LOGOUT</option>
-                        <option value="access_denied">ACCESS DENIED</option>
+                        <option value="CREATE">Create</option>
+                        <option value="UPDATE">Update</option>
+                        <option value="DELETE">Delete</option>
+                        <option value="LOGIN">Login</option>
+                        <option value="LOGOUT">Logout</option>
+                        <option value="FAILED_LOGIN">Failed Login</option>
+                        <option value="ACCESS_DENIED">Access Denied</option>
+                        <option value="VOID">Void</option>
                       </Select>
                     </Field>
                   </div>
@@ -266,10 +268,11 @@ export default function AuditLogsPage() {
                   columns={[
                     { key: "audit_id", label: "Audit ID", sortable: true, className: "pl-8 w-28" },
                     { key: "timestamp", label: "Date", sortable: true, className: "w-44" },
+                    { key: "category", label: "Category", sortable: true, className: "w-32" },
                     { key: "actor", label: "Actor", sortable: true },
                     { key: "action", label: "Action", sortable: true, className: "w-28 text-center" },
+                    { key: "status", label: "Status", sortable: true, className: "w-24 text-center" },
                     { key: "resource", label: "Resource", sortable: true, className: "w-32" },
-                    { key: "correlation", label: "Correlation", sortable: true, className: "w-32 text-center" },
                     { key: "actions", label: "", className: "w-16 text-right pr-8" },
                   ]}
                   rows={sortedRows.map((log) => (
@@ -299,17 +302,24 @@ export default function AuditLogsPage() {
                         </div>
                       </td>
                       <td className="py-6">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">
+                            {log.event_category}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-6">
                         <div className="flex items-center gap-3">
                           <div className="flex size-8 items-center justify-center rounded-lg bg-stone-100 text-stone-400 group-hover:bg-stone-200 group-hover:text-stone-600 transition-colors">
                             <User size={14} />
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-bold text-stone-900 truncate">
-                              {log.user ? `${log.user.first_name} ${log.user.last_name}` : "System Trace"}
+                              {log.actor_snapshot?.name || (log.user ? `${log.user.first_name} ${log.user.last_name}` : "System Trace")}
                             </p>
-                            {log.user?.username && (
+                            {(log.user?.username || log.actor_snapshot?.role) && (
                               <p className="font-mono text-[10px] font-bold text-teal-600 uppercase tracking-widest mt-0.5">
-                                @{log.user.username}
+                                @{log.user?.username || log.actor_snapshot?.role}
                               </p>
                             )}
                           </div>
@@ -320,6 +330,9 @@ export default function AuditLogsPage() {
                           {log.action}
                         </StatusBadge>
                       </td>
+                      <td className="py-6 text-center">
+                        <div className={`mx-auto size-2 rounded-full ${log.is_success ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]'}`} />
+                      </td>
                       <td className="py-6">
                         <div className="flex flex-col">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-stone-900">
@@ -329,9 +342,6 @@ export default function AuditLogsPage() {
                             REF #{formatAuditEntityIdDisplay(log.record_id, log.action)}
                           </span>
                         </div>
-                      </td>
-                      <td className="py-6 text-center">
-                        <CorrelationIdCell id={log.correlation_id} />
                       </td>
                       <td className="pr-8 py-6 text-right">
                         <div className="flex justify-end">

@@ -7,6 +7,8 @@ use App\Models\Role;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use App\Services\Core\AuditService;
+
 
 class IdentitySeeder extends Seeder
 {
@@ -16,6 +18,7 @@ class IdentitySeeder extends Seeder
      */
     public function run(): void
     {
+        AuditService::setSystemContext('identity');
         $adminEmail = env('SEED_ADMIN_EMAIL');
 
         if (!$adminEmail) {

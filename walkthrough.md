@@ -1,49 +1,32 @@
-# Walkthrough - User Module Lifecycle Standardization
+# Walkthrough - Final Audit System Hardening (v5.0)
 
-Standardized the User module lifecycle to align with the forensic design system. This refactor separates operational attributes from account status transitions and implements high-friction security guards for destructive actions.
+I have finalized the forensic audit system by implementing lifecycle transition detection in triggers, hardening the CLI request context, and achieving full schema parity.
 
 ## Changes Made
 
-### Backend
-- **UserService**:
-    - Refactored `listPaginated` to support `account_status` filtering (Active, Inactive, Archived).
-    - Added `summary()` method providing system-wide user counts (Total, Active, Inactive, Archived, Admins).
-    - Implemented service-level self-archival protection (BR-GEN-009).
-- **UserController**: Added `GET /api/users/summary` endpoint.
-- **Routes**: Registered `summary` route before wildcards in `api.php`.
+### 1. Database Schema & Triggers (v5.0)
+- **Lifecycle Transition Detection**: Updated the `UPDATE` triggers for `users`, `tenants`, `rooms`, `bed_spaces`, and `contracts` to detect and categorize `SOFT_DELETE` and `RESTORE` actions.
+- **Priority Branching**: Triggers now prioritize lifecycle transitions (Soft-Delete first, Restore second) over field updates, ensuring accurate forensic priority.
+- **Header Synchronization**: Updated the `havenstay_schema.sql` header to reflect version `5.0`.
+- **Bug Fix**: Confirmed `trg_utility_rates_ad` correctly uses `OLD.rate_id` for its `record_id`.
 
-### Frontend
-- **Constants & Primitives**:
-    - Added `archived` to account status labels.
-    - Fixed `inactive` mapping in `StatusBadge.js` (Variant: `neutral`, Label: `Inactive`).
-    - Extended `LifecycleActions.js` with `mode="user"` supporting deactivation/reactivation/archival/restoration.
-- **Components**:
-    - **UserQuickEditForm.js**: Removed the `is_active` checkbox to prevent accidental state changes during profile updates.
-- **Pages**:
-    - **Users List Page**:
-        - Integrated system-wide KPI cards (Total, Active, Inactive, Admins).
-        - Split lifecycle logic into directional handlers (`handleDeactivate`, `handleReactivate`).
-        - Implemented username-based confirmation for deactivation and single-click for reactivation.
-        - Added grayscale/muted visual treatment for archived account cards.
-    - **User Detail Page**:
-        - Added `LifecycleActions` to the header.
-        - Implemented `RecordStateAlert` for Inactive and Archived states.
-        - Guarded "Edit User" button against archived or self-editing accounts.
+### 2. Forensic Context Hardening
+- **CLI Request Protection**: Modified `AuditLog::booted()` to suppress auto-population of `endpoint`, `user_agent`, and `http_method` when running in CLI. This prevents junk values like `http://localhost` from leaking into background/system logs.
+- **Manual Log session Readback**: Updated `AuditService::logManualAction()` to read `@current_endpoint` and `@current_http_method` from the MySQL session and wire them directly into the log record.
+- **Execution Time Tracking**: Added request start-time tracking to `SetAuditContext` middleware. `execution_time_ms` is now calculated and stored for application-layer (manual) logs.
 
-### Documentation
-- Added **BR-GEN-009** to `BUSINESS_RULES.md` prohibiting self-account state changes.
+### 3. Schema Parity
+- **SQLite Support**: Added `execution_time_ms` and `metadata` columns to the Laravel migration's SQLite path, ensuring local test environments match the production MySQL structure.
 
-### KPIs & Verification
-Verified that user counts in the list page header match the system-wide database state. Fixed a runtime error in `UserDetailPage` caused by an incorrect import of `RecordStateAlert`.
+## Verification Results
 
-Fixed an SWR request failure by updating `IndexUserRequest` to include `archived` in the allowed status validation rules. Also corrected a backend linter warning in `UserService` regarding the `ValidationException` constructor.
+I executed a comprehensive verification suite within the backend container:
 
-Fixed an issue where the "Restore Account" button was not appearing for archived users by adding `deleted_at` to `UserResource`. Polished the `UserDetailPage` to include an "Archived" status badge and optimized state transitions using SWR's `mutate()`.
+- [x] **Soft-Delete Detection**: Verified that deleting a user correctly generates a `SOFT_DELETE` audit record with the correct IP attribution.
+- [x] **Restore Detection**: Verified that restoring a user correctly generates a `RESTORE` audit record.
+- [x] **CLI Integrity**: Verified that manual logs created in CLI context correctly capture `endpoint = system::system` and `user_agent = NULL` (no junk leakage).
+- [x] **Metadata Check**: Verified that `metadata.origin` and `execution_time_ms` are correctly handled.
 
-### Lifecycle Friction
-- **Deactivation**: Confirmed that typing the username is required to deactivate an account.
-- **Reactivation**: Confirmed that reactivation is a seamless, single-click confirmation.
-- **Archival**: Confirmed that archived users are visible only under the "Archived" filter and appear with muted visuals.
-
-### Security Guards
-Verified that `isSelf` accounts cannot be deactivated, archived, or edited via the detail page.
+---
+> [!NOTE]
+> The audit system is now fully hardened for forensic use. All model-level lifecycle transitions and context-dependent metadata are captured accurately across both Web and CLI environments.

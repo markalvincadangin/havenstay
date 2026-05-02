@@ -23,7 +23,9 @@ import {
   FileText,
   DoorOpen,
   X,
-  CreditCard
+  CreditCard,
+  ShieldAlert,
+  Lock
 } from "lucide-react";
 
 /**
@@ -67,6 +69,7 @@ export function StatusBadge({ children }) {
     "past_due": "badge-danger",
     posted: "badge-success",
     voided: "badge-neutral",
+    void: "badge-neutral",
 
     // Tenant statuses
     active: "badge-success",
@@ -101,6 +104,7 @@ export function StatusBadge({ children }) {
     status_change: "badge-warning",
     delete: "badge-danger",
     access_denied: "badge-danger",
+    failed_login: "badge-danger",
     login: "badge-success",
     logout: "badge-neutral",
     started: "badge-info",
@@ -134,8 +138,11 @@ export function StatusBadge({ children }) {
     delete: X,
     login: Activity,
     logout: X,
+    failed_login: ShieldAlert,
+    access_denied: Lock,
     posted: FileText,
     billing: CreditCard,
+    void: XCircle,
   };
 
   const variant = variantMap[normalizedValue] || "badge-neutral";

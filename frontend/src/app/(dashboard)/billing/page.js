@@ -313,20 +313,12 @@ export default function BillingListPage() {
                       }
                     >
                       <td className="px-8 py-5">
-                        <div className="flex flex-col">
-                          <ResourceIdCell id={billing.billing_id} type="billing" />
-                          <div className="mt-1.5">
-                            <CorrelationIdCell value={billing.correlation_id} />
-                          </div>
-                        </div>
+                        <ResourceIdCell id={billing.billing_id} type="billing" />
                       </td>
                       <td className="py-5">
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors leading-tight flex items-center gap-2">
                             {tenantName}
-                            {tenant?.correlation_id && (
-                              <CorrelationIdCell value={tenant.correlation_id} className="opacity-60 scale-90" />
-                            )}
                           </span>
                           <span className="mt-1 text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">
                             Room {roomCode}{bedLabel ? ` / ${bedLabel}` : ""}

@@ -20,22 +20,30 @@ class SetAuditContext
      */
     public function handle(Request $request, Closure $next): Response
     {
+        $correlationId = $request->header('X-Correlation-ID') ?? 'req_'.bin2hex(random_bytes(8));
+        $requestId = 'trace_'.bin2hex(random_bytes(12));
+        $endpoint = $request->path();
+        $method = $request->method();
+        $ip = $request->ip();
+        $startTime = microtime(true);
+
+        $request->attributes->set('correlation_id', $correlationId);
+        $request->attributes->set('request_id', $requestId);
+        $request->attributes->set('start_time', $startTime);
+
+        AuditService::setCorrelationContext($correlationId);
+        AuditService::setRequestContext($requestId, $endpoint, $method, $ip);
+
         if ($user = $request->user()) {
-            // 1. Set the Actor Context
             AuditService::setAuditUserContext((int) $user->user_id);
-
-            // 2. Resolve or Generate Correlation ID
-            // If the frontend provides one, we preserve it; otherwise, we generate a forensic trace.
-            $correlationId = $request->header('X-Correlation-ID')
-                ?? 'req_'.bin2hex(random_bytes(8));
-
-            AuditService::setCorrelationContext($correlationId);
-
-            // 3. Attach to request for downstream consumption (logging/response headers)
-            $request->attributes->set('correlation_id', $correlationId);
         }
 
-        return $next($request);
+        $response = $next($request);
+
+        $response->headers->set('X-Correlation-ID', $correlationId);
+        $response->headers->set('X-Request-ID', $requestId);
+
+        return $response;
     }
 
     /**
