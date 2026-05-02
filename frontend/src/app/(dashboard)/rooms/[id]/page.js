@@ -38,6 +38,7 @@ import MetricItem from "@/components/ui/MetricItem";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { RoomQuickEditForm } from '@/features/rooms/components/RoomQuickEditForm';
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import DetailHeader from "@/components/ui/DetailHeader";
 export default function RoomDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -94,38 +95,24 @@ export default function RoomDetailsPage() {
       setBusyAction("");
     }
   };
+  const header = DetailHeader({
+    type: "room",
+    id: roomId,
+    title: room ? `Room ${room.room_code}` : "Room",
+    subtitle: "Room details — beds, status, and meters.",
+    status: room?.status,
+    loading: loading,
+    listHref: "/rooms",
+    listLabel: "Room Inventory",
+    detailLabel: "Room Profile"
+  });
+
   return (
     <StandardPage
-      title={
-        loading ? (
-          "Loading Room..."
-        ) : room ? (
-          <div className="flex items-center gap-4">
-            <span>Room {room.room_code}</span>
-            <ResourceIdCell id={room.room_id} type="room" />
-          </div>
-        ) : (
-          "Room Profile"
-        )
-      }
-      subtitle={
-        loading ? (
-          "Synchronizing unit details..."
-        ) : room ? (
-          "Room details — beds, status, and meters."
-        ) : null
-      }
+      {...header}
       loading={loading}
       skeleton={<SkeletonDetailPage />}
       error={roomError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Room Inventory", href: "/rooms" },
-            { label: "Room Profile" },
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/rooms"

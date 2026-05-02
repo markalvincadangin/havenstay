@@ -267,7 +267,6 @@ export default function TenantsPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors leading-none flex items-center gap-2">
                           {formatTenantDirectoryName(tenant)}
-                          <CorrelationIdCell value={tenant.correlation_id} label="Workflow ID" />
                         </p>
                       </div>
                     </div>

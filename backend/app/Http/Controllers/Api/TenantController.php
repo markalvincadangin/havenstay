@@ -7,6 +7,7 @@ use App\Http\Requests\Tenant\IndexTenantRequest;
 use App\Http\Requests\Tenant\ManageTenantRequest;
 use App\Http\Requests\Tenant\StoreTenantRequest;
 use App\Http\Requests\Tenant\UpdateTenantRequest;
+use App\Http\Requests\Tenant\ViewTenantRequest;
 use App\Http\Resources\TenantResource;
 use App\Models\Tenant;
 use App\Services\Operations\TenantService;
@@ -61,7 +62,7 @@ class TenantController extends Controller
     /**
      * FR-011a: Retrieve detailed tenant forensic record.
      */
-    public function show(ManageTenantRequest $request, Tenant $tenant): JsonResponse
+    public function show(ViewTenantRequest $request, Tenant $tenant): JsonResponse
     {
         $loaded = TenantService::getById((int) $tenant->tenant_id);
         if (! $loaded) {

@@ -365,4 +365,5 @@ export const ID_PREFIX_MAP = {
   meter: "MTR",
   rate: "RATE",
   user: "USER",
+  utility: "SVC",
 };

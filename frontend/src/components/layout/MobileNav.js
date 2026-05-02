@@ -18,6 +18,7 @@ import {
   UserManagementIcon,
   UtilityIcon,
 } from "@/components/ui/Icons";
+import UserRoleBadge from "@/components/ui/UserRoleBadge";
 
 const OPERATIONS_ICONS_BY_HREF = {
   "/dashboard": DashboardIcon,
@@ -164,7 +165,13 @@ export default function MobileNav({ user, onLogout, pathname }) {
                 )}
               </div>
 
-              <div className="shrink-0 p-4 border-t border-white/5">
+              <div className="shrink-0 p-4 border-t border-white/5 space-y-4">
+                {user && (
+                  <UserRoleBadge 
+                    user={user} 
+                    isSidebar={true} 
+                  />
+                )}
                 <button
                   type="button"
                   className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/5 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-white/10 hover:text-rose-400 hover:border-rose-400/30"

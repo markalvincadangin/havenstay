@@ -1,7 +1,7 @@
 # HavenStay Boarding House Management System (BHMS)
 ## Operations Runbook: Standard Procedures and Temporal Logic
 
-**Version:** 1.5  
+**Version:** 1.6  
 **Last Updated:** May 02, 2026  
 **Status:** Stable - Operational Baseline
 
@@ -22,7 +22,9 @@
 
 This document defines the operational procedures, environmental constants, and temporal logic for the HavenStay Boarding House Management System (BHMS). It ensures that all users and systems interpret time and data consistently across different timezones and reporting periods.
 
-## 2. Temporal Definitions (BR-015)
+> **Note:** Temporal definitions and operational windows described in this document are implemented as application-layer conventions. They are not assigned formal Business Rule codes in `BUSINESS_RULES.md`.
+
+## 2. Temporal Definitions
 
 The system relies on a deterministic "Business Date" for financial and logic evaluation, such as overdue detection, receivables aging, and movement forecasting.
 
@@ -30,7 +32,7 @@ The system relies on a deterministic "Business Date" for financial and logic eva
 - **System Business Date**: In Release 1, the business date is derived from the current server system time in the Asia/Manila timezone.
 - **Reporting Cutoff**: Collections and billing summaries use a "day-inclusive" window (e.g., `00:00:00` to `23:59:59` of the specified dates).
 
-## 3. Operational Windows (BR-019)
+## 3. Operational Windows
 
 Operational windows define when certain batch actions (like billing generation) are permitted to ensure data stability.
 
@@ -54,6 +56,7 @@ Operational windows define when certain batch actions (like billing generation) 
 | v1.0 | 2026-03-20 | Initial runbook created. |
 | v1.4 | 2026-04-20 | Updated timezone and reporting cutoff definitions. |
 | **v1.5** | **2026-05-02** | **Standardized formatting and aligned with HavenStay Documentation Standard.** |
+| **v1.6** | **2026-05-02** | **Docs Remediation: Removed undefined BR-015 / BR-019 cross-references from section headings. Added clarifying note on operational convention status.** |
 
 ---
 

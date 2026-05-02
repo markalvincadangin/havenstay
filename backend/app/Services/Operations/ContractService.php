@@ -192,37 +192,48 @@ class ContractService
     {
         $contractId = $contract->contract_id;
 
-        return Cache::remember("contracts:unbilled:{$contractId}", 300, function () use ($contract) {
-            $roomId = $contract->room->room_id;
+        $cached = Cache::get("contracts:unbilled:{$contractId}");
+        
+        // Handle serialization edge cases or incomplete class objects
+        if ($cached instanceof Collection) {
+            return $cached;
+        }
 
-            // Find meters currently or previously assigned to this room
-            return MeterReading::query()
-                ->with(['meter.utility'])
-                ->whereIn('meter_id', function ($q) use ($roomId) {
-                    $q->select('meter_id')
-                        ->from('meter_assignments')
-                        ->where('room_id', $roomId);
-                })
-                ->whereNotExists(function ($q) use ($contract) {
-                    $q->select(DB::raw(1))
-                        ->from('billing_line_items')
-                        ->join('billing', 'billing.billing_id', '=', 'billing_line_items.billing_id')
-                        ->whereColumn('billing_line_items.reading_id', 'meter_readings.reading_id')
-                        ->where('billing.contract_id', $contract->contract_id);
-                })
-                ->orderBy('reading_date', 'desc')
-                ->get()
-                ->map(function (MeterReading $reading) {
-                    // Flatten for frontend consumption
-                    $r = $reading->toArray();
-                    $r['utility_name'] = $reading->meter->utility->name;
-                    $r['utility_type'] = strtolower($reading->meter->utility->name); // for legacy FE compatibility
-                    $r['unit'] = $reading->meter->utility->unit_of_measurement;
-                    $r['calculated_amount'] = Financials::computeUtilityCost($reading->meter_id, (float) $reading->reading_value);
+        $roomId = $contract->room?->room_id;
+        if (! $roomId) {
+            return collect();
+        }
 
-                    return $r;
-                });
-        });
+        $readings = MeterReading::query()
+            ->with(['meter.utility'])
+            ->whereIn('meter_id', function ($q) use ($roomId) {
+                $q->select('meter_id')
+                    ->from('meter_assignments')
+                    ->where('room_id', $roomId);
+            })
+            ->whereNotExists(function ($q) use ($contract) {
+                $q->select(DB::raw(1))
+                    ->from('billing_line_items')
+                    ->join('billing', 'billing.billing_id', '=', 'billing_line_items.billing_id')
+                    ->whereColumn('billing_line_items.reading_id', 'meter_readings.reading_id')
+                    ->where('billing.contract_id', $contract->contract_id);
+            })
+            ->orderBy('reading_date', 'desc')
+            ->get()
+            ->map(function (MeterReading $reading) {
+                // Flatten for frontend consumption
+                $r = $reading->toArray();
+                $r['utility_name'] = $reading->meter->utility->name ?? 'Utility';
+                $r['utility_type'] = strtolower($reading->meter->utility->name ?? 'utility');
+                $r['unit'] = $reading->meter->utility->unit_of_measurement ?? '';
+                $r['calculated_amount'] = Financials::computeUtilityCost($reading->meter_id, (float) $reading->reading_value);
+
+                return $r;
+            });
+
+        Cache::put("contracts:unbilled:{$contractId}", $readings, 300);
+
+        return $readings;
     }
 
     /**

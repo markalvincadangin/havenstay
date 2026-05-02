@@ -36,11 +36,7 @@ class TenantResource extends JsonResource
 
         // Forensic v5.0: Relocate PII masking logic into the Resource layer
         if (PiiMaskingService::shouldMaskTenantPii($request->user())) {
-            $data['contact_number'] = PiiMaskingService::maskPhone($this->contact_number);
-            $data['email'] = PiiMaskingService::maskEmail($this->email);
-            $data['emergency_contact_name'] = 'Redacted';
-            $data['emergency_contact_number'] = '***';
-            $data['address'] = 'Redacted';
+            $data = PiiMaskingService::maskTenantArray($data);
         }
 
         return $data;

@@ -38,6 +38,7 @@ import CurrencyCell from "@/components/ui/CurrencyCell";
 
 import { UtilityRateQuickEditForm } from '@/features/utilities/components/UtilityRateQuickEditForm';
 import { UtilityQuickEditForm } from '@/features/utilities/components/UtilityQuickEditForm';
+import DetailHeader from "@/components/ui/DetailHeader";
 
 /**
  * @module Utilities/ServiceDetail
@@ -108,18 +109,21 @@ export default function UtilityDetailPage({ params }) {
 
   const meters = utility?.meters || [];
 
+  const header = DetailHeader({
+    type: "utility",
+    id: utilityId,
+    title: utility ? utility.name : "Utility Details",
+    subtitle: "Configure specific utility settings and track historical unit rates.",
+    status: "active",
+    loading: authLoading || loading,
+    listHref: "/utilities",
+    listLabel: "Utilities",
+    detailLabel: utility ? utility.name : "Detail"
+  });
+
   return (
     <StandardPage
-      title={title}
-      subtitle="Configure specific utility settings and track historical unit rates."
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Utilities", href: "/utilities" },
-            { label: title },
-          ]}
-        />
-      }
+      {...header}
       loading={authLoading || loading}
       skeleton={<SkeletonDetailPage />}
       actions={

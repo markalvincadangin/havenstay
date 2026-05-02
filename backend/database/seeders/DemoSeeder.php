@@ -51,7 +51,7 @@ class DemoSeeder extends Seeder
 
             echo "[seeder] Starting inventory...\n";
             $inventory = $this->seedInventory();
-            echo '[seeder] Inventory seeded (Rooms: '.count($inventory['rooms']).").\n";
+            echo '[seeder] Inventory seeded (Rooms: ' . count($inventory['rooms']) . ").\n";
 
             echo "[seeder] Starting meters...\n";
             $this->seedMeters($inventory['rooms']);
@@ -67,8 +67,8 @@ class DemoSeeder extends Seeder
             echo "[seeder] Final sync complete.\n";
             gc_collect_cycles();
         } catch (\Throwable $e) {
-            echo "\n[SEEDER ERROR] ".$e->getMessage()."\n";
-            echo '[SEEDER TRACE] '.$e->getTraceAsString()."\n";
+            echo "\n[SEEDER ERROR] " . $e->getMessage() . "\n";
+            echo '[SEEDER TRACE] ' . $e->getTraceAsString() . "\n";
             throw $e;
         }
     }
@@ -77,26 +77,41 @@ class DemoSeeder extends Seeder
     {
         $adminRole = Role::where('role_name', RoleEnum::ADMIN->value)->firstOrFail();
         $staffRole = Role::where('role_name', RoleEnum::STAFF->value)->firstOrFail();
+        $viewerRole = Role::where('role_name', RoleEnum::VIEWER->value)->firstOrFail();
 
-        $admin = User::updateOrCreate(['username' => 'admin'], [
-            'first_name' => 'System',
-            'last_name' => 'Admin',
-            'email' => 'admin@havenstay.com',
+        // Use email as the primary key for updateOrCreate to match IdentitySeeder and prevent UQ violations
+        $admin = User::updateOrCreate(['email' => 'havenstay.admin@havenstay.com'], [
+            'username' => 'havenstay.admin',
+            'first_name' => 'HavenStay',
+            'last_name' => 'Administrator',
             'password_hash' => Hash::make(self::DEMO_PASSWORD),
             'role_id' => $adminRole->role_id,
             'is_active' => true,
         ]);
 
-        $staff = User::updateOrCreate(['username' => 'elena.santos'], [
-            'first_name' => 'Elena',
-            'last_name' => 'Santos',
-            'email' => 'elena.santos@havenstay.ph',
+        $staff = User::updateOrCreate(['email' => 'havenstay.staff@havenstay.com'], [
+            'username' => 'havenstay.staff',
+            'first_name' => 'HavenStay',
+            'last_name' => 'Staff',
             'password_hash' => Hash::make(self::DEMO_PASSWORD),
             'role_id' => $staffRole->role_id,
             'is_active' => true,
         ]);
 
-        return ['admin' => $admin, 'staff' => $staff];
+        $viewer = User::updateOrCreate(['email' => 'viewer@havenstay.com'], [
+            'username' => 'havenstay.viewer',
+            'first_name' => 'HavenStay',
+            'last_name' => 'Viewer',
+            'password_hash' => Hash::make(self::DEMO_PASSWORD),
+            'role_id' => $viewerRole->role_id,
+            'is_active' => true,
+        ]);
+
+        return [
+            'admin' => $admin,
+            'staff' => $staff,
+            'viewer' => $viewer
+        ];
     }
 
     private function seedUtilities(): void
@@ -116,9 +131,9 @@ class DemoSeeder extends Seeder
         $roomData = [
             'sharedFour' => ['code' => 'UNIT-101', 'type' => RoomType::SHARED, 'cap' => 4, 'rate' => 5800.00, 'desc' => 'Sampaloc Shared-4 (U-Belt)'],
             'sharedTwin' => ['code' => 'UNIT-102', 'type' => RoomType::SHARED, 'cap' => 2, 'rate' => 8200.00, 'desc' => 'España Twin (Quiet Zone)'],
-            'soloStandard' => ['code' => 'UNIT-201', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 14500.00, 'desc' => 'Loyola Studio (Student Solo)', 'metered' => true],
-            'soloExecutive' => ['code' => 'UNIT-202', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 16800.00, 'desc' => 'Katipunan Executive (Professional Solo)', 'metered' => true],
-            'soloInclusive' => ['code' => 'UNIT-301', 'type' => RoomType::PRIVATE, 'cap' => 1, 'rate' => 18500.00, 'desc' => 'BGC Premium (All-Inclusive)', 'metered' => false],
+            'soloStandard' => ['code' => 'UNIT-201', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 14500.00, 'desc' => 'Loyola Studio (Student Solo)', 'metered' => true],
+            'soloExecutive' => ['code' => 'UNIT-202', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 16800.00, 'desc' => 'Katipunan Executive (Professional Solo)', 'metered' => true],
+            'soloInclusive' => ['code' => 'UNIT-301', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 18500.00, 'desc' => 'BGC Premium (All-Inclusive)', 'metered' => false],
         ];
 
         foreach ($roomData as $key => $d) {
@@ -134,7 +149,7 @@ class DemoSeeder extends Seeder
             for ($i = 0; $i < $d['cap']; $i++) {
                 BedSpace::updateOrCreate([
                     'room_id' => $rooms[$key]->room_id,
-                    'bed_label' => 'Bed '.chr(65 + $i),
+                    'bed_label' => 'Bed ' . chr(65 + $i),
                 ], [
                     'status' => BedSpaceStatus::VACANT,
                 ]);
@@ -150,7 +165,7 @@ class DemoSeeder extends Seeder
         $water = Utility::where('name', 'Water')->first();
 
         foreach ($rooms as $room) {
-            if (! $room->is_metered) {
+            if (!$room->is_metered) {
                 echo "[seeder] Skipping hardware for all-inclusive room: {$room->room_code}\n";
 
                 continue;
@@ -212,18 +227,27 @@ class DemoSeeder extends Seeder
     private function seedScenarioConsistentPayer(array $users, array $inventory): void
     {
         $tenant = Tenant::updateOrCreate(['email' => 'cheska.reyes@example.ph'], [
-            'first_name' => 'Francesca', 'last_name' => 'Reyes', 'contact_number' => '09171234567',
-            'emergency_contact_name' => 'Mario Reyes', 'emergency_contact_number' => '09170001111',
-            'address' => 'Brgy. Loyola Heights, Quezon City, PH', 'status' => TenantStatus::ACTIVE,
+            'first_name' => 'Francesca',
+            'last_name' => 'Reyes',
+            'contact_number' => '09171234567',
+            'emergency_contact_name' => 'Mario Reyes',
+            'emergency_contact_number' => '09170001111',
+            'address' => 'Unit 12B, Torre de Santo Tomas, Sampaloc, Manila',
+            'status' => TenantStatus::ACTIVE,
         ]);
 
         $bed = BedSpace::where('room_id', $inventory['rooms']['sharedFour']->room_id)->where('bed_label', 'Bed A')->firstOrFail();
 
         $contract = Contract::create([
-            'tenant_id' => $tenant->tenant_id, 'bed_space_id' => $bed->bed_space_id, 'created_by' => $users['admin']->user_id,
-            'contract_type' => 'fixed_term', 'move_in_date' => '2025-02-01',
-            'expected_move_out_date' => '2026-02-01', 'monthly_rate' => 5800.00,
-            'deposit_amount' => 5800.00, 'status' => ContractStatus::ACTIVE,
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $users['admin']->user_id,
+            'contract_type' => 'fixed_term',
+            'move_in_date' => '2025-02-01',
+            'expected_move_out_date' => '2026-02-01',
+            'monthly_rate' => 5800.00,
+            'deposit_amount' => 5800.00,
+            'status' => ContractStatus::ACTIVE,
         ]);
 
         $bed->update(['status' => BedSpaceStatus::OCCUPIED]);
@@ -236,17 +260,26 @@ class DemoSeeder extends Seeder
     private function seedScenarioNewEnrollment(array $users, array $inventory): void
     {
         $tenant = Tenant::updateOrCreate(['email' => 'miguel.torres@example.ph'], [
-            'first_name' => 'Juan Miguel', 'last_name' => 'Torres', 'contact_number' => '09187654321',
-            'emergency_contact_name' => 'Elena Torres', 'emergency_contact_number' => '09180002222',
-            'address' => 'Sampaloc, Manila, PH', 'status' => TenantStatus::ACTIVE,
+            'first_name' => 'Juan Miguel',
+            'last_name' => 'Torres',
+            'contact_number' => '09187654321',
+            'emergency_contact_name' => 'Elena Torres',
+            'emergency_contact_number' => '09180002222',
+            'address' => '415 Loyola Heights, Katipunan Ave, Quezon City',
+            'status' => TenantStatus::ACTIVE,
         ]);
 
         $bed = BedSpace::where('room_id', $inventory['rooms']['soloStandard']->room_id)->firstOrFail();
 
         Contract::create([
-            'tenant_id' => $tenant->tenant_id, 'bed_space_id' => $bed->bed_space_id, 'created_by' => $users['admin']->user_id,
-            'contract_type' => 'month_to_month', 'move_in_date' => Carbon::now()->startOfMonth()->toDateString(),
-            'monthly_rate' => 14500.00, 'deposit_amount' => 14500.00, 'status' => ContractStatus::PENDING_PAYMENT,
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $users['admin']->user_id,
+            'contract_type' => 'month_to_month',
+            'move_in_date' => Carbon::now()->startOfMonth()->toDateString(),
+            'monthly_rate' => 14500.00,
+            'deposit_amount' => 14500.00,
+            'status' => ContractStatus::PENDING_PAYMENT,
         ]);
 
         $bed->update(['status' => BedSpaceStatus::OCCUPIED]);
@@ -255,17 +288,26 @@ class DemoSeeder extends Seeder
     private function seedScenarioOverdueAccount(array $users, array $inventory): void
     {
         $tenant = Tenant::updateOrCreate(['email' => 'paolo.mercado@example.ph'], [
-            'first_name' => 'Paolo', 'last_name' => 'Mercado', 'contact_number' => '09192223333',
-            'emergency_contact_name' => 'Lucia Mercado', 'emergency_contact_number' => '09190004444',
-            'address' => 'Makati City, PH', 'status' => TenantStatus::ACTIVE,
+            'first_name' => 'Paolo',
+            'last_name' => 'Mercado',
+            'contact_number' => '09192223333',
+            'emergency_contact_name' => 'Lucia Mercado',
+            'emergency_contact_number' => '09190004444',
+            'address' => '888 Makati Ave, Brgy. Poblacion, Makati City',
+            'status' => TenantStatus::ACTIVE,
         ]);
 
         $bed = BedSpace::where('room_id', $inventory['rooms']['sharedTwin']->room_id)->where('bed_label', 'Bed A')->firstOrFail();
 
         $contract = Contract::create([
-            'tenant_id' => $tenant->tenant_id, 'bed_space_id' => $bed->bed_space_id, 'created_by' => $users['admin']->user_id,
-            'contract_type' => 'fixed_term', 'move_in_date' => '2025-01-15',
-            'monthly_rate' => 8200.00, 'deposit_amount' => 8200.00, 'status' => ContractStatus::ACTIVE,
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $users['admin']->user_id,
+            'contract_type' => 'fixed_term',
+            'move_in_date' => '2025-01-15',
+            'monthly_rate' => 8200.00,
+            'deposit_amount' => 8200.00,
+            'status' => ContractStatus::ACTIVE,
         ]);
 
         $bed->update(['status' => BedSpaceStatus::OCCUPIED]);
@@ -290,18 +332,27 @@ class DemoSeeder extends Seeder
     private function seedScenarioMovedOut(array $users, array $inventory): void
     {
         $tenant = Tenant::updateOrCreate(['email' => 'liza.v@example.ph'], [
-            'first_name' => 'Liza', 'last_name' => 'Villaluz', 'contact_number' => '09205556666',
-            'emergency_contact_name' => 'Vicente Villaluz', 'emergency_contact_number' => '09200007777',
-            'address' => 'Cebu City, PH', 'status' => TenantStatus::MOVED_OUT,
+            'first_name' => 'Liza',
+            'last_name' => 'Villaluz',
+            'contact_number' => '09205556666',
+            'emergency_contact_name' => 'Vicente Villaluz',
+            'emergency_contact_number' => '09200007777',
+            'address' => '123 Ramos St., Brgy. Zapatera, Cebu City',
+            'status' => TenantStatus::MOVED_OUT,
         ]);
 
         $bed = BedSpace::where('room_id', $inventory['rooms']['sharedTwin']->room_id)->where('bed_label', 'Bed B')->firstOrFail();
 
         Contract::create([
-            'tenant_id' => $tenant->tenant_id, 'bed_space_id' => $bed->bed_space_id, 'created_by' => $users['admin']->user_id,
-            'contract_type' => 'fixed_term', 'move_in_date' => '2024-01-01',
-            'actual_move_out_date' => '2025-01-01', 'monthly_rate' => 8200.00,
-            'deposit_amount' => 8200.00, 'status' => ContractStatus::COMPLETED,
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $users['admin']->user_id,
+            'contract_type' => 'fixed_term',
+            'move_in_date' => '2024-01-01',
+            'actual_move_out_date' => '2025-01-01',
+            'monthly_rate' => 8200.00,
+            'deposit_amount' => 8200.00,
+            'status' => ContractStatus::COMPLETED,
             'is_cleared' => true,
         ]);
     }
@@ -309,18 +360,27 @@ class DemoSeeder extends Seeder
     private function seedScenarioRateOverride(array $users, array $inventory): void
     {
         $tenant = Tenant::updateOrCreate(['email' => 'mangben@example.ph'], [
-            'first_name' => 'Benjamin', 'last_name' => 'Santos', 'contact_number' => '09218889999',
-            'emergency_contact_name' => 'Rosa Santos', 'emergency_contact_number' => '09210008888',
-            'address' => 'Marikina City, PH', 'status' => TenantStatus::ACTIVE,
+            'first_name' => 'Benjamin',
+            'last_name' => 'Santos',
+            'contact_number' => '09218889999',
+            'emergency_contact_name' => 'Rosa Santos',
+            'emergency_contact_number' => '09210008888',
+            'address' => 'Marikina City, PH',
+            'status' => TenantStatus::ACTIVE,
         ]);
 
         $bed = BedSpace::where('room_id', $inventory['rooms']['soloExecutive']->room_id)->firstOrFail();
 
         Contract::create([
-            'tenant_id' => $tenant->tenant_id, 'bed_space_id' => $bed->bed_space_id, 'created_by' => $users['admin']->user_id,
-            'contract_type' => 'fixed_term', 'move_in_date' => '2025-01-01',
-            'monthly_rate' => 16800.00, 'monthly_rate_override' => 15500.00, // Loyalty Discount
-            'deposit_amount' => 15500.00, 'status' => ContractStatus::ACTIVE,
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $users['admin']->user_id,
+            'contract_type' => 'fixed_term',
+            'move_in_date' => '2025-01-01',
+            'monthly_rate' => 16800.00,
+            'monthly_rate_override' => 15500.00, // Loyalty Discount
+            'deposit_amount' => 15500.00,
+            'status' => ContractStatus::ACTIVE,
         ]);
 
         $bed->update(['status' => BedSpaceStatus::OCCUPIED]);
@@ -329,17 +389,26 @@ class DemoSeeder extends Seeder
     private function seedScenarioAllInclusive(array $users, array $inventory): void
     {
         $tenant = Tenant::updateOrCreate(['email' => 'rico.m@example.ph'], [
-            'first_name' => 'Rico', 'last_name' => 'Manila', 'contact_number' => '09223334444',
-            'emergency_contact_name' => 'Teresa Manila', 'emergency_contact_number' => '09220001111',
-            'address' => 'BGC, Taguig, PH', 'status' => TenantStatus::ACTIVE,
+            'first_name' => 'Rico',
+            'last_name' => 'Manila',
+            'contact_number' => '09223334444',
+            'emergency_contact_name' => 'Teresa Manila',
+            'emergency_contact_number' => '09220001111',
+            'address' => 'BGC, Taguig, PH',
+            'status' => TenantStatus::ACTIVE,
         ]);
 
         $bed = BedSpace::where('room_id', $inventory['rooms']['soloInclusive']->room_id)->firstOrFail();
 
         Contract::create([
-            'tenant_id' => $tenant->tenant_id, 'bed_space_id' => $bed->bed_space_id, 'created_by' => $users['admin']->user_id,
-            'contract_type' => 'fixed_term', 'move_in_date' => '2025-04-01',
-            'monthly_rate' => 18500.00, 'deposit_amount' => 18500.00, 'status' => ContractStatus::ACTIVE,
+            'tenant_id' => $tenant->tenant_id,
+            'bed_space_id' => $bed->bed_space_id,
+            'created_by' => $users['admin']->user_id,
+            'contract_type' => 'fixed_term',
+            'move_in_date' => '2025-04-01',
+            'monthly_rate' => 18500.00,
+            'deposit_amount' => 18500.00,
+            'status' => ContractStatus::ACTIVE,
         ]);
 
         $bed->update(['status' => BedSpaceStatus::OCCUPIED]);
@@ -370,7 +439,7 @@ class DemoSeeder extends Seeder
             'amount_paid' => $amount,
             'payment_date' => $month->copy()->startOfMonth()->addDays(2)->toDateString(),
             'payment_method' => PaymentMethod::GCASH,
-            'reference_number' => 'GCASH-'.random_int(100000, 999999),
+            'reference_number' => 'GCASH-' . random_int(100000, 999999),
         ]);
     }
 

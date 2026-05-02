@@ -1,9 +1,9 @@
 # HavenStay — Backend Architecture & Coding Standards Blueprint
 
-**Version:** 6.1  
-**Last Updated:** April 29, 2026  
+**Version:** 6.2  
+**Last Updated:** May 02, 2026  
 **Status:** Authoritative Standard  
-**Scope:** `backend/app` — Laravel 14 / PHP 8.3+  
+**Scope:** `backend/app` — Laravel 11 / PHP 8.3+  
 
 ---
 
@@ -19,7 +19,7 @@ Every line of backend code written for HavenStay must adhere to these non-negoti
 
 ## 2. Standardized Directory Structure
 
-The `backend/` directory is structured to enforce the separation of concerns, adhering closely to Laravel 13+ conventions extended for HavenStay's domain:
+The `backend/` directory is structured to enforce the separation of concerns, adhering closely to Laravel 11+ conventions extended for HavenStay's domain:
 
 ```text
 backend/
@@ -186,3 +186,4 @@ Code containing these anti-patterns will be automatically rejected:
 | v5.0 | Apr 22, 2026 | Major Architecture Update. Formalized 5-Tier Extended MVC (added Support tier). Mandated strict PHPDoc and native typing. Mandated API Resources for all output. Fixed `transaction_logs` references. Corrected `Requests/Meter/` singular naming convention. |
 | v6.0 | Apr 29, 2026 | Major Stabilization: Mandated Idempotency-Key protection for financial writes. Standardized Dual-Path Forensic Resolution for XOR relationships (Payments). Codified Resilient Batch Workflow patterns (Non-blocking loops). |
 | **v6.1** | **Apr 29, 2026** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |
+| **v6.2** | **May 02, 2026** | **Docs Remediation: Corrected Laravel version references from 14/13 to 11 in scope header and directory structure section.** |

@@ -69,7 +69,7 @@ HavenStay BHMS is a centralized web-based system for managing boarding house ope
 - [**BUSINESS_RULES.md**](../BUSINESS_RULES.md) — Authoritative business rules (all BR references below)
 - [**SDD.md**](SDD.md) — System Design Document
 - [**TEST_PLAN.md**](TEST_PLAN.md) — Test strategy and cases
-- [**havenstay_schema.sql**](../db/havenstay_schema.sql) — Database schema (updated to reflect v4.2)
+- [**havenstay_schema.sql**](../db/havenstay_schema.sql) — Canonical database schema (v5.0 — Forensic Hardened). Mirror copy at `backend/database/sql/havenstay_schema.sql`. Both files must remain byte-for-byte identical per `DATABASE.md §3`.
 
 ---
 

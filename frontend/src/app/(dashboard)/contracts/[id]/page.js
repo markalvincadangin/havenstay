@@ -59,6 +59,7 @@ import { normalizePaginatedList } from "@/lib/pagination";
 import { FormSection } from "@/components/ui/FormSection";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import RecordStateAlert from "@/components/ui/RecordStateAlert";
+import DetailHeader from "@/components/ui/DetailHeader";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -142,7 +143,7 @@ export default function ContractDetailsPage() {
   const [isArchiving, setIsArchiving] = useState(false);
   const [editingContract, setEditingContract] = useState(null);
   const [isActivating, setIsActivating] = useState(false);
-  const pageTitle = contract ? `Contract #${contractId}` : "Contract Detail";
+  const pageTitle = contract ? `CONTRACT #${String(contractId).padStart(6, "0")}` : "Contract Detail";
 
   const loadContract = () => refetchContract();
 
@@ -272,42 +273,24 @@ export default function ContractDetailsPage() {
   const isActive = isContractActive(contract?.status);
   const isEnded = isContractEnded(contract?.status);
   const tenantDisplay = tenant ? formatTenantDirectoryName(tenant) : "Agreement";
+  const header = DetailHeader({
+    type: "contract",
+    id: contractId,
+    title: pageTitle,
+    subtitle: "Lease profile: terms, billing, and payment history.",
+    status: contract?.status,
+    loading: loading,
+    listHref: "/contracts",
+    listLabel: "Contracts",
+    detailLabel: `Agreement ${contractId}`
+  });
+
   return (
     <StandardPage
-      title={
-        loading ? (
-          "Loading Agreement..."
-        ) : (
-          pageTitle
-        )
-      }
-      subtitle={
-        loading ? (
-          "Synchronizing lease records..."
-        ) : contract ? (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <ResourceIdCell id={contract.contract_id} type="contract" />
-              <span className="text-stone-300">·</span>
-              <StatusBadge size="sm">{contract.status}</StatusBadge>
-            </div>
-            <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
-              Lease profile: terms, billing, and payment history.
-            </p>
-          </div>
-        ) : null
-      }
+      {...header}
       loading={loading}
       skeleton={<SkeletonDetailPage />}
       error={contractError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Contracts", href: "/contracts" },
-            { label: `Agreement ${contractId}` },
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/contracts"
@@ -365,25 +348,25 @@ export default function ContractDetailsPage() {
       >
         {fetchError && <Alert variant="error" title="Load Failed">{fetchError}</Alert>}
 
-        <RecordStateAlert 
-          show={contract?.status === 'voided'} 
-          variant="warning" 
+        <RecordStateAlert
+          show={contract?.status === 'voided'}
+          variant="warning"
           title="Contract Voided"
         >
           This contract was voided due to a registration error. Associated billing was cancelled and inventory released.
         </RecordStateAlert>
 
-        <RecordStateAlert 
-          show={contract?.status === 'terminated'} 
-          variant="warning" 
+        <RecordStateAlert
+          show={contract?.status === 'terminated'}
+          variant="warning"
           title="Contract Terminated"
         >
           This contract was terminated early. Operational access for this agreement has been revoked.
         </RecordStateAlert>
 
-        <RecordStateAlert 
-          show={contract?.status === 'completed'} 
-          variant="info" 
+        <RecordStateAlert
+          show={contract?.status === 'completed'}
+          variant="info"
           title="Contract Completed"
         >
           This contract is completed. Resident has moved out and all terms have been finalized.

@@ -12,7 +12,7 @@ import { ID_PREFIX_MAP } from "@/lib/constants";
  * @param {number} [length] - Padding length (default 6).
  */
 export default function ResourceIdCell({ id, type, prefix: manualPrefix, length = 6 }) {
-  if (!id) return <span className="text-stone-300">—</span>;
+  if (!id) return null;
   
   const prefix = type ? ID_PREFIX_MAP[type] : manualPrefix;
   const formattedId = String(id).padStart(length, '0');

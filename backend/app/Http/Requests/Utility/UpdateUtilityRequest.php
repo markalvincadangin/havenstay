@@ -19,7 +19,7 @@ class UpdateUtilityRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        AuthorizationService::ensureCanManageUsers($this->user());
+        AuthorizationService::ensureCanManageUtilities($this->user());
 
         return true;
     }

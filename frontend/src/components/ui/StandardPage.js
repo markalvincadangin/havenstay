@@ -7,7 +7,6 @@ import { SkeletonListPage } from "@/components/ui/Skeleton";
 import { AppMain } from "@/components/layout/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
 import Alert from "@/components/ui/Alert";
-import UserRoleBadge from "@/components/ui/UserRoleBadge";
 
 /**
  * StandardPage wrapper — centralizes page composition, auth guards, and skeletons.
@@ -33,16 +32,8 @@ export default function StandardPage({
     return null;
   }
 
-  // Combine custom actions with the global user identity badge
-  const headerActions = (
-    <div className="flex items-center gap-4">
-      {actions}
-      <UserRoleBadge 
-        username={user?.username} 
-        roleName={user?.role?.role_name} 
-      />
-    </div>
-  );
+  // Custom actions area for the page header
+  const headerActions = actions;
 
   const pageVariants = {
     initial: { opacity: 0, y: 8 },

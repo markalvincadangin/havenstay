@@ -209,7 +209,7 @@ class AuthorizationService
     /**
      * Authorized: Admin, Staff, Viewer.
      */
-    public static function canViewRooms(?User $user): bool
+    public static function canViewUtilities(?User $user): bool
     {
         if (! $user) {
             return false;
@@ -222,7 +222,45 @@ class AuthorizationService
     /**
      * Authorized: Admin.
      */
+    public static function canManageUtilities(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return self::resolveRole($user) === RoleEnum::ADMIN;
+    }
+
+    /**
+     * Authorized: Admin, Staff, Viewer.
+     */
+    public static function canViewRooms(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+        $role = self::resolveRole($user);
+
+        return in_array($role, [RoleEnum::ADMIN, RoleEnum::STAFF, RoleEnum::VIEWER], true);
+    }
+
+    /**
+     * Authorized: Admin, Staff, Viewer.
+     */
     public static function canViewReports(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+        $role = self::resolveRole($user);
+
+        return in_array($role, [RoleEnum::ADMIN, RoleEnum::STAFF, RoleEnum::VIEWER], true);
+    }
+
+    /**
+     * Authorized: Admin.
+     */
+    public static function canExportReports(?User $user): bool
     {
         if (! $user) {
             return false;
@@ -367,5 +405,29 @@ class AuthorizationService
     public static function ensureCanViewReports(?User $user): void
     {
         self::ensure(self::canViewReports($user), 'Unauthorized to view reports.');
+    }
+
+    /**
+     * @throws AuthorizationException
+     */
+    public static function ensureCanExportReports(?User $user): void
+    {
+        self::ensure(self::canExportReports($user), 'Unauthorized to export reports. Analytical data exports are restricted to System Administrators.');
+    }
+
+    /**
+     * @throws AuthorizationException
+     */
+    public static function ensureCanViewUtilities(?User $user): void
+    {
+        self::ensure(self::canViewUtilities($user), 'Unauthorized to view utility catalog.');
+    }
+
+    /**
+     * @throws AuthorizationException
+     */
+    public static function ensureCanManageUtilities(?User $user): void
+    {
+        self::ensure(self::canManageUtilities($user), 'Unauthorized to manage utility catalog or registry metadata.');
     }
 }

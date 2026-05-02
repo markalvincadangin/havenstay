@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Utility\ManageUtilityRequest;
+use App\Services\Core\AuthorizationService;
 use App\Http\Requests\Utility\StoreUtilityRateRequest;
 use App\Http\Requests\Utility\StoreUtilityRequest;
 use App\Http\Requests\Utility\UpdateUtilityRequest;
@@ -72,6 +73,8 @@ class UtilityController extends Controller
      */
     public function archive(ManageUtilityRequest $request, Utility $utility): JsonResponse
     {
+        AuthorizationService::ensureCanManageUtilities($request->user());
+
         UtilityService::archive($request->user(), $utility);
 
         return $this->success('Utility category archived successfully.', ['utility_id' => $utility->utility_id]);

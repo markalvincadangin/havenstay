@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## Business Rules (BR)
 
-**Version:** 2.2  
-**Last Updated:** April 29, 2026  
+**Version:** 2.3  
+**Last Updated:** May 02, 2026  
 **Status:** Authoritative logic and behavioral constraints
 
 ---

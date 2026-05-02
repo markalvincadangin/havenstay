@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Report\ExportReportsRequest;
 use App\Http\Requests\Report\ManageReportsRequest;
+use App\Http\Requests\Report\ViewReportsRequest;
 use App\Services\Analytics\PiiMaskingService;
 use App\Services\Analytics\ReportService;
 use App\Services\Core\AuthorizationService;
@@ -24,7 +26,7 @@ class ReportController extends Controller
     /**
      * FR-028: Room Occupancy Distribution.
      */
-    public function occupancy(ManageReportsRequest $request): JsonResponse
+    public function occupancy(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $page = $request->integer('page');
@@ -42,7 +44,7 @@ class ReportController extends Controller
     /**
      * FR-029: Monthly Billing and Revenue Summary.
      */
-    public function billingSummary(ManageReportsRequest $request): JsonResponse
+    public function billingSummary(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $page = $request->integer('page');
@@ -64,7 +66,7 @@ class ReportController extends Controller
     /**
      * FR-030: Tenant Aging and Outstanding Balances.
      */
-    public function outstandingBalances(ManageReportsRequest $request): JsonResponse
+    public function outstandingBalances(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $page = $request->integer('page');
@@ -84,7 +86,7 @@ class ReportController extends Controller
     /**
      * FR-031: Asset-level Occupancy Status.
      */
-    public function occupancyStatus(ManageReportsRequest $request): JsonResponse
+    public function occupancyStatus(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $page = $request->integer('page');
@@ -104,7 +106,7 @@ class ReportController extends Controller
     /**
      * FR-032: Active Lease Portfolio.
      */
-    public function activeContracts(ManageReportsRequest $request): JsonResponse
+    public function activeContracts(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $page = $request->integer('page');
@@ -124,7 +126,7 @@ class ReportController extends Controller
     /**
      * FR-033: Global Collections Performance.
      */
-    public function collectionsPerformance(ManageReportsRequest $request): JsonResponse
+    public function collectionsPerformance(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $report = ReportService::collectionsPerformance($validated);
@@ -137,7 +139,7 @@ class ReportController extends Controller
     /**
      * FR-034: Historical Tenant Activity Log.
      */
-    public function tenantHistory(ManageReportsRequest $request): JsonResponse
+    public function tenantHistory(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $report = ReportService::tenantHistory($validated);
@@ -150,7 +152,7 @@ class ReportController extends Controller
     /**
      * FR-035: Granular Tenant Financial Ledger.
      */
-    public function tenantLedger(ManageReportsRequest $request): JsonResponse
+    public function tenantLedger(ViewReportsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $report = ReportService::tenantLedger((int) $validated['tenant_id']);
@@ -175,7 +177,7 @@ class ReportController extends Controller
     /**
      * FR-023: Meter Asset Management & Usage Summary.
      */
-    public function meterCoverage(ManageReportsRequest $request): JsonResponse
+    public function meterCoverage(ViewReportsRequest $request): JsonResponse
     {
         $report = ReportService::meterSummary();
 
@@ -197,7 +199,7 @@ class ReportController extends Controller
     /**
      * Summary dashboard statistics.
      */
-    public function summaryStats(ManageReportsRequest $request): JsonResponse
+    public function summaryStats(ViewReportsRequest $request): JsonResponse
     {
         $report = ReportService::summaryStats();
 
@@ -207,7 +209,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Occupancy Distribution.
      */
-    public function occupancyExport(ManageReportsRequest $request): StreamedResponse
+    public function occupancyExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::occupancy($request->validated());
 
@@ -217,7 +219,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Occupancy Status.
      */
-    public function occupancyStatusExport(ManageReportsRequest $request): StreamedResponse
+    public function occupancyStatusExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::occupancyStatus($request->validated());
 
@@ -227,7 +229,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Active Contracts.
      */
-    public function activeContractsExport(ManageReportsRequest $request): StreamedResponse
+    public function activeContractsExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::activeContracts($request->validated());
         $report = $this->finalizeReportForViewer($request, 'active_contracts', $report);
@@ -238,7 +240,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Billing Summary.
      */
-    public function billingSummaryExport(ManageReportsRequest $request): StreamedResponse
+    public function billingSummaryExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::billingSummary($request->validated());
         $report = $this->finalizeReportForViewer($request, 'billing_summary', $report);
@@ -249,7 +251,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Outstanding Balances.
      */
-    public function outstandingBalancesExport(ManageReportsRequest $request): StreamedResponse
+    public function outstandingBalancesExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::outstandingBalances($request->validated());
         $report = $this->finalizeReportForViewer($request, 'outstanding_balances', $report);
@@ -260,7 +262,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Collections Performance.
      */
-    public function collectionsPerformanceExport(ManageReportsRequest $request): StreamedResponse
+    public function collectionsPerformanceExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::collectionsPerformance($request->validated());
         $report = $this->finalizeReportForViewer($request, 'collections_performance', $report);
@@ -271,7 +273,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Tenant History.
      */
-    public function tenantHistoryExport(ManageReportsRequest $request): StreamedResponse
+    public function tenantHistoryExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::tenantHistory($request->validated());
         $report = $this->finalizeReportForViewer($request, 'tenant_history', $report);
@@ -282,7 +284,7 @@ class ReportController extends Controller
     /**
      * CSV Export: Tenant Ledger.
      */
-    public function tenantLedgerExport(ManageReportsRequest $request): StreamedResponse
+    public function tenantLedgerExport(ExportReportsRequest $request): StreamedResponse
     {
         $report = ReportService::tenantLedger((int) $request->validated()['tenant_id']);
         $report = $this->finalizeReportForViewer($request, 'tenant_ledger', $report);

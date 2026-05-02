@@ -82,7 +82,7 @@ export default function UsersPage() {
     return normalizePaginatedList(usersData);
   }, [usersData]);
   const loading = !usersData && !usersError;
-  const stats = useMemo(() => summaryData?.data || {}, [summaryData]);
+  const stats = useMemo(() => summaryData || {}, [summaryData]);
   const sortedRows = useMemo(() => {
     if (!sortColumn) return users;
     return sortClientRows(users, sortColumn, sortDirection, (u) => {
@@ -324,7 +324,7 @@ export default function UsersPage() {
                         <div className="p-6 pb-4">
                           <div className="flex items-center gap-4">
                             <Avatar
-                              user={{ first_name: row.first_name, last_name: row.last_name }}
+                              user={row}
                               variant="teal"
                               size="lg"
                               className="group-hover:scale-105 transition-transform"

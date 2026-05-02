@@ -16,6 +16,7 @@ import {
   UserManagementIcon,
   UtilityIcon,
 } from "@/components/ui/Icons";
+import UserRoleBadge from "@/components/ui/UserRoleBadge";
 import { matchesPath } from "@/lib/formatters";
 import { ADMIN_NAV_ITEMS, OPERATIONS_NAV_ITEMS } from "@/lib/navItems";
 const OPERATIONS_ICONS_BY_HREF = {
@@ -107,7 +108,13 @@ export default function Sidebar({ pathname, user, onLogout, onToggleHelp }) {
         )}
       </div>
       
-      <div className="shrink-0 border-t border-white/5 p-4 space-y-2">
+      <div className="shrink-0 border-t border-white/5 p-4 space-y-4">
+        {!isCollapsed && user && (
+          <UserRoleBadge 
+            user={user} 
+            isSidebar={true} 
+          />
+        )}
 
         {!isCollapsed && (
           <button

@@ -33,6 +33,7 @@ import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import { useToasts } from "@/context/ToastContext";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import DetailHeader from "@/components/ui/DetailHeader";
 
 function paymentStatus(p) {
   return p?.voided_at ? "voided" : "posted";
@@ -104,38 +105,23 @@ export default function PaymentDetailPage() {
   const methodKey = String(payment?.payment_method || "").toLowerCase();
   const methodLabel = METHOD_LABELS[methodKey] || payment?.payment_method || "—";
 
+  const header = DetailHeader({
+    type: "payment",
+    id: paymentId,
+    title: payment ? `#PAY-${String(paymentId).padStart(6, "0")}` : "Payment Detail",
+    subtitle: "Payment details, billing link, and record history.",
+    status: status,
+    loading: loading,
+    listHref: "/payments",
+    listLabel: "Payments",
+    detailLabel: `#PAY-${String(paymentId).padStart(6, "0")}`
+  });
+
   return (
     <StandardPage
-      title={
-        loading ? (
-          "Loading Payment..."
-        ) : (
-          title
-        )
-      }
-      subtitle={
-        loading ? (
-          "Fetching payment audit log..."
-        ) : payment ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-stone-500">
-              Payment details, billing link, and record history.
-            </span>
-            <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
-            <ResourceIdCell id={payment.payment_id} type="payment" />
-          </div>
-        ) : null
-      }
+      {...header}
       loading={loading}
       error={paymentError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Payments", href: "/payments" },
-            { label: `#PAY-${String(paymentId).padStart(6, "0")}` }
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/payments"

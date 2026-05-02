@@ -35,6 +35,7 @@ import MetricItem from "@/components/ui/MetricItem";
 import DetailRow from "@/components/ui/DetailRow";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { TenantQuickEditForm } from '@/features/tenants/components/TenantQuickEditForm';
+import DetailHeader from "@/components/ui/DetailHeader";
 export default function TenantDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -90,36 +91,24 @@ export default function TenantDetailsPage() {
       setBusyAction("");
     }
   };
+  const header = DetailHeader({
+    type: "tenant",
+    id: tenantId,
+    title: fullName,
+    subtitle: "Complete tenant's profile information",
+    status: tenant?.status,
+    loading: loading,
+    listHref: "/tenants",
+    listLabel: "Tenant Directory",
+    detailLabel: "Profile"
+  });
+
   return (
     <StandardPage
-      title={
-        loading ? (
-          "Loading Profile..."
-        ) : (
-          <div className="flex items-center gap-3">
-            {fullName}
-            {tenant && <ResourceIdCell id={tenant.tenant_id} type="tenant" />}
-          </div>
-        )
-      }
-      subtitle={
-        loading ? (
-          "Synchronizing tenant records..."
-        ) : (
-          "Complete tenant's profile information"
-        )
-      }
+      {...header}
       loading={loading}
       skeleton={<SkeletonDetailPage />}
       error={tenantError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Tenant Directory", href: "/tenants" },
-            { label: "Profile" },
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/tenants"

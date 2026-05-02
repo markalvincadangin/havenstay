@@ -31,11 +31,18 @@ class BedSpaceResource extends JsonResource
             'active_contract' => $this->activeContract ? [
                 'contract_id' => $this->activeContract->contract_id,
                 'move_in_date' => $this->activeContract->move_in_date,
-                'tenant' => $this->activeContract->tenant ? [
-                    'tenant_id' => $this->activeContract->tenant->tenant_id,
-                    'first_name' => $this->activeContract->tenant->first_name,
-                    'last_name' => $this->activeContract->tenant->last_name,
-                ] : null,
+                'tenant' => $this->activeContract->tenant ? (
+                    \App\Services\Analytics\PiiMaskingService::shouldMaskTenantPii($request->user())
+                        ? [
+                            'tenant_id' => $this->activeContract->tenant->tenant_id,
+                            'name' => \App\Services\Analytics\PiiMaskingService::maskedTenantDirectoryLabel($this->activeContract->tenant->tenant_id),
+                        ]
+                        : [
+                            'tenant_id' => $this->activeContract->tenant->tenant_id,
+                            'first_name' => $this->activeContract->tenant->first_name,
+                            'last_name' => $this->activeContract->tenant->last_name,
+                        ]
+                ) : null,
             ] : null,
         ];
     }

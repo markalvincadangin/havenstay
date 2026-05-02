@@ -24,6 +24,7 @@ import { useAuth } from "@/context/AuthContext";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { SkeletonDetailPage } from "@/components/ui/Skeleton";
 import RecordStateAlert from "@/components/ui/RecordStateAlert";
+import DetailHeader from "@/components/ui/DetailHeader";
 
 /** Metric item — standard registry detail atom. */
 function MetricItem({ label, children, icon: Icon }) {
@@ -68,33 +69,24 @@ export default function BillingDetailsPage() {
   const lineItems = billing?.line_items || [];
   const payments = billing?.payments || [];
 
+  const header = DetailHeader({
+    type: "billing",
+    id: billingId,
+    title: billing ? `#BILL-${String(billingId).padStart(6, '0')}` : "Billing Detail",
+    subtitle: "Itemized charges and payments for this bill.",
+    status: billing?.status,
+    loading: loading,
+    listHref: "/billing",
+    listLabel: "Billing",
+    detailLabel: `Bill #${billingId}`
+  });
+
   return (
     <StandardPage
-      title={title}
-      subtitle={
-        loading ? (
-          "Loading billing details..."
-        ) : billing ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-stone-500">
-              Itemized charges and payments for this bill.
-            </span>
-            <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
-            <ResourceIdCell id={billing.billing_id} type="billing" />
-          </div>
-        ) : null
-      }
+      {...header}
       loading={loading}
       skeleton={<SkeletonDetailPage />}
       error={billingError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Billing", href: "/billing" },
-            { label: `Billing #${billingId || ""}` }
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/billing"

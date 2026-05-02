@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## System Design Document (SDD)
 
-**Version:** 5.2  
-**Last Updated:** April 29, 2026  
+**Version:** 5.3  
+**Last Updated:** May 02, 2026  
 **Status:** Canonical architectural design and forensic implementation patterns
 
 ---
@@ -71,8 +71,8 @@ graph TD
 
 | Layer | Technology | Version |
 | :--- | :--- | :--- |
-| **Backend Framework** | Laravel (PHP 8.3+) | 14.x |
-| **Frontend Framework** | Next.js (App Router) | 16.x |
+| **Backend Framework** | Laravel (PHP 8.3+) | 11.x |
+| **Frontend Framework** | Next.js (App Router) | 14.x |
 | **Frontend Styling** | Vanilla CSS (Custom Design System) | — |
 | **Database (Primary)** | MySQL (InnoDB) | 8.4+ |
 | **Database (Dev/Test)** | SQLite | — |
@@ -262,7 +262,8 @@ The following design decisions satisfy the binding constraints of the Informatio
 | v5.0 | 2026-04-29 | Major Stabilization: Documented Resilient Batch Billing (FR-036) and Dual-Path Forensic Context (BR-PAY-011). Updated Section 10 with stabilization decisions. Aligned to v5.0 Documentation Suite. |
 | v5.1 | 2026-04-29 | Realigned Analytical Rule references and footer synchronization. Aligned to SRS v5.1 / BR v2.1. |
 | **v5.2** | **2026-04-29** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |
+| **v5.3** | **2026-05-02** | **Docs Remediation: Corrected Laravel version to 11.x and Next.js version to 14.x in technology stack table.** |
 
 ---
 
-*Aligned to: SRS.md v5.2 · BUSINESS_RULES.md v2.2 · db/havenstay_schema.sql (v5.0) · API_REFERENCE.md · OPERATIONS_RUNBOOK.md · TEST_PLAN.md*
+*Aligned to: SRS.md v5.2 · BUSINESS_RULES.md v2.3 · db/havenstay_schema.sql (v5.0) · API_REFERENCE.md v5.3 · OPERATIONS_RUNBOOK.md · TEST_PLAN.md*

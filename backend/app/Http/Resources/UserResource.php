@@ -33,6 +33,8 @@ class UserResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'deleted_at' => $this->deleted_at,
+            'avatar_url' => $this->avatar_url,
+            'oauth_provider' => $this->oauth_provider,
 
             // Relationships
             'role' => $this->whenLoaded('role'),
