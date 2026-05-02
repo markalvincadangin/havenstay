@@ -28,6 +28,12 @@ class AuditLogResource extends JsonResource
             'old_value' => $this->old_value, // JSON blob for Diff Modal
             'new_value' => $this->new_value, // JSON blob for Diff Modal
             'changed_by' => $this->changed_by,
+            'user' => $this->user ? [
+                'user_id' => $this->user->user_id,
+                'username' => $this->user->username,
+                'first_name' => $this->user->first_name,
+                'last_name' => $this->user->last_name,
+            ] : null,
             'actor_name' => $this->user ? ($this->user->first_name.' '.$this->user->last_name) : 'SYSTEM',
             'actor_email' => $this->user?->email,
             'correlation_id' => $this->correlation_id,

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import UserRoleBadge from "./UserRoleBadge";
 import { headerIconBackButtonClass, primaryLinkCtaClass } from "./LinkTokens";
 
 export default function PageHeaderActions({
@@ -31,9 +30,6 @@ export default function PageHeaderActions({
         </Link>
       ) : null}
       {children}
-      <div className={`${backHref || hasCta ? "border-l border-stone-200 pl-3" : ""}`}>
-        <UserRoleBadge username={user?.username} roleName={user?.role?.role_name} />
-      </div>
     </div>
   );
 }

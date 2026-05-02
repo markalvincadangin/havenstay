@@ -86,7 +86,7 @@ class BillingService
                     $activeContracts = Contract::whereHas('bedSpace', function ($q) use ($contract) {
                         $q->where('room_id', $contract->room->room_id);
                     })
-                        ->where('status', ContractStatus::ACTIVE)
+                        ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])
                         ->orderBy('move_in_date', 'asc')
                         ->get();
 

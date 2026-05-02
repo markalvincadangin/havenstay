@@ -272,9 +272,9 @@ payment post and every payment void. No other operation
 may leave billing status stale.
 
 **BR-BIL-008**
-A billing cycle may only be generated for an active contract.
-Generating a billing cycle for a completed or terminated
-contract is not permitted.
+A billing cycle may only be generated for a contract in an `active` or `pending_payment` 
+state. Generating a billing cycle for a completed, terminated, or voided contract is not permitted. 
+This ensures new tenants can receive their initial ledger to transition to an active status.
 
 **BR-BIL-009**
 Billing generation is performed manually by Admin or Staff.
@@ -402,7 +402,7 @@ to `replaced`. Historical readings on a replaced meter are
 retained and remain queryable for audit purposes.
 
 **BR-MET-010**
-For shared rooms, the total calculated utility charge for the room (as per BR-MET-007) must be automatically divided equally among all active contracts assigned to bed spaces within that room during the billing period. This evenly apportioned amount is then added as the utility line item on each respective tenant's billing cycle. Rounding differentials resulting from the division (e.g., ₱0.01) shall be applied to the earliest created active contract in the group to ensure the sum of line items exactly matches the total room consumption charge. For private rooms, the single active contract absorbs 100% of the calculated utility charge.
+For shared rooms, the total calculated utility charge for the room (as per BR-MET-007) must be automatically divided equally among all contracts in an `active` or `pending_payment` state assigned to bed spaces within that room during the billing period. This evenly apportioned amount is then added as the utility line item on each respective tenant's billing cycle. Rounding differentials resulting from the division (e.g., ₱0.01) shall be applied to the earliest created active/pending contract in the group to ensure the sum of line items exactly matches the total room consumption charge. For private rooms, the single occupant absorbs 100% of the calculated utility charge.
 
 ---
 

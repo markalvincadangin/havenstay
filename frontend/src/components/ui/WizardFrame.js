@@ -24,6 +24,7 @@ export function WizardFrame({
   cancelLabel = "Cancel",
   nextLabel = "Next Step",
   submitLabel = "Confirm & Save",
+  extraActions = null,
   children
 }) {
   const isFirstStep = currentStepIndex === 0;
@@ -109,7 +110,7 @@ export function WizardFrame({
       </Card>
 
       {/* Navigation Controls */}
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end sm:items-center">
         {!isFirstStep && (
           <Button 
             variant="secondary" 
@@ -121,6 +122,8 @@ export function WizardFrame({
             Back
           </Button>
         )}
+
+        {extraActions}
         
         {isLastStep ? (
           <Button 

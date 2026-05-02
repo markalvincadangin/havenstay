@@ -17,7 +17,6 @@ import {
 import { canViewReports } from "@/lib/auth";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import UserRoleBadge from "@/components/ui/UserRoleBadge";
 import StandardPage from "@/components/ui/StandardPage";
 import { SkeletonGridPage } from "@/components/ui/Skeleton";
 import { useAuth } from "@/context/AuthContext";
@@ -100,11 +99,6 @@ export default function ReportsIndexPage() {
       title="Reports"
       subtitle="Data exports and operational summaries."
       skeleton={<SkeletonGridPage cards={6} />}
-      actions={
-        <div className="flex items-center gap-4">
-          <UserRoleBadge username={currentUser?.username} roleName={currentUser?.role?.role_name} />
-        </div>
-      }
     >
       {!canAccess ? (
         <Alert variant="warning" title="Access Restricted">

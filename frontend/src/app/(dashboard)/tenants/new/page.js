@@ -16,6 +16,8 @@ import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import StandardPage from "@/components/ui/StandardPage";
 import { SkeletonDetailPage } from "@/components/ui/Skeleton";
 import { WizardFrame } from "@/components/ui/WizardFrame";
+import Button from "@/components/ui/Button";
+import { Zap } from "lucide-react";
 
 const PH_MOBILE_REGEX = /^(09\d{9}|(\+639)\d{9})$/;
 
@@ -136,6 +138,19 @@ export default function NewTenantPage() {
             nextLabel="Next Step"
             submitLabel="Register Tenant"
             cancelLabel="Discard Changes"
+            extraActions={
+               currentStepIndex === 2 && (
+                  <Button
+                     variant="ghost"
+                     onClick={() => onSubmitTenant("lease")}
+                     disabled={readOnly || isSubmitting}
+                     className="text-stone-500 hover:text-teal-700 hover:bg-teal-50"
+                  >
+                     <Zap size={16} className="mr-2" />
+                     Save & Generate Lease
+                  </Button>
+               )
+            }
          >
             <div className="space-y-6">
                {currentStepIndex === 0 && (
@@ -218,17 +233,6 @@ export default function NewTenantPage() {
                               })}
                            />
                         </Field>
-                     </div>
-
-                     <div className="pt-8 flex sm:justify-end">
-                        <button
-                           type="button"
-                           onClick={() => onSubmitTenant("lease")}
-                           disabled={readOnly || isSubmitting}
-                           className="text-xs font-black uppercase tracking-widest text-[#0e7490] hover:text-[#164e63] underline underline-offset-4 decoration-2"
-                        >
-                           Or Save & Generate Lease Immediately
-                        </button>
                      </div>
                   </div>
                )}

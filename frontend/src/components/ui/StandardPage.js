@@ -7,6 +7,7 @@ import { SkeletonListPage } from "@/components/ui/Skeleton";
 import { AppMain } from "@/components/layout/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
 import Alert from "@/components/ui/Alert";
+import UserRoleBadge from "@/components/ui/UserRoleBadge";
 
 /**
  * StandardPage wrapper — centralizes page composition, auth guards, and skeletons.
@@ -21,7 +22,7 @@ export default function StandardPage({
   skeleton = <SkeletonListPage rows={10} />,
   children,
 }) {
-  const { authLoading, isUnauthorized } = useAuthGuard();
+  const { authLoading, isUnauthorized, user } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
 
   if (authLoading || (loading && !children)) {
@@ -31,6 +32,17 @@ export default function StandardPage({
   if (isUnauthorized) {
     return null;
   }
+
+  // Combine custom actions with the global user identity badge
+  const headerActions = (
+    <div className="flex items-center gap-4">
+      {actions}
+      <UserRoleBadge 
+        username={user?.username} 
+        roleName={user?.role?.role_name} 
+      />
+    </div>
+  );
 
   const pageVariants = {
     initial: { opacity: 0, y: 8 },
@@ -57,7 +69,7 @@ export default function StandardPage({
           title={title}
           subtitle={subtitle}
           breadcrumbs={breadcrumbs}
-          actions={actions}
+          actions={headerActions}
         />
 
         {normalizedError && (
