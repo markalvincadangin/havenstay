@@ -104,7 +104,7 @@ CREATE TABLE rooms (
     room_type    ENUM('private','shared') DEFAULT 'private',
     capacity     INT           DEFAULT 1,
     monthly_rate DECIMAL(10,2) NOT NULL,
-    status       ENUM('available','unavailable','maintenance') DEFAULT 'available',
+    status       ENUM('available','unavailable','maintenance','decommissioned') DEFAULT 'available',
     amenities    TEXT          NULL,
     description  TEXT          NULL,
     is_metered   TINYINT(1)    DEFAULT 1,
@@ -542,7 +542,7 @@ SELECT
     SUM(CASE WHEN bs.status = 'vacant' THEN 1 ELSE 0 END) AS vacant_beds
 FROM rooms r
 LEFT JOIN bed_spaces bs ON r.room_id = bs.room_id
-WHERE r.deleted_at IS NULL
+WHERE r.deleted_at IS NULL AND r.status != 'decommissioned'
 GROUP BY r.room_id, r.room_code, r.capacity, r.room_type, r.status;
 
 CREATE VIEW vw_occupancy_status AS
@@ -560,7 +560,7 @@ FROM bed_spaces bs
 JOIN rooms r ON bs.room_id = r.room_id
 LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status IN ('active', 'pending_payment')
 LEFT JOIN tenants t ON c.tenant_id = t.tenant_id
-WHERE r.deleted_at IS NULL;
+WHERE r.deleted_at IS NULL AND r.status != 'decommissioned';
 
 CREATE VIEW vw_collections_summary AS
 SELECT

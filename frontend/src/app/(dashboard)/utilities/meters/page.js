@@ -340,14 +340,14 @@ export default function MeterRegistryPage() {
                           )}
                         </td>
                         <td className="py-6 text-center">
-                          <StatusBadge variant="pastel">{meter.status}</StatusBadge>
+                          <StatusBadge>{meter.status}</StatusBadge>
                         </td>
                         <td className="px-8 py-6 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <QuickEditRowAction
-                              disabled={!canAccess}
+                              disabled={!canAccess || meter.status === 'replaced'}
                               onClick={() => setEditingMeter(meter)}
-                              title="Update details"
+                              title={meter.status === 'replaced' ? "Replaced meter — historical record only" : "Update details"}
                             />
                             <RowOpenIndicator />
                           </div>

@@ -23,6 +23,7 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { useAuth } from "@/context/AuthContext";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { SkeletonDetailPage } from "@/components/ui/Skeleton";
+import RecordStateAlert from "@/components/ui/RecordStateAlert";
 
 /** Metric item — standard registry detail atom. */
 function MetricItem({ label, children, icon: Icon }) {
@@ -105,6 +106,13 @@ export default function BillingDetailsPage() {
       {billing ? (
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
+            <RecordStateAlert
+              show={billing?.status === 'paid'}
+              variant="info"
+              title="Bill Settled"
+            >
+              This billing cycle has been fully collected. No further payments are required.
+            </RecordStateAlert>
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
               <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
@@ -226,7 +234,10 @@ export default function BillingDetailsPage() {
                         </div>
                       </td>
                       <td className="py-5 text-right">
-                        <CurrencyDisplay amount={payment.amount_paid} className="text-sm font-bold text-emerald-700" />
+                        <CurrencyDisplay
+                          amount={payment.amount_paid}
+                          className={`text-sm font-bold ${payment.voided_at ? "text-stone-400 line-through" : "text-emerald-700"}`}
+                        />
                       </td>
                       <td className="py-5 text-center">
                         <ResourceIdCell id={payment.payment_id} type="payment" />

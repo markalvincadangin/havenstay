@@ -26,7 +26,7 @@ class IndexUserRequest extends FormRequest
         return array_merge([
             'q' => ['nullable', 'string', 'max:200'],
             'role' => ['nullable', 'string', 'max:32'],
-            'account_status' => ['nullable', 'string', 'in:active,inactive'],
+            'account_status' => ['nullable', 'string', 'in:active,inactive,archived'],
         ], Pagination::queryRules());
     }
 }

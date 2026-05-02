@@ -72,7 +72,7 @@ class Payment extends Model
 
     public function contract(): BelongsTo
     {
-        return $this->belongsTo(Contract::class, 'contract_id', 'contract_id');
+        return $this->belongsTo(Contract::class, 'contract_id', 'contract_id')->withTrashed();
     }
 
     public function processor(): BelongsTo

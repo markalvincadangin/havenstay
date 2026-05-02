@@ -73,7 +73,7 @@ class Contract extends Model
 
     public function tenant(): BelongsTo
     {
-        return $this->belongsTo(Tenant::class, 'tenant_id', 'tenant_id');
+        return $this->belongsTo(Tenant::class, 'tenant_id', 'tenant_id')->withTrashed();
     }
 
     public function bedSpace(): BelongsTo

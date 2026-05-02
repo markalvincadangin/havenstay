@@ -46,7 +46,7 @@ class RoomService
             payload: ['room_code' => $roomData['room_code'] ?? 'ERR'],
             operation: function () use ($roomData, $data) {
                 // Private room bed management bypass
-                if (($roomData['room_type'] ?? null) === RoomType::PRIVATE->value) {
+                if (($roomData['room_type'] ?? null) === RoomType::PRIVATE ->value) {
                     $roomData['capacity'] = 1;
                 }
 
@@ -88,14 +88,12 @@ class RoomService
                 $state = Inventory::computeRoomState($room);
                 $room->update($state);
 
+                self::clearCache();
+
                 return $room->fresh(['bedSpaces']);
             },
-            resultDetails: fn (Room $room) => ['room_id' => $room->room_id]
+            resultDetails: fn(Room $room) => ['room_id' => $room->room_id]
         );
-
-        self::clearCache();
-
-        return $room;
     }
 
     /**
@@ -112,6 +110,12 @@ class RoomService
      */
     public static function update(User $actor, Room $room, array $data): Room
     {
+        if ($room->status === RoomStatus::DECOMMISSIONED) {
+            throw ValidationException::withMessages([
+                'room' => ['Decommissioned rooms cannot be modified. Restore the room first if updates are required.'],
+            ]);
+        }
+
         return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'UPDATE_ROOM',
@@ -153,7 +157,7 @@ class RoomService
 
                     // 2. Update existing or create new
                     foreach ($incomingBeds as $bedData) {
-                        if (! empty($bedData['bed_space_id'])) {
+                        if (!empty($bedData['bed_space_id'])) {
                             // Update existing
                             $existing = $currentBeds->firstWhere('bed_space_id', $bedData['bed_space_id']);
                             if ($existing) {
@@ -177,7 +181,7 @@ class RoomService
                     if ($roomType === RoomType::PRIVATE) {
                         $roomData['capacity'] = 1;
                     }
-                } elseif ($roomType === RoomType::PRIVATE->value) {
+                } elseif ($roomType === RoomType::PRIVATE ->value) {
                     $roomData['capacity'] = 1;
                 }
 
@@ -188,14 +192,12 @@ class RoomService
                 $state = Inventory::computeRoomState($room);
                 $room->update($state);
 
+                self::clearCache();
+
                 return $room->fresh(['bedSpaces']);
             },
-            resultDetails: fn (Room $room) => ['room_id' => $room->room_id]
+            resultDetails: fn(Room $room) => ['room_id' => $room->room_id]
         );
-
-        self::clearCache();
-
-        return $room;
     }
 
     /**
@@ -210,22 +212,18 @@ class RoomService
     {
         $query = Room::query()->with(['bedSpaces']);
 
-        if (! empty($filters['status'])) {
-            if ($filters['status'] === 'archived') {
-                $query->onlyTrashed();
-            } else {
-                $query->where('status', $filters['status']);
-            }
+        if (!empty($filters['status'])) {
+            $query->where('status', $filters['status']);
         } else {
-            $query->withTrashed();
+            $query->where('status', '!=', RoomStatus::DECOMMISSIONED->value);
         }
 
         $type = $filters['type'] ?? $filters['room_type'] ?? null;
-        if (! empty($type)) {
+        if (!empty($type)) {
             $query->where('room_type', $type);
         }
 
-        if (! empty($filters['q'])) {
+        if (!empty($filters['q'])) {
             $needle = $filters['q'];
             $query->where(function ($w) use ($needle): void {
                 $w->where('room_code', 'LIKE', "%{$needle}%")
@@ -267,7 +265,7 @@ class RoomService
 
                 return $bedSpace;
             },
-            resultDetails: fn (BedSpace $bed) => [
+            resultDetails: fn(BedSpace $bed) => [
                 'room_id' => $room->room_id,
                 'bed_space_id' => $bed->bed_space_id,
             ]
@@ -314,18 +312,15 @@ class RoomService
             payload: ['bed_space_id' => $bedSpace->bed_space_id],
             operation: function () use ($bedSpace): BedSpace {
                 $bedSpace->update(['status' => BedSpaceStatus::OCCUPIED]);
+                self::clearCache();
 
                 return $bedSpace;
             },
-            resultDetails: fn (BedSpace $bed) => [
+            resultDetails: fn(BedSpace $bed) => [
                 'bed_space_id' => $bed->bed_space_id,
                 'room_id' => $bed->room_id,
             ]
         );
-
-        self::clearCache();
-
-        return $bedSpace;
     }
 
     /**
@@ -426,6 +421,7 @@ class RoomService
 
             $maintenanceBeds = BedSpace::where('status', BedSpaceStatus::MAINTENANCE)->count();
             $offlineRooms = Room::where('status', RoomStatus::MAINTENANCE)->count();
+            $decommissionedRooms = Room::where('status', RoomStatus::DECOMMISSIONED)->count();
 
             $occupancyPct = $totalBeds > 0 ? (int) round(($occupiedBeds / $totalBeds) * 100) : 0;
 
@@ -436,6 +432,7 @@ class RoomService
                 'bookable_vacant_beds' => $bookableVacantBeds,
                 'maintenance_beds' => $maintenanceBeds,
                 'offline_units' => $offlineRooms,
+                'decommissioned_rooms' => $decommissionedRooms,
                 'occupancy_pct' => $occupancyPct,
             ];
         });
@@ -465,14 +462,13 @@ class RoomService
 
         return self::runWriteWorkflow(
             actorId: $actor->user_id,
-            action: 'ARCHIVE_ROOM',
+            action: 'DECOMMISSION_ROOM',
             payload: ['room_id' => $room->room_id],
             operation: function () use ($room) {
-                // Set status to unavailable before soft-deletion
-                $room->status = RoomStatus::UNAVAILABLE;
+                $room->status = RoomStatus::DECOMMISSIONED;
                 $room->save();
 
-                $room->delete();
+                self::clearCache();
 
                 return $room;
             }
@@ -492,9 +488,12 @@ class RoomService
             action: 'RESTORE_ROOM',
             payload: ['room_id' => $id],
             operation: function () use ($id): Room {
-                $room = Room::withTrashed()->findOrFail($id);
-                $room->restore();
+                $room = Room::findOrFail($id);
+                $room->status = RoomStatus::AVAILABLE;
+                $room->save();
+
                 self::syncStatusAndCapacity($room);
+                self::clearCache();
 
                 return $room;
             }

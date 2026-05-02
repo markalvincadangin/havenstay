@@ -221,7 +221,13 @@ class TenantService
      */
     public static function searchRichBuilder(string $query = '', string $status = '', string $sortBy = 'last_name', string $sortOrder = 'asc'): Builder
     {
-        $q = Tenant::withTrashed();
+        $q = Tenant::query();
+
+        if ($status === TenantStatus::ARCHIVED->value) {
+            $q->onlyTrashed();
+        } else {
+            $q->withoutTrashed();
+        }
 
         // Include room, bed, and balance context
         $driver = DB::getDriverName();

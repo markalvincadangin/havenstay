@@ -61,6 +61,7 @@ export default function RoomsPage() {
       bookableVacantBeds: statsData?.bookable_vacant_beds ?? 0,
       maintenanceBeds: statsData?.maintenance_beds ?? 0,
       offlineUnits: statsData?.offline_units ?? 0,
+      decommissionedRooms: statsData?.decommissioned_rooms ?? 0,
       occupancyPct: statsData?.occupancy_pct ?? 0,
     };
   }, [statsData]);
@@ -93,7 +94,7 @@ export default function RoomsPage() {
       }
     >
       <div className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <KpiCard
             label="Total Capacity"
             icon={DoorOpen}
@@ -128,9 +129,16 @@ export default function RoomsPage() {
             value={stats.offlineUnits}
             sub={`${stats.maintenanceBeds} BEDS IN MAINTENANCE`}
             isWarning={stats.offlineUnits > 0}
-            isActiveDecision={stats.offlineUnits > 0}
             isSyncing={statsValidating || isSyncing}
             className="hs-glass-effect"
+          />
+          <KpiCard
+            label="Decommissioned"
+            icon={ShieldAlert}
+            value={stats.decommissionedRooms}
+            sub="REMOVED FROM INVENTORY"
+            isSyncing={statsValidating || isSyncing}
+            className="hs-glass-effect opacity-80"
           />
         </div>
         <FilterPanelCard icon={DoorOpen}>
@@ -231,9 +239,11 @@ export default function RoomsPage() {
                 <Link
                   key={room.room_id}
                   href={`/rooms/${room.room_id}`}
-                  className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+                  className={`group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${room.status === 'decommissioned' ? 'opacity-60 grayscale-[0.5]' : ''
+                    }`}
                 >
-                  <Card className="h-full !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm transition-[box-shadow,border-color] duration-200 group-hover:border-teal-200 group-hover:shadow-lg hs-glass-effect">
+                  <Card className={`h-full !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm transition-[box-shadow,border-color] duration-200 group-hover:border-teal-200 group-hover:shadow-lg hs-glass-effect ${room.status === 'decommissioned' ? 'bg-stone-50/50' : ''
+                    }`}>
                     <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-teal-600 shadow-sm transition-[background-color,border-color] group-hover:border-teal-100 group-hover:bg-teal-50">
@@ -249,11 +259,10 @@ export default function RoomsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-md border ${
-                          room.is_metered 
-                            ? "bg-amber-50 text-amber-600 border-amber-100" 
+                        <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-md border ${room.is_metered
+                            ? "bg-amber-50 text-amber-600 border-amber-100"
                             : "bg-blue-50 text-blue-600 border-blue-100"
-                        }`}>
+                          }`}>
                           {room.is_metered ? "METERED" : "ALL-INCLUSIVE"}
                         </span>
                         <StatusBadge size="xs">{room.status}</StatusBadge>

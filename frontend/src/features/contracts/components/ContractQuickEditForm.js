@@ -111,14 +111,14 @@ export function ContractQuickEditForm({ contract, currentUser, onSuccess, onCanc
       </div>
 
       {isLocked && (
-        <RecordStateAlert variant="info" className="mb-6">
+        <RecordStateAlert show variant="warning" title="Contract Closed" className="mb-6">
           This contract has ended. Only notes can be updated to preserve forensic history (BR-CON-010).
         </RecordStateAlert>
       )}
 
       {isFinanciallyLocked && !isLocked && (
-        <RecordStateAlert variant="info" className="mb-6">
-          Core financial terms are locked after contract activation (BR-CON-005).
+        <RecordStateAlert show variant="warning" title="Contract Active" className="mb-6">
+          The rent and deposit may not be modified as the contract is currently active.
         </RecordStateAlert>
       )}
 

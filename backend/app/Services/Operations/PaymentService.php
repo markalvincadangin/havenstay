@@ -26,7 +26,15 @@ class PaymentService
      */
     public static function getById(int $paymentId): ?Payment
     {
-        return Payment::with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'contract.room', 'contract.bedSpace', 'processor'])->find($paymentId);
+        return Payment::with([
+            'billing.contract.tenant' => fn ($q) => $q->withTrashed(),
+            'billing.contract.room',
+            'billing.contract.bedSpace',
+            'contract.tenant' => fn ($q) => $q->withTrashed(),
+            'contract.room',
+            'contract.bedSpace',
+            'processor'
+        ])->find($paymentId);
     }
 
     /**
@@ -57,7 +65,7 @@ class PaymentService
             throw ValidationException::withMessages(['billing_id' => ['Target (billing or contract) is required.']]);
         }
 
-        return self::runWriteWorkflow(
+        $payment = self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'POST_PAYMENT',
             payload: [
@@ -130,7 +138,7 @@ class PaymentService
      */
     public static function void(User $actor, Payment $payment, ?string $reason = null): Payment
     {
-        return self::runWriteWorkflow(
+        $voided = self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'VOID_PAYMENT',
             payload: [
@@ -160,7 +168,7 @@ class PaymentService
 
         self::clearCache($payment->contract_id);
 
-        return $payment;
+        return $voided;
     }
 
     public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
@@ -190,7 +198,15 @@ class PaymentService
     public static function listHistoryQuery(array $filters = []): Builder
     {
         $query = Payment::query()
-            ->with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'contract.room', 'contract.bedSpace', 'processor'])
+            ->with([
+                'billing.contract.tenant' => fn ($q) => $q->withTrashed(),
+                'billing.contract.room',
+                'billing.contract.bedSpace',
+                'contract.tenant' => fn ($q) => $q->withTrashed(),
+                'contract.room',
+                'contract.bedSpace',
+                'processor'
+            ])
             ->orderByDesc('payment_date')
             ->orderByDesc('payment_id');
 

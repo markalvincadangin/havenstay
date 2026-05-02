@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { apiRequest, fetcher } from "@/lib/api";
+import { flattenApiErrors } from "@/lib/errors";
 import { useSWRConfig } from "swr";
 import { canManageBilling, canViewBilling } from "@/lib/auth";
 import { formatDateRange, formatDateString } from "@/lib/formatters";
@@ -78,8 +79,8 @@ export default function PaymentDetailPage() {
     }
     setVoidLoading(true);
     try {
-      await apiRequest(`/api/payments/${paymentId}`, {
-        method: "DELETE",
+      await apiRequest(`/api/payments/${paymentId}/void`, {
+        method: "POST",
         body: JSON.stringify({ void_reason: voidReason }),
       });
       await loadPayment();
@@ -87,7 +88,7 @@ export default function PaymentDetailPage() {
       showToast("Payment voided successfully.", "success");
       setIsVoiding(false);
     } catch (error) {
-      showToast(error?.message || "Failed to void payment.", "error");
+      showToast(flattenApiErrors(error) || "Failed to void payment.", "error");
     } finally {
       setVoidLoading(false);
     }

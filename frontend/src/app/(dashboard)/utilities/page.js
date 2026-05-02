@@ -198,7 +198,9 @@ export default function UtilitiesPage() {
                             </div>
                           </div>
                         </div>
-                        <StatusBadge variant="success" size="sm">Active</StatusBadge>
+                        <StatusBadge size="sm">
+                          {utility.active_rate ? "active" : "maintenance"}
+                        </StatusBadge>
                       </div>
 
                       <div className="p-8 flex-1 flex flex-col justify-center">

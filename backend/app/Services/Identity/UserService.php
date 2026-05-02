@@ -6,6 +6,8 @@ use App\Models\User;
 use App\Services\Concerns\ManagesWorkflows;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 /**
  * UserService
@@ -45,7 +47,7 @@ class UserService
                     'is_active' => true,
                 ]);
             },
-            resultDetails: fn (User $createdUser): array => ['user_id' => $createdUser->user_id]
+            resultDetails: fn(User $createdUser): array => ['user_id' => $createdUser->user_id]
         );
     }
 
@@ -63,7 +65,7 @@ class UserService
             action: 'UPDATE_USER',
             payload: ['user_id' => $user->user_id, 'old_username' => $user->username],
             operation: function () use ($user, $data): User {
-                if (! empty($data['password'] ?? null)) {
+                if (!empty($data['password'] ?? null)) {
                     $data['password_hash'] = Hash::make($data['password']);
                 }
                 unset($data['password']);
@@ -101,6 +103,13 @@ class UserService
      */
     public static function archive(User $actor, User $user): User
     {
+        // Defense-in-depth: Service-level self-archival guard
+        if ($actor->user_id === $user->user_id) {
+            $validator = Validator::make([], []);
+            $validator->errors()->add('user', 'You cannot archive your own account.');
+            throw new ValidationException($validator);
+        }
+
         return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'ARCHIVE_USER',
@@ -166,6 +175,20 @@ class UserService
     }
 
     /**
+     * System-wide user statistics for administrative KPIs.
+     */
+    public static function summary(): array
+    {
+        return [
+            'total_users' => User::count(),
+            'active_users' => User::where('is_active', true)->count(),
+            'inactive_users' => User::where('is_active', false)->count(),
+            'archived_users' => User::onlyTrashed()->count(),
+            'admin_count' => User::whereHas('role', fn($q) => $q->where('role_name', 'admin'))->count(),
+        ];
+    }
+
+    /**
      * Paginated user list with role context and filtering.
      *
      * @param  array  $filters  (q, role, account_status).
@@ -174,7 +197,16 @@ class UserService
     {
         $query = User::with('role')->orderByDesc('user_id');
 
-        if (! empty($filters['q'])) {
+        if (($filters['account_status'] ?? '') === 'archived') {
+            $query->onlyTrashed();
+        } else {
+            if (!empty($filters['account_status'])) {
+                $isActive = $filters['account_status'] === 'active';
+                $query->where('is_active', $isActive);
+            }
+        }
+
+        if (!empty($filters['q'])) {
             $needle = $filters['q'];
             $query->where(function ($w) use ($needle): void {
                 $w->where('username', 'LIKE', "%{$needle}%")
@@ -184,8 +216,8 @@ class UserService
             });
         }
 
-        if (! empty($filters['role'])) {
-            $query->whereHas('role', fn ($r) => $r->where('role_name', $filters['role']));
+        if (!empty($filters['role'])) {
+            $query->whereHas('role', fn($r) => $r->where('role_name', $filters['role']));
         }
 
         return $query->paginate($perPage, ['*'], 'page', $page);

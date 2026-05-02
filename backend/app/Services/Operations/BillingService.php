@@ -240,6 +240,9 @@ class BillingService
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
+        if (! empty($filters['due_date'])) {
+            $query->whereDate('due_date', $filters['due_date']);
+        }
 
         if (! empty($filters['past_due'])) {
             $query->where('due_date', '<', now()->toDateString())

@@ -35,7 +35,7 @@ class UpdateRoomRequest extends FormRequest
             'room_type' => ['sometimes', Rule::enum(RoomType::class)],
             'capacity' => ['sometimes', 'integer', 'min:1'],
             'monthly_rate' => ['sometimes', 'numeric', 'min:0'],
-            'status' => ['sometimes', Rule::enum(RoomStatus::class)],
+            'status' => ['sometimes', Rule::enum(RoomStatus::class), Rule::notIn([RoomStatus::DECOMMISSIONED->value])],
             'amenities' => ['sometimes', 'nullable', 'string'],
             'description' => ['sometimes', 'nullable', 'string'],
             'bed_spaces' => ['sometimes', 'array'],

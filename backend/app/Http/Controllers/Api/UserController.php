@@ -103,6 +103,14 @@ class UserController extends Controller
     }
 
     /**
+     * Retrieve system-wide user statistics for administrative KPIs.
+     */
+    public function summary(ManageUserRequest $request): JsonResponse
+    {
+        return $this->success('User statistics retrieved successfully.', UserService::summary());
+    }
+
+    /**
      * List all available roles (Admin only).
      */
     public function roles(ManageUserRequest $request): JsonResponse

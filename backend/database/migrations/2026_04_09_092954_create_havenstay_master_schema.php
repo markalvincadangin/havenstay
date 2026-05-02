@@ -110,7 +110,7 @@ return new class extends Migration
             $table->enum('room_type', ['private', 'shared'])->default('private');
             $table->integer('capacity')->default(1);
             $table->decimal('monthly_rate', 10, 2);
-            $table->enum('status', ['available', 'unavailable', 'maintenance'])->default('available');
+            $table->enum('status', ['available', 'unavailable', 'maintenance', 'decommissioned'])->default('available');
             $table->text('amenities')->nullable();
             $table->text('description')->nullable();
             $table->boolean('is_metered')->default(true);
@@ -335,7 +335,7 @@ return new class extends Migration
                 SUM(CASE WHEN bs.status = 'vacant' THEN 1 ELSE 0 END) AS vacant_beds
             FROM rooms r
             LEFT JOIN bed_spaces bs ON r.room_id = bs.room_id
-            WHERE r.deleted_at IS NULL
+            WHERE r.deleted_at IS NULL AND r.status != 'decommissioned'
             GROUP BY r.room_id, r.room_code, r.capacity, r.room_type, r.status");
 
         DB::statement('DROP VIEW IF EXISTS vw_occupancy_status');
@@ -354,7 +354,7 @@ return new class extends Migration
             JOIN rooms r ON bs.room_id = r.room_id
             LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status IN ('active', 'pending_payment')
             LEFT JOIN tenants t ON c.tenant_id = t.tenant_id
-            WHERE r.deleted_at IS NULL");
+            WHERE r.deleted_at IS NULL AND r.status != 'decommissioned'");
 
         DB::statement('DROP VIEW IF EXISTS vw_collections_summary');
         DB::statement("CREATE VIEW vw_collections_summary AS

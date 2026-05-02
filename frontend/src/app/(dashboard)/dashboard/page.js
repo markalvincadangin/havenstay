@@ -396,9 +396,9 @@ export default function PlatformDashboardPage() {
                       <td className="px-8 py-4 text-right">
                         <Link
                           href={`/payments/new?billing_id=${b.billing_id}`}
-                          className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-700 transition-all border border-teal-100 bg-teal-50 px-3 py-1.5 rounded-lg whitespace-nowrap inline-block"
+                          className="text-[10px] font-black uppercase tracking-widest text-teal-700 hover:text-teal-900 transition-all border border-teal-200 bg-teal-50 px-4 py-2 rounded-xl shadow-sm shadow-teal-900/5 whitespace-nowrap inline-block"
                         >
-                          Record Payment
+                          Pay
                         </Link>
                       </td>
                     </tr>

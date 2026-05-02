@@ -42,8 +42,16 @@ class Inventory
         $hasVacant = $room->bedSpaces->where('status', BedSpaceStatus::VACANT)->isNotEmpty();
         $currentStatus = $room->status;
 
+        // BR-ROM-007: Decommissioned status is authoritative and cannot be overwritten by bed syncs
+        if ($currentStatus === RoomStatus::DECOMMISSIONED) {
+            return [
+                'status' => RoomStatus::DECOMMISSIONED,
+                'capacity' => $capacity
+            ];
+        }
+
         if ($currentStatus !== RoomStatus::MAINTENANCE) {
-            $currentStatus = $hasVacant ? RoomStatus::AVAILABLE : RoomStatus::UNAVAILABLE;
+            $currentStatus = $hasVacant ? RoomStatus::AVAILABLE->value : RoomStatus::UNAVAILABLE->value;
         }
 
         return [

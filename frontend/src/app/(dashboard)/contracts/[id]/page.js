@@ -58,6 +58,7 @@ import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { normalizePaginatedList } from "@/lib/pagination";
 import { FormSection } from "@/components/ui/FormSection";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import RecordStateAlert from "@/components/ui/RecordStateAlert";
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -338,7 +339,7 @@ export default function ContractDetailsPage() {
       <ConfirmationDialog
         open={showArchiveConfirm}
         title="Confirm Archive"
-        description="Are you sure you want to archive this contract?"
+        description="This will remove the contract from the active directory. All historical data and financial records will be preserved for forensic audit purposes."
         confirmLabel="Archive Contract"
         isDanger
         isLoading={isArchiving}
@@ -363,6 +364,30 @@ export default function ContractDetailsPage() {
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
         {fetchError && <Alert variant="error" title="Load Failed">{fetchError}</Alert>}
+
+        <RecordStateAlert 
+          show={contract?.status === 'voided'} 
+          variant="warning" 
+          title="Contract Voided"
+        >
+          This contract was voided due to a registration error. Associated billing was cancelled and inventory released.
+        </RecordStateAlert>
+
+        <RecordStateAlert 
+          show={contract?.status === 'terminated'} 
+          variant="warning" 
+          title="Contract Terminated"
+        >
+          This contract was terminated early. Operational access for this agreement has been revoked.
+        </RecordStateAlert>
+
+        <RecordStateAlert 
+          show={contract?.status === 'completed'} 
+          variant="info" 
+          title="Contract Completed"
+        >
+          This contract is completed. Resident has moved out and all terms have been finalized.
+        </RecordStateAlert>
 
         {!loading && contract ? (
           <div className="grid gap-6 lg:grid-cols-12">
@@ -705,7 +730,7 @@ export default function ContractDetailsPage() {
                         <td className="py-5 text-right">
                           <CurrencyDisplay
                             amount={p.amount_paid}
-                            className="text-sm font-bold text-emerald-700"
+                            className={`text-sm font-bold ${p.voided_at ? "text-stone-400 line-through" : "text-emerald-700"}`}
                           />
                         </td>
                         <td className="py-5 text-center text-[10px] font-bold uppercase tracking-widest text-stone-400">

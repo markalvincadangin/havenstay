@@ -70,6 +70,7 @@ export function StatusBadge({ children }) {
 
     // Tenant statuses
     active: "badge-success",
+    inactive: "badge-neutral",
     moved_out: "badge-neutral",
     archived: "badge-neutral",
 
@@ -182,6 +183,7 @@ export function StatusBadge({ children }) {
     ...PAYMENT_STATUS_LABELS,
     ...ROOM_TYPE_LABELS,
     ...AUDIT_ACTION_LABELS,
+    inactive: "Inactive",
     voided: "Voided",
     voided_contract: "Voided",
     settled: "Paid",

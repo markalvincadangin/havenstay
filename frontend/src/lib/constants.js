@@ -32,6 +32,7 @@ export const ROOM_STATUS_LABELS = {
   available: "Available",
   unavailable: "Fully Occupied",
   maintenance: "Maintenance",
+  decommissioned: "Decommissioned",
 };
 
 /** Valid `rooms.status` keys (schema ENUM order). */
@@ -291,6 +292,7 @@ export const USER_ACCOUNT_STATUS_FILTER_LABELS = {
   all: "All statuses",
   active: "Active",
   inactive: "Inactive",
+  archived: "Archived",
 };
 
 /** Normalize enum-like backend keys for safe comparisons. */

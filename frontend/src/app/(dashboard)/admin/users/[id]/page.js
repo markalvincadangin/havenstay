@@ -9,6 +9,7 @@ import { canManageUsers } from "@/lib/auth";
 import { formatDateString } from "@/lib/formatters";
 import { normalizePaginatedList } from "@/lib/pagination";
 import Alert from "@/components/ui/Alert";
+import RecordStateAlert from "@/components/ui/RecordStateAlert";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
@@ -22,17 +23,24 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { UserQuickEditForm } from '@/features/admin/users/components/UserQuickEditForm';
+import LifecycleActions from "@/components/ui/LifecycleActions";
+import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import { useToasts } from "@/context/ToastContext";
+import { apiRequest } from "@/lib/api";
+import { flattenApiErrors } from "@/lib/errors";
+import { Input } from "@/components/ui/Fields";
 export default function UserDetailPage() {
     const router = useRouter();
     const params = useParams();
     const userId = params?.id;
     const { user: currentUser, authLoading } = useAuth();
+    const { showToast } = useToasts();
     const { page, setPage, perPage, setPerPage, queryString } = usePaginatedFilters({
         initialFilters: {},
         buildExtraParams: () => ({ user_id: userId }),
     });
     const canManage = useMemo(() => canManageUsers(currentUser), [currentUser]);
-    const { data: uData, error: uError } = useSWR(
+    const { data: uData, error: uError, mutate: mutateUser } = useSWR(
         currentUser && userId && canManage ? `/api/users/${userId}` : null,
         fetcher
     );
@@ -45,6 +53,9 @@ export default function UserDetailPage() {
     const { rows: auditLogsList, meta: auditMeta } = useMemo(() => normalizePaginatedList(aData), [aData]);
     const isSelf = String(userId) === String(currentUser?.user_id);
     const [editingUser, setEditingUser] = useState(null);
+    const [busyAction, setBusyAction] = useState("");
+    const [isDeactivating, setIsDeactivating] = useState(false);
+    const [confirmInput, setConfirmInput] = useState("");
     if (authLoading || loading) {
         return <StandardPage title="Loading User..." loading={true} />;
     }
@@ -52,10 +63,70 @@ export default function UserDetailPage() {
         return (
             <StandardPage title="Error" breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "User Directory", href: "/admin/users" }]} />}>
                 <Alert variant="error" title="Failed to load user account">
-                    {uError?.message || "Internal system error occurred while retrieving user profile."}
+                    {uError?.status === 404 ? "This user account does not exist or has been permanently removed." : (uError?.message || "Internal system error occurred while retrieving user profile.")}
                 </Alert>
             </StandardPage>
         );
+    }
+    const isArchived = !!uData?.deleted_at;
+    const isActive = !!uData?.is_active;
+
+    async function handleDeactivate() {
+        if (uData.username !== confirmInput) {
+            showToast("Username mismatch.", "error");
+            return;
+        }
+        setBusyAction("deactivate");
+        try {
+            await apiRequest(`/api/users/${userId}/deactivate`, { method: "POST" });
+            setIsDeactivating(false);
+            setConfirmInput("");
+            await mutateUser();
+            showToast("User deactivated.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
+    }
+
+    async function handleReactivate() {
+        setBusyAction("reactivate");
+        try {
+            await apiRequest(`/api/users/${userId}/reactivate`, { method: "POST" });
+            await mutateUser();
+            showToast("Access restored.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
+    }
+
+    async function handleArchive() {
+        setBusyAction("archive");
+        try {
+            await apiRequest(`/api/users/${userId}/archive`, { method: "POST" });
+            await mutateUser();
+            showToast("User account archived.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
+    }
+
+    async function handleRestore() {
+        setBusyAction("restore");
+        try {
+            await apiRequest(`/api/users/${userId}/restore`, { method: "POST" });
+            await mutateUser();
+            showToast("User account restored.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
     }
     return (
         <StandardPage
@@ -71,17 +142,23 @@ export default function UserDetailPage() {
             }
             actions={
                 <div className="flex items-center gap-3">
-                    <Button
-                        variant="secondary"
-                        onClick={() => router.push("/admin/users")}
-                        className="!h-11 px-6 text-[10px] font-black uppercase tracking-widest border-stone-200"
-                    >
-                        Back to Directory
-                    </Button>
+                    <LifecycleActions
+                        mode="user"
+                        canManage={canManage}
+                        isActive={isActive}
+                        isArchived={isArchived}
+                        isSelf={isSelf}
+                        busyAction={busyAction}
+                        onDeactivate={() => setIsDeactivating(true)}
+                        onReactivate={handleReactivate}
+                        onArchive={handleArchive}
+                        onRestore={handleRestore}
+                    />
+                    <div className="h-8 w-px bg-stone-200 mx-1" />
                     <Button
                         variant="primary"
                         onClick={() => setEditingUser(uData)}
-                        disabled={isSelf} // Self-management restricted as per security audit
+                        disabled={isSelf || isArchived}
                         className="!h-11 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 border-0"
                     >
                         <Edit2 size={14} className="mr-2" />
@@ -96,6 +173,14 @@ export default function UserDetailPage() {
                         Only administrators are authorized to view detailed system user profiles.
                     </Alert>
                 )}
+
+                <RecordStateAlert show={isArchived} variant="archived">
+                    This user account has been archived and soft-deleted. Access is revoked and the account is hidden from standard directory listings. Use "Restore Account" above to re-enable.
+                </RecordStateAlert>
+
+                <RecordStateAlert show={!isArchived && !isActive} variant="inactive">
+                    This account is currently deactivated. System access is revoked across all platforms. Profile details remain visible for auditing purposes.
+                </RecordStateAlert>
                 <div className="grid gap-6 lg:grid-cols-3">
                     <div className="lg:col-span-2 space-y-6">
                         <FormSection title="User Details" icon={User} className="hs-glass-effect">
@@ -130,7 +215,9 @@ export default function UserDetailPage() {
                                 <div>
                                     <span className="block text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Account Status</span>
                                     <div className="flex items-center gap-2">
-                                        <StatusBadge>{uData?.is_active ? "active" : "inactive"}</StatusBadge>
+                                        <StatusBadge variant={isArchived ? "neutral" : (isActive ? "success" : "neutral")}>
+                                            {isArchived ? "archived" : (isActive ? "active" : "inactive")}
+                                        </StatusBadge>
                                         {isSelf && (
                                             <span className="text-[10px] font-bold text-stone-400 uppercase italic">Active Session</span>
                                         )}
@@ -246,6 +333,33 @@ export default function UserDetailPage() {
                         className="hs-glass-effect"
                     />
                 </Card>
+
+                <ConfirmationDialog
+                    open={isDeactivating}
+                    title="Confirm Account Deactivation"
+                    description={`You are about to revoke all system access for @${uData?.username}. This will invalidate all active sessions immediately.`}
+                    confirmLabel="CONFIRM DEACTIVATION"
+                    isDanger
+                    isLoading={busyAction === "deactivate"}
+                    onConfirm={handleDeactivate}
+                    onCancel={() => {
+                        setIsDeactivating(false);
+                        setConfirmInput("");
+                    }}
+                >
+                    <div className="space-y-4">
+                        <p className="text-xs font-medium text-stone-500">
+                            Type the username <span className="font-bold text-rose-600">{uData?.username}</span> below to confirm.
+                        </p>
+                        <Input
+                            autoFocus
+                            value={confirmInput}
+                            onChange={(e) => setConfirmInput(e.target.value)}
+                            placeholder={uData?.username}
+                            className="!h-11 border-stone-200 focus:border-rose-500/50"
+                        />
+                    </div>
+                </ConfirmationDialog>
             </div>
             <SideSheetOverlay
                 isOpen={!!editingUser}

@@ -58,6 +58,9 @@ or delete any record.
 Analytical reporting and data exports are restricted to System
 Administrators to protect tenant privacy and financial integrity.
 
+**BR-GEN-009**
+An authenticated user is prohibited from deactivating, archiving, or changing the system role of their own account. These operations must be performed by another System Administrator to maintain security oversight and prevent self-lockout or unauthorized privilege escalation.
+
 ---
 
 ## 3. Tenant Rules
@@ -125,6 +128,12 @@ a new contract until its status is restored to `vacant` by staff.
 **BR-ROM-006**
 Every bed space must have a label (e.g. "Bed A", "Bed 1") that
 is unique within its room.
+
+**BR-ROM-007**
+Decommissioning a room is an operational state change, not a forensic removal. 
+- A `decommissioned` room is locked for editing and excluded from active occupancy metrics. 
+- It may not be decommissioned if it contains `occupied` beds or `active`/`pending_payment` contracts. 
+- Restoring a decommissioned room resets its status to `available` and recalculates capacity.
 
 ---
 
@@ -445,3 +454,4 @@ The Collection Rate KPI measures performance efficiency by comparing cash inflow
 | **v2.0** | **Apr 29, 2026** | **Major Stabilization: Added BR-BIL-011 (Resilient Batch Billing), BR-PAY-011 (Forensic Context Resolution), and BR-PAY-012 (Collection Rate Logic).** |
 | **v2.1** | **Apr 29, 2026** | **Reorganized formulas into a new Analytical Rules (ANL) category for reporting transparency. Migrated Balance, Consumption, and Collection Rate formulas.** |
 | **v2.2** | **Apr 29, 2026** | **Clean State Release: Fully removed migrated placeholders and renumbered all rules to be continuous.** |
+| **v2.3** | **May 02, 2026** | **Added BR-GEN-009 (Self-Account Restriction) to reinforce system security policy during lifecycle standardization.** |

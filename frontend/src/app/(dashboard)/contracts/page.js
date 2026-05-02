@@ -12,6 +12,7 @@ import {
   formatDateString,
   formatTenantDirectoryName,
 } from "@/lib/formatters";
+import { isContractEnded } from "@/lib/constants";
 import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import { Card } from "@/components/ui/Card";
 import FilterPanelCard from "@/components/ui/FilterPanelCard";
@@ -376,9 +377,9 @@ export default function ContractsListPage() {
                         <div className="flex items-center justify-end gap-2">
                           <div onClick={stopRowClick}>
                             <QuickEditRowAction
-                              disabled={!canWrite}
+                              disabled={!canWrite || isContractEnded(c.status)}
                               onClick={() => setEditingContract(c)}
-                              title="Update details"
+                              title={isContractEnded(c.status) ? "Contract closed" : "Update details"}
                             />
                           </div>
                           <RowOpenIndicator />

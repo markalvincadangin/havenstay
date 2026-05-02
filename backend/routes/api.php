@@ -30,6 +30,7 @@ Route::middleware(['auth:sanctum', 'auth.check'])->get('/user', function (Reques
 Route::middleware(['auth:sanctum', 'auth.check'])->prefix('users')->group(function (): void {
     Route::get('/', [UserController::class, 'index']);
     Route::get('roles', [UserController::class, 'roles']);
+    Route::get('summary', [UserController::class, 'summary']);
     Route::post('/', [UserController::class, 'store']);
     Route::get('{user}', [UserController::class, 'show'])->withTrashed();
     Route::put('{user}', [UserController::class, 'update']);
@@ -59,13 +60,13 @@ Route::middleware(['auth:sanctum', 'auth.check'])->prefix('rooms')->group(functi
     Route::get('stats', [RoomController::class, 'stats']);
     Route::post('/', [RoomController::class, 'store']);
     Route::get('availability', [RoomController::class, 'availability']);
-    Route::get('{room}', [RoomController::class, 'show'])->withTrashed();
+    Route::get('{room}', [RoomController::class, 'show']);
     Route::put('{room}', [RoomController::class, 'update']);
     Route::post('{room}/archive', [RoomController::class, 'archive']);
     Route::post('{id}/restore', [RoomController::class, 'restore']);
     Route::post('{room}/bed-spaces', [RoomController::class, 'addBedSpace']);
     Route::post('bed-spaces/{bedSpace}/occupy', [RoomController::class, 'occupyBedSpace']);
-    Route::get('{room}/meters', [MeterController::class, 'roomMeters'])->withTrashed();
+    Route::get('{room}/meters', [MeterController::class, 'roomMeters']);
 });
 
 // FR-016..FR-019: Contract management endpoints (Admin/Staff create + move-out, all roles view)

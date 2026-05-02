@@ -12,8 +12,12 @@ import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Fields";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Lock, User as UserIcon, LayoutDashboard, History, ClipboardCheck } from "lucide-react";
 
+/**
+ * LoginPage — Professional Management Portal
+ * Aligned with HavenStay Identity (SRS v5.2): Professional, Efficient, and User-Friendly.
+ */
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -22,23 +26,17 @@ export default function LoginPage() {
   const [apiError, setApiError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Only skip the form when we already have a validated session (not merely a stale token).
   useEffect(() => {
     if (!authLoading && user && hasAuthToken()) {
       router.replace(callbackUrl || "/dashboard");
     }
   }, [authLoading, user, router, callbackUrl]);
 
-  // 3. Pre-warm the backend on login page load (Bypass Render Free Tier spin-down)
   useEffect(() => {
-    // Fire and forget a background request to the health check endpoint.
-    // This wakes up the Render instance while the user is preparing to login.
     const warmServer = async () => {
       try {
         await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ""}/api/ping`, { mode: 'no-cors' });
-      } catch (e) {
-        // Silent catch: warming is best-effort
-      }
+      } catch (e) { /* silent catch */ }
     };
     warmServer();
   }, []);
@@ -56,7 +54,6 @@ export default function LoginPage() {
 
   const onSubmit = async (values) => {
     setApiError("");
-
     try {
       const response = await apiRequest("/api/auth/login", {
         method: "POST",
@@ -65,16 +62,8 @@ export default function LoginPage() {
           password: values.password,
         }),
       });
-      const payload = response;
-
-      if (payload?.token) {
-        setAuthToken(payload.token);
-      }
-
-      if (payload?.user) {
-        login(payload.user);
-      }
-
+      if (response?.token) setAuthToken(response.token);
+      if (response?.user) login(response.user);
       router.push(callbackUrl || "/dashboard");
     } catch (error) {
       setApiError(flattenApiErrors(error));
@@ -83,116 +72,171 @@ export default function LoginPage() {
 
   const shouldReduceMotion = useReducedMotion();
 
-  const containerVariants = {
-    hidden: { opacity: 0, scale: shouldReduceMotion ? 1 : 0.98, y: shouldReduceMotion ? 0 : 16 },
-    visible: {
-      opacity: 1,
-      scale: 1,
-      y: 0,
-      transition: {
-        duration: 0.45,
-        ease: [0.16, 1, 0.3, 1],
-        when: "beforeChildren",
-        staggerChildren: 0.08,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 8 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
-  };
-
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[radial-gradient(circle_at_top_right,_var(--color-primary-light)_0%,_var(--color-background)_60%)] px-4 py-10 sm:px-6 sm:py-12">
-      <motion.div
-        className="w-full max-w-[440px]"
-        initial="hidden"
-        animate="visible"
-        variants={containerVariants}
-      >
-        <Card className="hs-glass-effect relative w-full overflow-hidden !p-0 rounded-3xl border-white/40 shadow-2xl shadow-stone-900/5">
-          {/* Top accent bar with brand primary color (MASTER §2.2) */}
-          <div className="h-1.5 w-full bg-teal-600/80 backdrop-blur-sm" aria-hidden />
+    <main className="flex min-h-screen bg-white">
+      {/* LEFT SECTION: BRANDING & VALUE PROPS (Professional & Inviting) */}
+      <section className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-teal-900 p-16 lg:flex">
+        <div className="absolute inset-0 z-0 scale-105 transform">
+          <Image
+            src="/brand/login-hero.png"
+            alt="HavenStay Management"
+            fill
+            className="object-cover opacity-20 mix-blend-overlay grayscale-[30%]"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-950/90 via-teal-900/60 to-transparent" />
+        </div>
 
-          <div className="px-8 pb-10 pt-10 sm:px-12 sm:pb-12 sm:pt-12">
-            <motion.div variants={itemVariants} className="mb-10 flex flex-col items-center text-center">
-              <div className="relative mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md ring-1 ring-stone-200">
-                <Image src="/brand/logo-dark.svg" alt="HavenStay" width={38} height={38} priority />
-              </div>
+        <motion.div
+          className="relative z-10"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-xl">
+              <Image src="/brand/logo-dark.svg" alt="HavenStay" width={28} height={28} />
+            </div>
+            <span className="text-xl font-black uppercase tracking-[0.3em] text-white">HavenStay</span>
+          </div>
 
-              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-stone-400">HavenStay · BHMS</p>
-              <h1 className="hs-page-title mt-2">Sign In</h1>
-              <p className="hs-page-subtitle mt-2 max-w-sm text-[13px] font-medium leading-relaxed text-stone-500">
-                Sign in to manage boarding house operations, tenants, and billing cycles.
-              </p>
-            </motion.div>
+          <div className="mt-24 max-w-lg">
+            <h1 className="text-5xl font-black leading-[1.1] tracking-tight text-white xl:text-6xl">
+              Smarter <span className="text-teal-400">Boarding</span> Operations.
+            </h1>
+            <p className="mt-6 text-lg font-medium leading-relaxed text-teal-100/70">
+              The professional choice for modern residential management. 
+              Efficiency, accuracy, and ease of use in one centralized platform.
+            </p>
+          </div>
+        </motion.div>
 
-            <motion.form variants={itemVariants} className="space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
-              <div className="space-y-5">
-                <Field label="Username or Email" required error={errors.username?.message}>
-                  <Input
-                    autoFocus
-                    type="text"
-                    autoComplete="username"
-                    placeholder="Enter your username or email"
-                    className="!h-11 border-stone-200/60 sm:!h-12 bg-white/50 focus:bg-white transition-colors"
-                    hasError={Boolean(errors.username)}
-                    {...register("username", {
-                      required: "Username or email is required.",
-                      minLength: { value: 3, message: "Must be at least 3 characters." },
-                    })}
-                  />
-                </Field>
+        <motion.div
+          className="relative z-10 grid grid-cols-2 gap-10"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+        >
+          <div className="space-y-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-800/50 backdrop-blur-sm">
+              <LayoutDashboard className="text-teal-400" size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-widest text-white">Unified Control</h3>
+              <p className="mt-1 text-xs leading-relaxed text-teal-100/50">Manage rooms, tenants, and billing from a single dashboard.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-800/50 backdrop-blur-sm">
+              <History className="text-teal-400" size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-widest text-white">Full Transparency</h3>
+              <p className="mt-1 text-xs leading-relaxed text-teal-100/50">Traceable histories and comprehensive financial audit trails.</p>
+            </div>
+          </div>
+        </motion.div>
+      </section>
 
-                <Field label="Password" required error={errors.password?.message}>
-                  <div className="relative">
+      {/* RIGHT SECTION: LOGIN PORTAL (Friendly & Efficient) */}
+      <section className="relative flex w-full flex-col items-center justify-center bg-stone-50 px-6 py-12 lg:w-1/2">
+        <motion.div
+          className="relative z-10 w-full max-w-[440px]"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <Card className="hs-glass-effect !p-0 overflow-hidden rounded-[2.5rem] border-white/60 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] transition-all hover:shadow-[0_48px_80px_-24px_rgba(0,0,0,0.1)]">
+            {/* Mobile Header */}
+            <div className="flex flex-col items-center px-8 pt-12 text-center sm:px-12">
+               <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md ring-1 ring-stone-100 lg:hidden">
+                 <Image src="/brand/logo-dark.svg" alt="HavenStay" width={38} height={38} />
+               </div>
+               
+               <p className="hs-strip-title !text-[9px] !text-stone-400">Management Portal</p>
+               <h2 className="hs-page-title mt-2 !text-3xl">Welcome Back</h2>
+               <p className="hs-page-subtitle mt-3 text-[13px] font-medium leading-relaxed text-stone-500/80">
+                 Sign in to your staff or admin account to get started.
+               </p>
+            </div>
+
+            <div className="px-8 pb-12 pt-10 sm:px-12">
+              <form className="space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
+                <div className="space-y-5">
+                  <Field label="Username or Email" required error={errors.username?.message}>
                     <Input
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      hasError={Boolean(errors.password)}
-                      placeholder="Enter your password"
-                      className="!h-11 border-stone-200/60 pr-12 sm:!h-12 bg-white/50 focus:bg-white transition-colors"
-                      {...register("password", {
-                        required: "Password is required.",
+                      autoFocus
+                      type="text"
+                      icon={UserIcon}
+                      autoComplete="username"
+                      placeholder="e.g. admin@havenstay.com"
+                      className="!h-12 border-stone-200/60 !rounded-xl bg-white/40 focus:bg-white transition-all"
+                      hasError={Boolean(errors.username)}
+                      {...register("username", {
+                        required: "Please enter your username or email.",
                       })}
                     />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-3 flex h-11 w-11 items-center justify-center text-stone-400 transition-colors hover:text-stone-700 sm:h-12 sm:w-12"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                      tabIndex={-1}
-                    >
-                      {showPassword ? (
-                        <EyeOff size={18} strokeWidth={2.5} aria-hidden />
-                      ) : (
-                        <Eye size={18} strokeWidth={2.5} aria-hidden />
-                      )}
-                    </button>
-                  </div>
-                </Field>
+                  </Field>
+
+                  <Field label="Password" required error={errors.password?.message}>
+                    <div className="relative group">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        icon={Lock}
+                        autoComplete="current-password"
+                        hasError={Boolean(errors.password)}
+                        placeholder="Enter your password"
+                        className="!h-12 border-stone-200/60 pr-12 !rounded-xl bg-white/40 focus:bg-white transition-all"
+                        {...register("password", {
+                          required: "Please enter your password.",
+                        })}
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-1 flex h-10 w-10 items-center justify-center self-center text-stone-400 transition-colors hover:text-teal-600 sm:h-12 sm:w-12"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        tabIndex={-1}
+                      >
+                        {showPassword ? (
+                          <EyeOff size={18} strokeWidth={2.5} aria-hidden />
+                        ) : (
+                          <Eye size={18} strokeWidth={2.5} aria-hidden />
+                        )}
+                      </button>
+                    </div>
+                  </Field>
+                </div>
+
+                {apiError && (
+                  <Alert variant="error" title="Sign In Failed" className="rounded-xl border-red-100/50">
+                    <p className="text-xs leading-relaxed">{apiError}</p>
+                  </Alert>
+                )}
+
+                <div className="pt-2">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    loading={isSubmitting}
+                    disabled={isSubmitting}
+                    className="w-full !h-12 rounded-xl bg-teal-600 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-[0_12px_24px_-4px_rgba(13,148,136,0.25)] hover:bg-teal-700 hover:shadow-[0_16px_32px_-4px_rgba(13,148,136,0.3)] hover:-translate-y-0.5 active:scale-[0.98] transition-all hs-pulse-glow"
+                  >
+                    Sign In
+                  </Button>
+                </div>
+              </form>
+
+              <div className="mt-10 flex flex-col items-center gap-4 text-center opacity-40">
+                 <div className="h-px w-8 bg-stone-200" />
+                 <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                    HavenStay Management System · v5.2
+                 </p>
               </div>
-
-              {apiError ? (
-                <Alert variant="error" title="Authentication Failed">
-                  <p className="text-xs leading-relaxed">{apiError}</p>
-                </Alert>
-              ) : null}
-
-              <Button
-                type="submit"
-                variant="primary"
-                loading={isSubmitting}
-                disabled={isSubmitting}
-                className="w-full !h-11 rounded-xl bg-teal-600 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-teal-900/20 hover:bg-teal-700 hover:shadow-teal-900/30 hover:-translate-y-0.5 active:scale-[0.98] transition-all sm:!h-12 hs-pulse-glow"
-              >
-                Sign In
-              </Button>
-            </motion.form>
-          </div>
-        </Card>
-      </motion.div>
+            </div>
+          </Card>
+        </motion.div>
+      </section>
     </main>
   );
 }
