@@ -14,8 +14,8 @@ constraints — neither overrides the other.
 **Repository layout**
 
     havenstay/
-    ├── backend/        Laravel 11 API
-    ├── frontend/       Next.js 14 App Router SPA
+    ├── backend/        Laravel 13 API
+    ├── frontend/       Next.js 16 App Router SPA
     ├── db/             Canonical schema SQL (v5.0 — Forensic Hardened)
     ├── design-system/  UI/UX specification
     └── docs/           SRS, SDD, project docs
@@ -26,10 +26,10 @@ constraints — neither overrides the other.
 
 | Layer        | Technology          | Version   |
 |--------------|---------------------|-----------|
-| Backend      | Laravel (PHP)       | 11 / 8.3+ |
+| Backend      | Laravel (PHP)       | 13 / 8.3+ |
 | Auth         | Laravel Sanctum     | 4.x       |
-| Frontend     | Next.js, React      | 14 / 18   |
-| Styling      | Vanilla CSS (Custom Design System) | — |
+| Frontend     | Next.js, React      | 16 / 19   |
+| Styling      | Tailwind CSS v4 + HS-Utilities | — |
 | Database     | MySQL InnoDB        | 8.4+      |
 | Infrastructure | Docker Compose    | 3.8+      |
 

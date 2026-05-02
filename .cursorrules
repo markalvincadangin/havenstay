@@ -1,6 +1,6 @@
 {
   "project_standards": {
-    "framework": "Laravel 11 (PHP 8.3+)",
+    "framework": "Laravel 13 (PHP 8.3+)",
     "database": "MySQL 8.4+ (Forensic Hardened Schema v5.0)",
     "architecture": "5-Tier Extended MVC: Middleware → Controller → Service → Model/Support → Database",
     "forensics": "45-Trigger Audit Engine | 15 Normalized Tables | 6 Reporting Views"

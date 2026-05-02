@@ -38,10 +38,10 @@ a defect.
 
 | Concern | Technology | Constraint |
 |---|---|---|
-| Framework | Next.js 14 (App Router) | Locked |
+| Framework | Next.js 16 (App Router) | Locked |
 | Architecture | Modular Feature-Based App Router | Authoritative |
 | Language | JavaScript | No TypeScript |
-| Styling | Vanilla CSS (Custom Design System) | No inline `style={}` — use `hs-*` CSS classes from `globals.css` |
+| Styling | Tailwind CSS v4 + HS-Utilities | No inline `style={}` — use `hs-*` CSS classes from `globals.css` |
 | Data fetching | SWR | No raw `useEffect` for remote data |
 | Animation | framer-motion | Respect `useReducedMotion` always |
 | Icons | lucide-react | No other icon libraries |

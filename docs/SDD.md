@@ -71,9 +71,9 @@ graph TD
 
 | Layer | Technology | Version |
 | :--- | :--- | :--- |
-| **Backend Framework** | Laravel (PHP 8.3+) | 11.x |
-| **Frontend Framework** | Next.js (App Router) | 14.x |
-| **Frontend Styling** | Vanilla CSS (Custom Design System) | — |
+| **Backend Framework** | Laravel (PHP 8.3+) | 13.x |
+| **Frontend Framework** | Next.js (App Router) | 16.x |
+| **Frontend Styling** | Tailwind v4 + HS-Utility Layer | — |
 | **Database (Primary)** | MySQL (InnoDB) | 8.4+ |
 | **Database (Dev/Test)** | SQLite | — |
 | **API Architecture** | RESTful JSON | — |

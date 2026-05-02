@@ -21,9 +21,9 @@ This Project Plan defines the execution strategy for designing, developing, and 
 
 | Layer | Technology | Version |
 | :--- | :--- | :--- |
-| **Backend** | Laravel (PHP 8.3+) | 11.x |
-| **Frontend** | Next.js (App Router) | 14.x |
-| **Frontend Styling** | Vanilla CSS (Custom Design System) | — |
+| **Backend** | Laravel (PHP 8.3+) | 13.x |
+| **Frontend** | Next.js (App Router) | 16.x |
+| **Frontend Styling** | Tailwind v4 + HS-Utility Layer | — |
 | **Database** | MySQL (InnoDB) | 8.4+ |
 | **Authentication** | Laravel Sanctum | 4.x |
 | **Containerization** | Docker / Docker Compose | — |

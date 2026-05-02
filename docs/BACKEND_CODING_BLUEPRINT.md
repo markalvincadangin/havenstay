@@ -3,7 +3,7 @@
 **Version:** 6.2  
 **Last Updated:** May 02, 2026  
 **Status:** Authoritative Standard  
-**Scope:** `backend/app` — Laravel 11 / PHP 8.3+  
+**Scope:** `backend/app` — Laravel 13 / PHP 8.3+  
 
 ---
 
@@ -19,7 +19,7 @@ Every line of backend code written for HavenStay must adhere to these non-negoti
 
 ## 2. Standardized Directory Structure
 
-The `backend/` directory is structured to enforce the separation of concerns, adhering closely to Laravel 11+ conventions extended for HavenStay's domain:
+The `backend/` directory is structured to enforce the separation of concerns, adhering closely to Laravel 13+ conventions extended for HavenStay's domain:
 
 ```text
 backend/
