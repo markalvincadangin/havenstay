@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import KeyboardHelpModal from "@/components/ui/KeyboardHelpModal";
 
-const AUTH_FREE_PAGES = new Set(["/login", "/signin"]);
+const AUTH_FREE_PAGES = new Set(["/login", "/signin", "/callback"]);
 
 export default function AppFrame({ children }) {
   const pathname = usePathname();

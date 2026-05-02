@@ -32,6 +32,16 @@ export default function LoginPage() {
     }
   }, [authLoading, user, router, callbackUrl]);
 
+  // Handle OAuth and external errors from URL parameters
+  useEffect(() => {
+    const errorType = searchParams.get("error");
+    if (errorType === "oauth_failed") {
+      setApiError("Google authentication failed. Please check your credentials or try again.");
+    } else if (errorType === "access_denied") {
+      setApiError("Access denied. You cancelled the authentication request.");
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     const warmServer = async () => {
       try {
@@ -105,7 +115,7 @@ export default function LoginPage() {
               Smarter <span className="text-teal-400">Boarding</span> Operations.
             </h1>
             <p className="mt-6 text-lg font-medium leading-relaxed text-teal-100/70">
-              The professional choice for modern residential management. 
+              The professional choice for modern residential management.
               Efficiency, accuracy, and ease of use in one centralized platform.
             </p>
           </div>
@@ -149,15 +159,15 @@ export default function LoginPage() {
           <Card className="hs-glass-effect !p-0 overflow-hidden rounded-[2.5rem] border-white/60 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] transition-all hover:shadow-[0_48px_80px_-24px_rgba(0,0,0,0.1)]">
             {/* Mobile Header */}
             <div className="flex flex-col items-center px-8 pt-12 text-center sm:px-12">
-               <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md ring-1 ring-stone-100 lg:hidden">
-                 <Image src="/brand/logo-dark.svg" alt="HavenStay" width={38} height={38} />
-               </div>
-               
-               <p className="hs-strip-title !text-[9px] !text-stone-400">Management Portal</p>
-               <h2 className="hs-page-title mt-2 !text-3xl">Welcome Back</h2>
-               <p className="hs-page-subtitle mt-3 text-[13px] font-medium leading-relaxed text-stone-500/80">
-                 Sign in to your staff or admin account to get started.
-               </p>
+              <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md ring-1 ring-stone-100 lg:hidden">
+                <Image src="/brand/logo-dark.svg" alt="HavenStay" width={38} height={38} />
+              </div>
+
+              <p className="hs-strip-title !text-[9px] !text-stone-400">Management Portal</p>
+              <h2 className="hs-page-title mt-2 !text-3xl">Welcome Back</h2>
+              <p className="hs-page-subtitle mt-3 text-[13px] font-medium leading-relaxed text-stone-500/80">
+                Sign in to your staff or admin account to get started.
+              </p>
             </div>
 
             <div className="px-8 pb-12 pt-10 sm:px-12">
@@ -214,7 +224,7 @@ export default function LoginPage() {
                   </Alert>
                 )}
 
-                <div className="pt-2">
+                <div className="pt-2 flex flex-col gap-6">
                   <Button
                     type="submit"
                     variant="primary"
@@ -222,16 +232,55 @@ export default function LoginPage() {
                     disabled={isSubmitting}
                     className="w-full !h-12 rounded-xl bg-teal-600 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-[0_12px_24px_-4px_rgba(13,148,136,0.25)] hover:bg-teal-700 hover:shadow-[0_16px_32px_-4px_rgba(13,148,136,0.3)] hover:-translate-y-0.5 active:scale-[0.98] transition-all hs-pulse-glow"
                   >
-                    Sign In
+                    {isSubmitting ? "Signing in..." : "Sign In"}
+                  </Button>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-stone-100"></div>
+                    </div>
+                    <div className="relative flex justify-center text-[10px] font-bold uppercase tracking-widest">
+                      <span className="bg-[#fcfcfc] px-4 text-stone-400">Or sign in with</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full !h-12 rounded-xl border-stone-200 bg-white text-[10px] font-bold uppercase tracking-[0.15em] text-stone-600 transition-all hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98] shadow-sm flex items-center justify-center gap-3"
+                    onClick={() => {
+                      // Using relative path to leverage Next.js rewrites and avoid 'undefined' env var issues
+                      window.location.href = "/api/auth/google/redirect";
+                    }}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24">
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
+                      />
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                    <span>Sign in with Google</span>
                   </Button>
                 </div>
               </form>
 
               <div className="mt-10 flex flex-col items-center gap-4 text-center opacity-40">
-                 <div className="h-px w-8 bg-stone-200" />
-                 <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                    HavenStay Management System · v5.2
-                 </p>
+                <div className="h-px w-8 bg-stone-200" />
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                  HavenStay BHMS · v5.2
+                </p>
               </div>
             </div>
           </Card>

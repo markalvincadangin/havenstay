@@ -71,6 +71,66 @@ class AuthService
         ];
     }
 
+    /**
+     * Authenticate via OAuth provider.
+     * 
+     * @param array{provider:string, provider_id:string, email:string, first_name:string, last_name:string, avatar?:string} $data
+     * @return array{user:User,token:string}
+     */
+    public static function oauthLogin(array $data): array
+    {
+        // Forensic Rule: OAuth logins must be mapped to existing identities or held for approval
+        $user = User::where('email', $data['email'])
+            ->orWhere('google_id', $data['provider_id'])
+            ->first();
+
+        if (!$user) {
+            // Non-Destructive Auto-Registration: Create as inactive or basic role
+            // In a strict forensic environment, we might block this or assign 'viewer'
+            $user = User::create([
+                'role_id' => 3, // Default to 'Viewer'
+                'first_name' => $data['first_name'],
+                'last_name' => $data['last_name'],
+                'username' => explode('@', $data['email'])[0] . '_' . rand(100, 999),
+                'email' => $data['email'],
+                'password_hash' => \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(32)),
+                'google_id' => $data['provider_id'],
+                'avatar_url' => $data['avatar'] ?? null,
+                'oauth_provider' => $data['provider'],
+                'is_active' => true,
+            ]);
+        } else {
+            // Update provider info if missing
+            $user->update([
+                'google_id' => $data['provider_id'],
+                'avatar_url' => $data['avatar'] ?? $user->avatar_url,
+                'oauth_provider' => $data['provider'],
+            ]);
+        }
+
+        if (!$user->isActive()) {
+            throw ValidationException::withMessages([
+                'oauth' => ['This account has been deactivated.'],
+            ]);
+        }
+
+        self::runWriteWorkflow(
+            actorId: $user->user_id,
+            action: 'USER_OAUTH_LOGIN',
+            payload: ['provider' => $data['provider'], 'email' => $data['email']],
+            operation: function () use ($user) {
+                $user->update(['last_login_at' => now()]);
+            }
+        );
+
+        AuditService::logLogin($user);
+
+        return [
+            'user' => $user,
+            'token' => $user->createToken('api-token')->plainTextToken,
+        ];
+    }
+
     public static function logout(?User $user): void
     {
         if ($user?->currentAccessToken()) {
