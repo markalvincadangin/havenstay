@@ -103,16 +103,6 @@ class TenantController extends Controller
     }
 
     /**
-     * Reactivate a moved-out or inactive tenant.
-     */
-    public function reactivate(ManageTenantRequest $request, Tenant $tenant): JsonResponse
-    {
-        $reactivated = TenantService::reactivate($request->user(), $tenant);
-
-        return $this->success('Tenant reactivated successfully.', new TenantResource($reactivated));
-    }
-
-    /**
      * Restore an archived tenant record.
      */
     public function restore(ManageTenantRequest $request, int $id): JsonResponse

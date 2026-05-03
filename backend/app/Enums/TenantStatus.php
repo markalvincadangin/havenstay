@@ -9,6 +9,7 @@ namespace App\Enums;
  */
 enum TenantStatus: string
 {
+    case ONBOARDED = 'onboarded';
     case ACTIVE = 'active';
     case MOVED_OUT = 'moved_out';
     case ARCHIVED = 'archived';

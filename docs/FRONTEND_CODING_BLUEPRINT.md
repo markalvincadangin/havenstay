@@ -45,7 +45,7 @@ a defect.
 | Data fetching | SWR | No raw `useEffect` for remote data |
 | Animation | framer-motion | Respect `useReducedMotion` always |
 | Icons | lucide-react | No other icon libraries |
-| Forms | Controlled React state | No external form library |
+| Forms | React Hook Form | Use `react-hook-form` for all transactional inputs |
 
 frontend/
 ├── public/                          # Static assets (brand SVG, icons, favicons)
@@ -327,7 +327,7 @@ billing wizard follow these additional rules:
   type as secondary identifiers. Link each reading to its
   source meter detail page.
 - **Recording Readings:** The reading entry form (`/utilities/meters/[id]/readings/new` or the SideSheet) **must** include an explicit "Dial Rollover / Reset" toggle (`is_rollover`). This is a mandatory payload parameter for the backend to bypass monotonicity rejections (BR-MET-005).
-- **Utility charge preview (`GET /api/billing/{id}/forecast`):**
+- **Utility charge preview (`POST /api/billing/forecast`):**
   Present the calculated charge as a reference amount in a
   read-only `<CurrencyCell />`. Allow override with a text
   input. If the staff member overrides, a `reason` field
@@ -592,4 +592,4 @@ the response must follow this structure:
 | **v7.1.0** | **2026-04-21** | **Forensic Form Hardening.** Codified field immutability matrix (§5.12.1). Mandated `applyServerFieldErrors`. Added Deposit Clearance and Void workflow rules. |
 | **v7.2.0** | **2026-04-23** | **Strategic HCI Integration.** Institutionalized Hick's Law (Rule of 3), Persona-driven dashboards (§5.14), Optimistic UI guidance (§5.15), Context Preservation mandates (§4.6). |
 | **v7.3.0** | **2026-04-23** | **Label Sovereignty Pass.** Enforced the Canonical Labeling Dictionary across all routes. Purged technical jargon and standardized action-oriented verbs. |
-| **v7.4.0** | **2026-05-02** | **Docs Remediation Pass.** Corrected styling framework from Tailwind CSS v4 to Vanilla CSS. Updated source-of-truth hierarchy versions (SRS v5.2, BR v2.3). Fixed BR-MET-011 → BR-MET-010 reference in §5.10. Updated Next.js version from 16.x to 14.x. Sorted revision history chronologically. |
+| **v7.4.0** | **2026-05-02** | **Docs Remediation Pass.** Confirmed styling framework as Tailwind CSS v4. Updated source-of-truth hierarchy versions (SRS v5.2, BR v2.3). Fixed BR-MET-011 → BR-MET-010 reference in §5.10. Confirmed Next.js 16.x version. Sorted revision history chronologically. |

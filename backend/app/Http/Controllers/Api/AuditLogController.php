@@ -27,25 +27,12 @@ class AuditLogController extends Controller
         $validated = $request->validated();
         $pageParams = Pagination::normalizePageParams($validated);
 
-        $filters = array_filter(
-            [
-                'entity_type' => $validated['entity_type'] ?? null,
-                'action' => $validated['action'] ?? null,
-                'from' => $validated['from'] ?? null,
-                'to' => $validated['to'] ?? null,
-                'user' => $validated['user'] ?? null,
-                'correlation' => isset($validated['correlation']) ? trim((string) $validated['correlation']) : null,
-                'q' => $validated['q'] ?? null,
-            ],
-            fn ($v) => $v !== null && $v !== ''
-        );
-
-        $paginator = AuditReportingService::listLogsPaginated($filters, $pageParams['page'], $pageParams['per_page']);
+        $paginator = AuditReportingService::listLogsPaginated($validated, $pageParams['page'], $pageParams['per_page']);
 
         // Use the helper's ability to transform the paginator items
         $paginator->through(fn ($item) => new AuditLogResource($item));
 
-        $accessDeniedTotal = AuditReportingService::countAccessDeniedMatchingFilters($filters);
+        $accessDeniedTotal = AuditReportingService::countAccessDeniedMatchingFilters($validated);
 
         return $this->paginated($paginator, [
             'access_denied_total' => $accessDeniedTotal,
@@ -59,19 +46,7 @@ class AuditLogController extends Controller
     {
         $validated = $request->validated();
 
-        $filters = array_filter(
-            [
-                'entity_type' => $validated['entity_type'] ?? null,
-                'action' => $validated['action'] ?? null,
-                'from' => $validated['from'] ?? null,
-                'to' => $validated['to'] ?? null,
-                'user' => $validated['user'] ?? null,
-                'correlation' => isset($validated['correlation']) ? trim((string) $validated['correlation']) : null,
-                'q' => $validated['q'] ?? null,
-            ],
-            fn ($v) => $v !== null && $v !== ''
-        );
-        $payload = AuditReportingService::auditLogsCsvPayload($filters);
+        $payload = AuditReportingService::auditLogsCsvPayload($validated);
 
         return response()->streamDownload(function () use ($payload): void {
             $output = fopen('php://output', 'w');

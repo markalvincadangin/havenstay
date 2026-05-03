@@ -36,6 +36,7 @@ class ReportService
             DB::raw('SUM(CASE WHEN total_beds = 0 THEN capacity ELSE total_beds END) as total_beds'),
             DB::raw('SUM(occupied_beds) as occupied_beds'),
             DB::raw('SUM(vacant_beds) as vacant_beds'),
+            DB::raw('SUM(maintenance_beds) as maintenance_beds'),
         ])->first();
 
         // 3. Paginated Rows
@@ -53,6 +54,7 @@ class ReportService
             $totalBeds = (int) $row->total_beds === 0 ? (int) $row->capacity : (int) $row->total_beds;
             $occupiedBeds = (int) $row->occupied_beds;
             $vacantBeds = (int) $row->vacant_beds;
+            $maintenanceBeds = (int) ($row->maintenance_beds ?? 0);
 
             return [
                 'room_id' => (int) $row->room_id,
@@ -61,6 +63,7 @@ class ReportService
                 'total_beds' => $totalBeds,
                 'occupied_beds' => $occupiedBeds,
                 'vacant_beds' => $vacantBeds,
+                'maintenance_beds' => $maintenanceBeds,
                 'occupancy_rate' => $totalBeds > 0 ? round(($occupiedBeds / $totalBeds) * 100, 2) : 0.0,
             ];
         });
@@ -71,6 +74,7 @@ class ReportService
                 'total_beds' => (int) ($summaryData->total_beds ?? 0),
                 'occupied_beds' => (int) ($summaryData->occupied_beds ?? 0),
                 'vacant_beds' => (int) ($summaryData->vacant_beds ?? 0),
+                'maintenance_beds' => (int) ($summaryData->maintenance_beds ?? 0),
             ],
             'rows' => $mappedRows,
             'meta' => $paginator ? [
@@ -164,6 +168,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -265,6 +271,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -356,6 +364,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -406,6 +416,8 @@ class ReportService
                 'tenant_name' => $row->tenant_name,
                 'room_code' => $row->room_code,
                 'due_date' => $row->due_date,
+                'amount_due' => (float) ($row->total_amount ?? 0),
+                'amount_paid' => (float) ($row->total_paid ?? 0),
                 'outstanding_balance' => $totalAmount - $totalPaid,
                 'status' => $row->billing_status,
             ];
@@ -429,6 +441,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -968,8 +982,13 @@ class ReportService
      */
     public static function checkInEfficiency(): array
     {
+        $avgDays = DB::table('contracts')
+            ->whereNotNull('move_in_date')
+            ->select(DB::raw('AVG(DATEDIFF(move_in_date, created_at)) as avg_days'))
+            ->value('avg_days');
+
         return [
-            'avg_onboarding_time_days' => 2.5, // TODO: Implement calculation based on created_at vs move_in_date
+            'avg_onboarding_time_days' => round((float) ($avgDays ?? 0), 1),
             'total_new_checkins_this_month' => DB::table('contracts')
                 ->whereBetween('move_in_date', [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()])
                 ->count(),

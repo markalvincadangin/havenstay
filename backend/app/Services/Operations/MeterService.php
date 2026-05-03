@@ -30,7 +30,7 @@ class MeterService
      */
     public static function recordReading(User $actor, int $meterId, array $data): MeterReading
     {
-        $reading = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'RECORD_METER_READING',
             payload: [
@@ -86,14 +86,12 @@ class MeterService
                     $reading->setAttribute('warning', 'Multiple readings recorded for this calendar month.');
                 }
 
+                $roomId = MeterAssignment::where('meter_id', $meterId)->whereNull('valid_to')->value('room_id');
+                self::clearCache($roomId, $meterId);
+
                 return $reading;
             }
         );
-
-        $roomId = MeterAssignment::where('meter_id', $meterId)->whereNull('valid_to')->value('room_id');
-        self::clearCache($roomId, $meterId);
-
-        return $reading;
     }
 
     /**
@@ -111,7 +109,7 @@ class MeterService
      */
     public static function assignToRoom(User $actor, int $meterId, int $roomId, string $startDate): MeterAssignment
     {
-        $assignment = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'ASSIGN_METER_TO_ROOM',
             payload: ['meter_id' => $meterId, 'room_id' => $roomId, 'start_date_fact' => $startDate],
@@ -121,17 +119,17 @@ class MeterService
                     ->whereNull('valid_to')
                     ->update(['valid_to' => $startDate]);
 
-                return MeterAssignment::create([
+                $assignment = MeterAssignment::create([
                     'meter_id' => $meterId,
                     'room_id' => $roomId,
                     'valid_from' => $startDate,
                 ]);
+
+                self::clearCache($roomId, $meterId);
+
+                return $assignment;
             }
         );
-
-        self::clearCache($roomId, $meterId);
-
-        return $assignment;
     }
 
     /**
@@ -139,7 +137,25 @@ class MeterService
      */
     public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
     {
-        return self::listHistoryQuery($filters)->paginate($perPage, ['*'], 'page', $page);
+        $query = self::listHistoryQuery($filters);
+        
+        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortDir = $filters['sort_dir'] ?? 'desc';
+        
+        if ($sortByRaw === 'serial') {
+            $query->orderBy('serial_number', $sortDir)->orderBy('meter_id', $sortDir);
+        } elseif ($sortByRaw === 'utility') {
+            $query->leftJoin('utilities', 'meters.utility_id', '=', 'utilities.utility_id')
+                  ->orderBy('utilities.name', $sortDir)
+                  ->orderBy('meters.meter_id', $sortDir)
+                  ->select('meters.*');
+        } elseif ($sortByRaw === 'status') {
+            $query->orderBy('status', $sortDir)->orderBy('meter_id', $sortDir);
+        } else {
+            $query->orderByDesc('meter_id');
+        }
+
+        return $query->paginate($perPage, ['*'], 'page', $page);
     }
 
     /**
@@ -212,7 +228,10 @@ class MeterService
             $needle = $filters['q'];
             $query->where(function ($q) use ($needle) {
                 $q->where('serial_number', 'LIKE', "%{$needle}%")
-                    ->orWhere('meter_id', 'LIKE', "%{$needle}%");
+                    ->orWhere('meter_id', 'LIKE', "%{$needle}%")
+                    ->orWhereHas('assignments.room', function ($rq) use ($needle) {
+                        $rq->where('room_code', 'LIKE', "%{$needle}%");
+                    });
             });
         }
 

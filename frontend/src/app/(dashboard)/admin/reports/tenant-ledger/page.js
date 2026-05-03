@@ -22,12 +22,9 @@ import { Table } from "@/components/ui/Table";
 import { BookOpen, User, Landmark, DollarSign, Activity } from "lucide-react";
 import StandardPage from "@/components/ui/StandardPage";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
-import {
-  buildReportListQuery,
-  normalizePaginatedList,
-  normalizeReportRows,
-  readStoredPerPage,
-} from "@/lib/pagination";
+import { normalizePaginatedList, normalizeReportRows } from "@/lib/pagination";
+import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import ResourceView from "@/components/ui/ResourceView";
 import TablePagination from "@/components/ui/TablePagination";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
@@ -38,11 +35,27 @@ export default function TenantLedgerReportPage() {
   const [exporting, setExporting] = useState(false);
   const [apiError, setApiError] = useState("");
   const [tenants, setTenants] = useState([]);
-  const [selectedTenantId, setSelectedTenantId] = useState("");
   const [report, setReport] = useState({ tenant: null, summary: null, entries: [] });
   const [tableMeta, setTableMeta] = useState(null);
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
+
+  const {
+    filters,
+    updateFilter,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { tenant_id: "" },
+    buildExtraParams: ({ filters: current }) => {
+      const extra = {};
+      if (current.tenant_id) extra.tenant_id = current.tenant_id;
+      return extra;
+    },
+  });
+
+  const selectedTenantId = filters.tenant_id;
 
   const { data: tenantsData } = useSWR(
     !authLoading && currentUser && canViewReports(currentUser) ? "/api/tenants?per_page=100" : null,
@@ -56,13 +69,8 @@ export default function TenantLedgerReportPage() {
     }
   }, [tenantsData]);
 
-  const reportQs = useMemo(() => {
-    if (!selectedTenantId) return null;
-    return buildReportListQuery(page, perPage, { tenant_id: selectedTenantId });
-  }, [selectedTenantId, page, perPage]);
-
   const { data: reportData, error: reportError, mutate: loadLedger, isValidating } = useSWR(
-    !authLoading && currentUser && canViewReports(currentUser) && reportQs ? `/api/reports/tenant-ledger${reportQs}` : null,
+    !authLoading && currentUser && canViewReports(currentUser) && selectedTenantId ? `/api/reports/tenant-ledger${queryString}` : null,
     fetcher,
     { keepPreviousData: true }
   );
@@ -85,9 +93,10 @@ export default function TenantLedgerReportPage() {
     }
   }, [reportData, selectedTenantId]);
 
+  const hasActiveFilters = Boolean(selectedTenantId);
+
   const handleTenantChange = (id) => {
-    setSelectedTenantId(id);
-    setPage(1);
+    updateFilter("tenant_id", id);
     if (!id) {
       setReport({ tenant: null, summary: null, entries: [] });
       setTableMeta(null);
@@ -181,42 +190,33 @@ export default function TenantLedgerReportPage() {
         </div>
       )}
 
-      <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
-        <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5 flex items-center justify-between">
-           <div className="flex items-center gap-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600 shadow-sm border border-teal-100/50">
-                 <User size={14} />
-              </div>
-              <h3 className="hs-strip-title uppercase tracking-widest text-xs font-black text-stone-900">Filters</h3>
-           </div>
-           {selectedTenantId && (
-             <Button type="button" variant="ghost" onClick={() => loadLedger()} className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600">
-                Refresh Ledger
-             </Button>
-           )}
+      <FilterPanelCard icon={User}>
+        <div className="flex items-center justify-between mb-4">
+          {selectedTenantId && (
+            <Button type="button" variant="ghost" onClick={() => loadLedger()} className="!h-8 px-3 text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 ml-auto">
+              Refresh Ledger
+            </Button>
+          )}
         </div>
-
-        <div className="p-8">
-            <div className="max-w-md">
-                <Field label="Search Tenant">
-                    <Select
-                    className="!h-11 border-stone-200"
-                    value={selectedTenantId}
-                    onChange={(e) => handleTenantChange(e.target.value)}
-                    disabled={fetchingLedger}
-                    >
-                    <option value="">Select a tenant name...</option>
-                    {tenants.map(t => (
-                        <option key={t.tenant_id} value={t.tenant_id}>
-                        {t.last_name}, {t.first_name} ({t.status})
-                        </option>
-                    ))}
-                    </Select>
-                </Field>
-            </div>
-            {apiError ? <Alert variant="error" className="mt-6" title="Sync Error">{apiError}</Alert> : null}
+        <div className="grid gap-6 sm:grid-cols-2">
+          <Field label="Search Tenant">
+              <Select
+                className="!h-11 border-stone-200"
+                value={selectedTenantId}
+                onChange={(e) => handleTenantChange(e.target.value)}
+                disabled={fetchingLedger}
+              >
+              <option value="">Select a tenant name...</option>
+              {tenants.map(t => (
+                  <option key={t.tenant_id} value={t.tenant_id}>
+                  {t.last_name}, {t.first_name} ({t.status})
+                  </option>
+              ))}
+              </Select>
+          </Field>
         </div>
-      </Card>
+        {apiError ? <Alert variant="error" className="mt-6" title="Sync Error">{apiError}</Alert> : null}
+      </FilterPanelCard>
 
       {selectedTenantId ? (
         <ResourceView
@@ -227,12 +227,29 @@ export default function TenantLedgerReportPage() {
           onRetry={() => loadLedger()}
           skeleton={<SkeletonListPage rows={10} />}
           emptyProps={{
-            title: "No financial records found",
-            message: "This tenant has no recorded transactions in the authoritative ledger."
+            title: selectedTenantId ? "No transactions found" : "No tenant selected",
+            description: selectedTenantId 
+              ? "This tenant has no financial entries on record." 
+              : "Select a tenant from the filters above to view their financial ledger.",
+            action: hasActiveFilters ? (
+              <Button
+                variant="secondary"
+                className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+                onClick={() => updateFilter("tenant_id", "")}
+              >
+                Clear filters
+              </Button>
+            ) : null
           }}
         >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
-                <Table
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">FINANCIAL STATEMENT DIRECTORY</h2>
+            <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+              {tableMeta?.total ?? entries.length} ENTRIES
+            </div>
+          </div>
+          <Table
                 embedded={true}
                 caption={`Financial statement for ${report.tenant?.name}`}
                 ariaLabel="Tenant financial ledger"

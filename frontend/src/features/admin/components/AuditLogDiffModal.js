@@ -110,8 +110,8 @@ export const AuditLogDiffModal = ({ audit, onClose }) => {
                   </p>
                 )}
                 <p className="text-sm text-stone-500 leading-relaxed font-medium">
-                  {audit.is_success 
-                    ? "This event was processed successfully. No record values were mutated during this action." 
+                  {audit.is_success
+                    ? "This event was processed successfully. No record values were mutated during this action."
                     : "The system recorded a failure or unauthorized attempt for this operation."}
                 </p>
               </div>
@@ -121,8 +121,8 @@ export const AuditLogDiffModal = ({ audit, onClose }) => {
               <thead className="bg-stone-50/80 sticky top-0 z-10 backdrop-blur-md">
                 <tr className="border-b border-stone-100">
                   <th className="px-8 py-4 font-bold text-stone-900 text-[10px] uppercase tracking-widest bg-stone-50/80">Attribute</th>
-                  <th className="px-8 py-4 font-bold text-stone-900 text-[10px] uppercase tracking-widest bg-stone-50/80 w-[40%]">Prior State</th>
-                  <th className="px-8 py-4 font-bold text-stone-900 text-[10px] uppercase tracking-widest bg-stone-50/80 w-[40%]">Target State</th>
+                  <th className="px-8 py-4 font-bold text-stone-900 text-[10px] uppercase tracking-widest bg-stone-50/80 w-[40%]">Old Value</th>
+                  <th className="px-8 py-4 font-bold text-stone-900 text-[10px] uppercase tracking-widest bg-stone-50/80 w-[40%]">New Value</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 font-mono text-[11px] font-bold tabular-nums">

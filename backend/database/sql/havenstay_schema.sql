@@ -1,12 +1,9 @@
--- HavenStay Boarding House Management System (BHMS)
--- Version: 5.0 (Forensic Audit Hardened)
--- Date: 2026-05-02
--- Description: Standardized forensic triggers with IP propagation, 
---              Soft-Delete/Restore detection, and refined context attribution.
+-- HavenStay Boarding House Management System
+
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- ── DROP ALL OBJECTS ──
+-- DROP ALL OBJECTS
 
 DROP TRIGGER IF EXISTS trg_roles_ai; DROP TRIGGER IF EXISTS trg_roles_au; DROP TRIGGER IF EXISTS trg_roles_ad;
 DROP TRIGGER IF EXISTS trg_users_ai; DROP TRIGGER IF EXISTS trg_users_au; DROP TRIGGER IF EXISTS trg_users_ad;
@@ -48,7 +45,7 @@ DROP VIEW IF EXISTS vw_occupancy_status;
 DROP VIEW IF EXISTS vw_collections_summary;
 DROP VIEW IF EXISTS vw_tenant_contract_history;
 
--- ── SECTION 1: CORE OPERATIONAL ENTITIES (14 TABLES) ──
+-- CORE OPERATIONAL ENTITIES (14 TABLES)
 
 CREATE TABLE roles (
     role_id     INT AUTO_INCREMENT PRIMARY KEY,
@@ -75,7 +72,7 @@ CREATE TABLE users (
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at    DATETIME NULL,
-    -- Forensic Uniqueness (allows re-registration after soft-delete)
+    -- Uniqueness (allows re-registration after soft-delete)
     active_username VARCHAR(100) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN username ELSE NULL END) VIRTUAL,
     active_email    VARCHAR(150) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN email    ELSE NULL END) VIRTUAL,
     UNIQUE KEY uq_active_username (active_username),
@@ -92,11 +89,11 @@ CREATE TABLE tenants (
     emergency_contact_name   VARCHAR(200) NOT NULL,
     emergency_contact_number VARCHAR(20)  NOT NULL,
     address                  TEXT         NOT NULL,
-    status                   ENUM('active','moved_out','archived') DEFAULT 'active',
+    status                   ENUM('onboarded','active','moved_out','archived') DEFAULT 'onboarded',
     created_at               DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at               DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at               DATETIME NULL,
-    -- Forensic Uniqueness (allows re-registration after soft-delete)
+    -- Uniqueness (allows re-registration after soft-delete)
     active_email VARCHAR(150) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN email ELSE NULL END) VIRTUAL,
     UNIQUE KEY uq_active_tenant_email (active_email),
     INDEX idx_tenant_lookup (last_name, first_name)
@@ -245,7 +242,6 @@ CREATE TABLE billing_line_items (
     CONSTRAINT fk_bli_reading FOREIGN KEY (reading_id) REFERENCES meter_readings (reading_id),
     CONSTRAINT chk_bli_amount   CHECK (amount <> 0),
     CONSTRAINT chk_bli_polarity CHECK ( (item_type = 'adjustment') OR (amount > 0) ),
-    -- Forensic Utility Linkage: Mandates references for 'utility' types (Level 5 Hardening)
     CONSTRAINT chk_bli_utility_link CHECK ( (item_type <> 'utility') OR (utility_id IS NOT NULL AND reading_id IS NOT NULL) )
 ) ENGINE=InnoDB;
 
@@ -274,13 +270,12 @@ CREATE TABLE payments (
         (billing_id IS NOT NULL AND contract_id IS NULL) OR
         (billing_id IS NULL AND contract_id IS NOT NULL)
     ),
-    -- BR-PAY-002: Reference number is mandatory for traceable payment methods
     CONSTRAINT chk_pay_ref_required CHECK (
         payment_method NOT IN ('gcash', 'bank_transfer') OR reference_number IS NOT NULL
     )
 ) ENGINE=InnoDB;
 
--- ── SECTION 2: FORENSIC TABLES (1 TABLE) ──
+-- AUDIT LOGS TABLE
 
 CREATE TABLE audit_logs (
     id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -304,7 +299,6 @@ CREATE TABLE audit_logs (
     execution_time_ms INT          NULL,
     metadata          JSON         NULL,
     changed_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
-    -- Performance Hardening
     INDEX idx_audit_timestamp (changed_at),
     INDEX idx_audit_resource  (target_table, record_id),
     INDEX idx_audit_action    (action),
@@ -313,7 +307,7 @@ CREATE TABLE audit_logs (
     INDEX idx_audit_request     (request_id)
 ) ENGINE=InnoDB;
 
--- ── SECTION 3: REFERENCE DATA ──
+-- REFERENCE DATA
 
 INSERT INTO roles (role_id, role_name, description) VALUES
 (1, 'admin',  'System Administrator'),
@@ -327,7 +321,7 @@ INSERT INTO utilities (utility_id, name, unit_of_measurement) VALUES
 (1, 'Electricity', 'kWh'),
 (2, 'Water', 'm3');
 
--- ── SECTION 4: FORENSIC AUDIT ENGINE (42 TRIGGERS) ──
+-- AUDIT TRIGGERS
 
 DELIMITER //
 
@@ -532,7 +526,7 @@ CREATE TRIGGER trg_audit_logs_protect_bd BEFORE DELETE ON audit_logs FOR EACH RO
 
 DELIMITER ;
 
--- ── SECTION 5: ANALYTICAL ENGINE (6 VIEWS) ──
+-- ANALYTICAL ENGINE
 
 CREATE VIEW vw_billing_summary AS
 SELECT
@@ -587,7 +581,8 @@ SELECT
     r.status AS room_status,
     COUNT(bs.bed_space_id) AS total_beds,
     SUM(CASE WHEN bs.status = 'occupied' THEN 1 ELSE 0 END) AS occupied_beds,
-    SUM(CASE WHEN bs.status = 'vacant' THEN 1 ELSE 0 END) AS vacant_beds
+    SUM(CASE WHEN bs.status = 'vacant' THEN 1 ELSE 0 END) AS vacant_beds,
+    SUM(CASE WHEN bs.status = 'maintenance' THEN 1 ELSE 0 END) AS maintenance_beds
 FROM rooms r
 LEFT JOIN bed_spaces bs ON r.room_id = bs.room_id
 WHERE r.deleted_at IS NULL AND r.status != 'decommissioned'

@@ -10,8 +10,8 @@
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
-2. [Temporal Definitions (BR-015)](#2-temporal-definitions-br-015)
-3. [Operational Windows (BR-019)](#3-operational-windows-br-019)
+2. [Temporal Definitions](#2-temporal-definitions)
+3. [Operational Windows](#3-operational-windows)
 4. [Environmental Constants](#4-environmental-constants)
 5. [Routine Maintenance](#5-routine-maintenance)
 6. [Revision History](#6-revision-history)

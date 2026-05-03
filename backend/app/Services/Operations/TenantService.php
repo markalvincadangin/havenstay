@@ -8,6 +8,7 @@ use App\Models\Contract;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Concerns\ManagesWorkflows;
+use App\Support\OperationalHardening;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
@@ -37,13 +38,9 @@ class TenantService
                 'email' => $data['email'] ?? 'N/A',
                 'name_fact' => ($data['first_name'] ?? '').' '.($data['last_name'] ?? ''),
             ],
-            operation: fn (): Tenant => Tenant::create($data),
+            operation: fn (): Tenant => tap(Tenant::create($data), fn() => self::clearCache()),
             resultDetails: fn (Tenant $tenant): array => ['tenant_id' => $tenant->tenant_id]
         );
-
-        self::clearCache();
-
-        return $tenant;
     }
 
     /**
@@ -65,34 +62,19 @@ class TenantService
             action: 'UPDATE_TENANT',
             payload: ['tenant_id' => $tenant->tenant_id, 'email_context' => $tenant->email],
             operation: function () use ($tenant, $data): Tenant {
-                $hasStatusChange = array_key_exists('status', $data) && $data['status'] != $tenant->status;
-
-                if ($hasStatusChange) {
-                    $newStatus = $data['status'] instanceof TenantStatus ? $data['status'] : TenantStatus::tryFrom($data['status']);
-
-                    if ($newStatus === TenantStatus::MOVED_OUT) {
-                        throw ValidationException::withMessages([
-                            'status' => ['Tenant status is system-managed via move-out workflow (BR-TEN-004).'],
-                        ]);
-                    }
-
-                    if (self::hasActiveContract($tenant->tenant_id)) {
-                        throw ValidationException::withMessages([
-                            'status' => ['Tenant status cannot be changed while an active contract exists.'],
-                        ]);
-                    }
+                if (array_key_exists('status', $data)) {
+                    throw ValidationException::withMessages([
+                        'status' => ['Tenant status is system-managed and cannot be modified manually (BR-TEN-004).'],
+                    ]);
                 }
 
                 $tenant->update($data);
+                self::clearCache();
 
                 return $tenant;
             },
             resultDetails: fn (Tenant $updatedTenant): array => ['tenant_id' => $updatedTenant->tenant_id]
         );
-
-        self::clearCache();
-
-        return $tenant;
     }
 
     /**
@@ -122,25 +104,6 @@ class TenantService
     }
 
     /**
-     * Reactivate a moved-out or inactive tenant.
-     */
-    public static function reactivate(User $actor, Tenant $tenant): Tenant
-    {
-        return self::runWriteWorkflow(
-            actorId: $actor->user_id,
-            action: 'REACTIVATE_TENANT',
-            payload: ['tenant_id' => $tenant->tenant_id],
-            operation: function () use ($tenant): Tenant {
-                $tenant->update(['status' => TenantStatus::ACTIVE]);
-                // Ensure state is actually correct post-reactivation
-                self::syncStatus((int) $tenant->tenant_id);
-
-                return $tenant->fresh();
-            }
-        );
-    }
-
-    /**
      * Restore an archived tenant.
      */
     public static function restore(User $actor, int $id): Tenant
@@ -151,6 +114,25 @@ class TenantService
             payload: ['tenant_id' => $id],
             operation: function () use ($id): Tenant {
                 $tenant = Tenant::withTrashed()->findOrFail($id);
+
+                // Pre-flight: Check that the archived tenant's email is still available.
+                // The active_email VIRTUAL column enforces this at DB level, but we surface
+                // a clean, actionable error before hitting the constraint.
+                $conflicting = Tenant::where('email', $tenant->email)
+                    ->whereNull('deleted_at')
+                    ->where('tenant_id', '!=', $id)
+                    ->first(['tenant_id', 'first_name', 'last_name']);
+
+                if ($conflicting) {
+                    throw ValidationException::withMessages([
+                        'email' => [
+                            "Cannot restore tenant #{$id}: the email address '{$tenant->email}' is already registered " .
+                            "to active tenant #{$conflicting->tenant_id} ({$conflicting->first_name} {$conflicting->last_name}). " .
+                            "Update that tenant's email first before restoring this record."
+                        ],
+                    ]);
+                }
+
                 $tenant->restore();
                 self::syncStatus($id);
 
@@ -202,8 +184,20 @@ class TenantService
     {
         $query = $filters['q'] ?? '';
         $status = $filters['status'] ?? '';
+        
+        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortDir = $filters['sort_dir'] ?? 'asc';
+        
+        $sortBy = match ($sortByRaw) {
+            'id' => 'tenants.tenant_id',
+            'name' => 'tenants.last_name',
+            'room' => 'vw_active_contracts.room_code',
+            'balance' => 'outstanding_balance',
+            'status' => 'tenants.status',
+            default => 'tenants.last_name',
+        };
 
-        return self::searchRichBuilder($query, $status)->paginate($perPage, ['*'], 'page', $page);
+        return self::searchRichBuilder($query, $status, $sortBy, $sortDir)->paginate($perPage, ['*'], 'page', $page);
     }
 
     /**
@@ -211,7 +205,7 @@ class TenantService
      */
     public static function getById(int $id): ?Tenant
     {
-        return self::searchRichBuilder()->find($id);
+        return self::searchRichBuilder(includeTrashed: true)->find($id);
     }
 
     /**
@@ -219,12 +213,12 @@ class TenantService
      *
      * @return Builder<Tenant>
      */
-    public static function searchRichBuilder(string $query = '', string $status = '', string $sortBy = 'last_name', string $sortOrder = 'asc'): Builder
+    public static function searchRichBuilder(string $query = '', string $status = '', string $sortBy = 'last_name', string $sortOrder = 'asc', bool $includeTrashed = false): Builder
     {
         $q = Tenant::query();
 
-        if ($status === TenantStatus::ARCHIVED->value) {
-            $q->onlyTrashed();
+        if ($status === TenantStatus::ARCHIVED->value || $includeTrashed) {
+            $q->withTrashed();
         } else {
             $q->withoutTrashed();
         }
@@ -250,12 +244,19 @@ class TenantService
             );
 
         if (! empty($query)) {
-            $q->where(function ($iq) use ($query) {
-                $iq->where('tenants.first_name', 'LIKE', "%{$query}%")
-                    ->orWhere('tenants.last_name', 'LIKE', "%{$query}%")
-                    ->orWhere('tenants.email', 'LIKE', "%{$query}%");
-                if (ctype_digit($query)) {
-                    $iq->orWhere('tenants.tenant_id', (int) $query);
+            $needle = trim((string) $query);
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $q->where(function ($iq) use ($needle, $forensicId) {
+                if ($forensicId) {
+                    $iq->where('tenants.tenant_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $iq->where('tenants.first_name', 'LIKE', "%{$stripped}%")
+                        ->orWhere('tenants.last_name', 'LIKE', "%{$stripped}%")
+                        ->orWhere(DB::raw("CONCAT(tenants.first_name, ' ', tenants.last_name)"), 'LIKE', "%{$stripped}%")
+                        ->orWhere('tenants.email', 'LIKE', "%{$stripped}%")
+                        ->orWhere('tenants.contact_number', 'LIKE', "%{$stripped}%");
                 }
             });
         }
@@ -264,7 +265,8 @@ class TenantService
             $q->where('tenants.status', $status);
         }
 
-        return $q->orderBy($sortBy, $sortOrder === 'desc' ? 'desc' : 'asc');
+        return $q->orderBy($sortBy, $sortOrder === 'desc' ? 'desc' : 'asc')
+            ->orderBy('tenants.tenant_id', $sortOrder === 'desc' ? 'desc' : 'asc');
     }
 
     /**
@@ -279,9 +281,6 @@ class TenantService
             ->exists();
     }
 
-    /**
-     * Synchronize a tenant's profile status based on their contract history.
-     */
     public static function syncStatus(int $tenantId): void
     {
         $tenant = Tenant::withTrashed()->find($tenantId);
@@ -298,11 +297,24 @@ class TenantService
             return;
         }
 
+        // Level 1: Check for current residency (Active/Pending)
         $hasActive = Contract::where('tenant_id', $tenantId)
             ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])
+            ->whereNull('deleted_at')
             ->exists();
 
-        $newStatus = $hasActive ? TenantStatus::ACTIVE : TenantStatus::MOVED_OUT;
+        if ($hasActive) {
+            $newStatus = TenantStatus::ACTIVE;
+        } else {
+            // Level 2: Check for any historical residency (Completed/Terminated/Voided)
+            // Rule: VOIDED contracts do not count as residency history (BR-CON-012).
+            $hasHistory = Contract::where('tenant_id', $tenantId)
+                ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT, ContractStatus::COMPLETED, ContractStatus::TERMINATED])
+                ->whereNull('deleted_at')
+                ->exists();
+
+            $newStatus = $hasHistory ? TenantStatus::MOVED_OUT : TenantStatus::ONBOARDED;
+        }
 
         if ($tenant->status !== $newStatus) {
             $tenant->update(['status' => $newStatus]);

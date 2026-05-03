@@ -27,6 +27,7 @@ class AuthService
     {
         $identifier = trim((string) ($credentials['username'] ?? $credentials['email'] ?? ''));
         if ($identifier === '') {
+            AuditService::logFailedLogin('unknown', 'Empty credentials provided');
             throw ValidationException::withMessages([
                 'username' => ['The username or email field is required.'],
             ]);
@@ -36,6 +37,7 @@ class AuthService
 
         $user = User::where($loginField, $identifier)->first();
         if ($user && ! $user->isActive()) {
+            AuditService::logFailedLogin($identifier, 'Account deactivated');
             throw ValidationException::withMessages([
                 'username' => ['This account has been deactivated.'],
             ]);
@@ -45,6 +47,7 @@ class AuthService
             $loginField => $identifier,
             'password' => $credentials['password'],
         ])) {
+            AuditService::logFailedLogin($identifier, 'Invalid credentials');
             throw ValidationException::withMessages([
                 'username' => ['The provided credentials are incorrect.'],
             ]);

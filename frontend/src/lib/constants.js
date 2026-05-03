@@ -22,6 +22,7 @@ export const PAYMENT_STATUS_LABELS = {
 
 // 2. Tenant Statuses
 export const TENANT_STATUS_LABELS = {
+  onboarded: "Onboarded",
   active: "Active",
   moved_out: "Moved Out",
   archived: "Archived",
@@ -106,7 +107,7 @@ export const BILLING_STATUS_LABELS = {
 };
 
 export const BILLING_AGING_FILTER_LABELS = {
-  all: "All balances",
+  all: "All Balances",
   current: "Current (not yet due)",
   past_due: "Past-due balances",
 };
@@ -134,13 +135,19 @@ export const AUDIT_ACTION_LABELS = {
   archive: "Archive",
   restore: "Restore",
   // Uppercase keys for Direct Database Trigger Parity
-  INSERT: "Insert",
+  CREATE: "Create",
   UPDATE: "Update",
   DELETE: "Delete",
+  SOFT_DELETE: "Soft Delete",
+  RESTORE: "Restore",
+  LOGIN: "Login",
+  LOGOUT: "Logout",
   FAILED_LOGIN: "Failed Login",
   ACCESS_DENIED: "Access Denied",
   VOID: "Void",
-  void: "Void",
+  SYSTEM: "System Event",
+  SECURITY: "Security Alert",
+  EXPORT: "Export",
 };
 
 /** `audit_logs.target_table` display names (filters + table). */
@@ -172,8 +179,10 @@ export const AUDIT_ENTITY_FILTER_GROUPS = {
     "bed_spaces",
     "contracts",
     "users",
+    "roles",
   ],
-  "Metrology & Assets": [
+  "Utility": [
+    "utilities",
     "meters",
     "meter_readings",
     "meter_assignments",
@@ -294,7 +303,7 @@ export const USER_ROLE_FALLBACK_OPTIONS = [
 ];
 
 export const USER_ACCOUNT_STATUS_FILTER_LABELS = {
-  all: "All statuses",
+  all: "All Statuses",
   active: "Active",
   inactive: "Inactive",
   archived: "Archived",
@@ -365,5 +374,51 @@ export const ID_PREFIX_MAP = {
   meter: "MTR",
   rate: "RATE",
   user: "USER",
-  utility: "SVC",
+  utility: "UTL",
 };
+// 10. Dashboard UI Labels & Search Patterns
+
+export const SEARCH_LABELS = {
+  tenants: "Search Tenants",
+  rooms: "Search Rooms",
+  contracts: "Search Contracts",
+  billing: "Search Billing",
+  payments: "Search Payments",
+  audit_logs: "Search Audit Logs",
+  users: "Search Users",
+  utilities: "Search Utilities",
+  meters: "Search Meters",
+};
+
+export const SEARCH_PLACEHOLDERS = {
+  tenants: "Name, phone, email, or #TENANT ID…",
+  rooms: "Room code, tenant name, amenities, or #ROOM ID…",
+  contracts: "Tenant name, room code, or #CONTRACT ID…",
+  billing: "Tenant name, phone, or #BILL ID…",
+  payments: "Tenant name, reference, or #PAYMENT ID…",
+  audit_logs: "IP address, actor name, or #LOG ID…",
+  users: "Name, username, email, or #USER ID…",
+  utilities: "Name, measurement unit, or #UTILITY ID…",
+  meters: "Serial number, assigned room, or #METER ID…",
+};
+
+/** Shared UI filter standard labels. */
+export const FILTER_ALL_OPTION = "All Statuses";
+
+export const ROLE_FILTER_LABELS = {
+  all: "All Roles",
+  ...ROLE_NAME_LABELS
+};
+
+export const UTILITY_TYPE_FILTER_LABELS = {
+  all: "All Types"
+};
+
+export const UTILITY_STATUS_FILTER_LABELS = {
+  all: "All Statuses",
+  active: "Active",
+  archived: "Archived"
+};
+export const FILTER_ALL_TYPES = "All Types";
+export const FILTER_ALL_RESOURCES = "All Resources";
+export const FILTER_ALL_ACTIONS = "All Actions";

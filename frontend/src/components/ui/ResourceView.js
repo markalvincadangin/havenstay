@@ -86,23 +86,25 @@ export default function ResourceView({
       <AnimatePresence>
         {isSyncing && (
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute left-0 top-0 z-50 h-[2px] w-full overflow-hidden bg-stone-100/20 pointer-events-none"
+            initial={{ opacity: 0, scaleY: 0 }}
+            animate={{ opacity: 1, scaleY: 1 }}
+            exit={{ opacity: 0, scaleY: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute left-0 top-0 z-50 h-[3px] w-full overflow-hidden bg-teal-600/10 pointer-events-none origin-top"
           >
-            <div className="hs-indeterminate-bar h-full w-full bg-teal-600" />
+            <div className="hs-indeterminate-bar hs-loading-glow h-full w-full bg-teal-600" />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <motion.div
-        animate={{ opacity: isSyncing ? 0.6 : 1 }}
-        transition={{ duration: 0.2, ease: "easeInOut" }}
-        className="h-full"
+      <div
+        className={[
+          "h-full transition-all duration-300",
+          isSyncing ? "hs-resource-syncing" : ""
+        ].join(" ")}
       >
         {children}
-      </motion.div>
+      </div>
     </div>
   );
 }

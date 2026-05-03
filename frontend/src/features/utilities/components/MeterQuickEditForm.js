@@ -17,6 +17,8 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
   const isEditing = !!meter?.meter_id;
   const readOnly = isEditing && !canManageMeters(currentUser);
 
+  const [scannedDuplicate, setScannedDuplicate] = useState(null);
+
   const { data: utilitiesData } = useSWR("/api/utilities", fetcher);
 
   const {
@@ -33,6 +35,21 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
       remarks: meter?.remarks || "",
     },
   });
+
+  const checkUniqueness = async (value) => {
+    if (isEditing || !value || value.trim().length < 3) {
+      setScannedDuplicate(null);
+      return;
+    }
+    try {
+      const results = await apiRequest(`/api/meters?q=${encodeURIComponent(value.trim())}`);
+      const list = results?.data || results || [];
+      const match = list.find(m => m.serial_number?.toLowerCase().trim() === value.trim().toLowerCase());
+      setScannedDuplicate(match ? match.meter_id : null);
+    } catch (e) {
+      // Ignore
+    }
+  };
 
   const onSubmit = async (values) => {
     if (readOnly) return;
@@ -67,6 +84,7 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
     <QuickEditFormShell
       onSubmit={handleSubmit(onSubmit)}
       isSubmitting={isSubmitting}
+      isSubmitDisabled={!!scannedDuplicate}
       onCancel={onCancel}
       submitLabel={isEditing ? "Update Meter" : "Register Hardware"}
     >
@@ -80,17 +98,28 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
           <Settings size={12} /> Hardware ID
         </h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Serial Number" required error={errors.serial_number?.message}>
-            <Input className="!h-10 border-stone-200 font-bold font-mono tracking-wider" disabled={readOnly || isEditing} {...register("serial_number", { required: "Required" })} />
+          <Field 
+            label="Serial Number" 
+            required 
+            error={errors.serial_number?.message}
+            warning={scannedDuplicate ? "This serial number is already registered to another meter." : null}
+          >
+            <Input 
+              className="!h-10 border-stone-200 font-bold font-mono tracking-wider" 
+              disabled={readOnly || isEditing} 
+              {...register("serial_number", { required: "Required" })} 
+              onBlur={(e) => checkUniqueness(e.target.value)}
+              hasError={Boolean(errors.serial_number || scannedDuplicate)}
+            />
           </Field>
           <Field label="Utility Type" required error={errors.utility_id?.message}>
-            <Select className="!h-10 border-stone-200" disabled={readOnly || isEditing} {...register("utility_id", { required: "Required" })}>
+            <Select className="!h-10 border-stone-200 font-bold" disabled={readOnly || isEditing} {...register("utility_id", { required: "Required" })}>
               <option value="">Select utility...</option>
               {(utilitiesData || []).map(u => <option key={u.utility_id} value={u.utility_id}>{u.name}</option>)}
             </Select>
           </Field>
           <Field label="Operational Status" required>
-            <Select className="!h-10 border-stone-200" disabled={readOnly} {...register("status")}>
+            <Select className="!h-10 border-stone-200 font-bold" disabled={readOnly} {...register("status")}>
               <option value="active">Active</option>
               <option value="maintenance">Maintenance</option>
               <option value="archived">Archived</option>
@@ -102,7 +131,7 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
         </div>
       </div>
 
-      <div>
+      <div className="mt-6">
         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400 mb-4 flex items-center gap-2">
           <Info size={12} /> Notes
         </h3>

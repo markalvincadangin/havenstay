@@ -5,8 +5,8 @@ import { FileText, Search, ShieldCheck, PlusCircle, Hourglass, Landmark, Trendin
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { canManageContracts } from "@/lib/auth";
-import { useTableSort } from "@/hooks/useTableSort";
-import { sortClientRows } from "@/lib/tableSort";
+
+
 import {
   compareTenantDirectoryName,
   formatDateString,
@@ -31,7 +31,7 @@ import {
   normalizePaginatedList,
   normalizeReportRows,
 } from "@/lib/pagination";
-import { CONTRACT_STATUS_LABELS } from "@/lib/constants";
+import { CONTRACT_STATUS_LABELS, SEARCH_LABELS, SEARCH_PLACEHOLDERS, FILTER_ALL_OPTION } from "@/lib/constants";
 import StandardPage from "@/components/ui/StandardPage";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { useAuth } from "@/context/AuthContext";
@@ -47,21 +47,32 @@ export default function ContractsListPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [editingContract, setEditingContract] = useState(null);
-  const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
-    usePaginatedFilters({
-      initialFilters: { search: "", status: "all" },
-      debounceKeys: ["search"],
-      buildExtraParams: ({ filters: current, debounced }) => {
-        const extra = {};
-        const q = String(debounced.search ?? "").trim();
-        if (q) extra.q = q;
-        if (current.status !== "all") extra.status = current.status;
-        return extra;
-      },
-    });
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    sort,
+    onSortChange,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { search: "", status: "all" },
+    initialSort: { by: "id", dir: "desc" },
+    debounceKeys: ["search"],
+    buildExtraParams: ({ filters: current, debounced }) => {
+      const extra = {};
+      const q = String(debounced.search ?? "").trim();
+      if (q) extra.q = q;
+      if (current.status !== "all") extra.status = current.status;
+      return extra;
+    },
+  });
   const searchQuery = filters.search;
   const statusFilter = filters.status;
-  const { sortColumn, sortDirection, onSortChange } = useTableSort();
+  
   const { data: reportData, isValidating: reportValidating } = useSWR(
     currentUser ? "/api/reports/active-contracts" : null,
     fetcher,
@@ -88,32 +99,7 @@ export default function ContractsListPage() {
     return normalizePaginatedList(contractData);
   }, [contractData]);
   const loading = !contractData && !contractError;
-  const sortedRows = useMemo(() => {
-    if (!sortColumn) return contracts;
-    if (sortColumn === "tenant") {
-      const list = [...contracts];
-      const dir = sortDirection === "asc" ? 1 : -1;
-      list.sort((a, b) => {
-        const ta = a.tenant;
-        const tb = b.tenant;
-        if (!ta && !tb) return 0;
-        if (!ta) return 1;
-        if (!tb) return -1;
-        return compareTenantDirectoryName(ta, tb) * dir;
-      });
-      return list;
-    }
-    return sortClientRows(contracts, sortColumn, sortDirection, (c) => {
-      switch (sortColumn) {
-        case "contract_id": return Number(c.contract_id) || 0;
-        case "move_in_date": return c.move_in_date || "";
-        case "room": return c.room?.room_code || "";
-        case "monthly_rate": return Number(c.monthly_rate) || 0;
-        case "status": return c.status || "";
-        default: return "";
-      }
-    });
-  }, [contracts, sortColumn, sortDirection]);
+  const sortedRows = contracts;
   const canWrite = canManageContracts(currentUser);
   const hasActiveFilters = Boolean(String(searchQuery ?? "").trim()) || statusFilter !== "all";
   return (
@@ -179,15 +165,15 @@ export default function ContractsListPage() {
         <FilterPanelCard icon={FileText} title="Filters">
           <div className="grid items-end gap-6 md:grid-cols-12">
             <div className="md:col-span-8 lg:col-span-9">
-              <Field label="Search Contracts">
+              <Field label={SEARCH_LABELS.contracts}>
                 <div className="group relative">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600"
                     aria-hidden
                   />
                   <Input
-                    placeholder="Tenant name, room code, or #CONTRACT ID…"
-                    className="!h-12 border-stone-200 pl-11 transition-[border-color,box-shadow] focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5"
+                    placeholder={SEARCH_PLACEHOLDERS.contracts}
+                    className="!h-12 border-stone-200 pl-11 font-bold transition-[border-color,box-shadow] focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5"
                     value={searchQuery}
                     onChange={(e) => updateFilter("search", e.target.value)}
                   />
@@ -201,7 +187,7 @@ export default function ContractsListPage() {
                   onChange={(e) => updateFilter("status", e.target.value)}
                   className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                 >
-                  <option value="all">All statuses</option>
+                  <option value="all">{FILTER_ALL_OPTION}</option>
                   {Object.entries(CONTRACT_STATUS_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
                   ))}
@@ -214,13 +200,13 @@ export default function ContractsListPage() {
             items={[
               {
                 key: "search",
-                label: "Query",
+                label: "Contracts",
                 value: searchQuery,
                 onClear: () => updateFilter("search", ""),
               },
               {
                 key: "status",
-                label: "Status",
+                label: "Contract Status",
                 value:
                   statusFilter !== "all"
                     ? CONTRACT_STATUS_LABELS[statusFilter] || statusFilter
@@ -266,13 +252,17 @@ export default function ContractsListPage() {
           >
             <Card className="overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-sm hs-glass-effect">
               <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Contract Directory</h2>
+                <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">CONTRACT DIRECTORY</h2>
                 <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
-                  {listMeta?.total ?? sortedRows.length} matching records
+                  {listMeta?.total ?? sortedRows.length} CONTRACTS MATCHING
                 </div>
               </div>
               <Table
                 embedded
+                sortable
+                sortColumn={sort.by}
+                sortDirection={sort.dir}
+                onSortChange={onSortChange}
                 columns={[
                   { key: "contract_id", label: "CONTRACT ID", sortable: true, sortKey: "contract_id", className: "pl-8" },
                   { key: "tenant", label: "TENANT", sortable: true, sortKey: "tenant" },
@@ -282,9 +272,6 @@ export default function ContractsListPage() {
                   { key: "status", label: "STATUS", sortable: true, sortKey: "status", className: "text-center" },
                   { key: "actions", label: "", className: "text-right w-16 px-8" },
                 ]}
-                sortColumn={sortColumn}
-                sortDirection={sortDirection}
-                onSortChange={onSortChange}
                 rows={sortedRows.map((c) => {
                   const tenant = c.tenant;
                   const tenantName = tenant ? formatTenantDirectoryName(tenant) : "—";

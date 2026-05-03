@@ -20,7 +20,7 @@ import CurrencyCell from "@/components/ui/CurrencyCell";
 import StandardPage from "@/components/ui/StandardPage";
 import Avatar from "@/components/ui/Avatar";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import { TENANT_STATUS_LABELS } from "@/lib/constants";
+import { TENANT_STATUS_LABELS, SEARCH_LABELS, SEARCH_PLACEHOLDERS, FILTER_ALL_OPTION } from "@/lib/constants";
 import {
   normalizePaginatedList,
 } from "@/lib/pagination";
@@ -30,8 +30,8 @@ import {
   compareTenantDirectoryName,
   formatPII,
 } from "@/lib/formatters";
-import { useTableSort } from "@/hooks/useTableSort";
-import { sortClientRows } from "@/lib/tableSort";
+
+
 import { useAuth } from "@/context/AuthContext";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
@@ -45,21 +45,32 @@ export default function TenantsPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const [editingTenant, setEditingTenant] = useState(null);
-  const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
-    usePaginatedFilters({
-      initialFilters: { query: "", status: "all" },
-      debounceKeys: ["query"],
-      buildExtraParams: ({ filters: current, debounced }) => {
-        const extra = {};
-        const q = String(debounced.query ?? "").trim();
-        if (q) extra.q = q;
-        if (current.status !== "all") extra.status = current.status;
-        return extra;
-      },
-    });
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    sort,
+    onSortChange,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { query: "", status: "all" },
+    initialSort: { by: "id", dir: "desc" },
+    debounceKeys: ["query"],
+    buildExtraParams: ({ filters: current, debounced }) => {
+      const extra = {};
+      const q = String(debounced.query ?? "").trim();
+      if (q) extra.q = q;
+      if (current.status !== "all") extra.status = current.status;
+      return extra;
+    },
+  });
   const query = filters.query;
   const statusFilter = filters.status;
-  const { sortColumn, sortDirection, onSortChange } = useTableSort();
+  
   const { data: tenantSummaryData, isValidating: summaryValidating } = useSWR(
     currentUser ? "/api/tenants/summary" : null,
     fetcher,
@@ -74,24 +85,10 @@ export default function TenantsPage() {
     if (!tenantData) return { rows: [], meta: null };
     return normalizePaginatedList(tenantData);
   }, [tenantData]);
-  const sortedFiltered = useMemo(() => {
-    if (!sortColumn) return tenants;
-    if (sortColumn === "name") {
-      const list = [...tenants];
-      const dir = sortDirection === "asc" ? 1 : -1;
-      list.sort((a, b) => compareTenantDirectoryName(a, b) * dir);
-      return list;
-    }
-    return sortClientRows(tenants, sortColumn, sortDirection, (t) => {
-      switch (sortColumn) {
-        case "id": return Number(t.tenant_id) || 0;
-        case "room": return t.room_code || "";
-        case "balance": return Number(t.outstanding_balance) || 0;
-        case "status": return t.status || "";
-        default: return "";
-      }
-    });
-  }, [tenants, sortColumn, sortDirection]);
+  
+  // Tenants are sorted on the server, we just pass them directly.
+  const sortedFiltered = tenants;
+  
   const stats = useMemo(() => ({
     activeCount: Number(tenantSummaryData?.active_tenants ?? 0),
     newOnboarded: Number(tenantSummaryData?.new_onboarded_mtd ?? 0),
@@ -167,11 +164,11 @@ export default function TenantsPage() {
         )}
         <div className="grid gap-6 md:grid-cols-12 items-end">
           <div className="md:col-span-9">
-            <Field label="Search by name or ID">
+            <Field label={SEARCH_LABELS.tenants}>
               <Input
                 icon={Search}
-                placeholder="Name, phone, email, or Tenant ID…"
-                className="!h-11 border-stone-200 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
+                placeholder={SEARCH_PLACEHOLDERS.tenants}
+                className="!h-12 border-stone-200 font-bold focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
                 value={query}
                 onChange={(e) => {
                   updateFilter("query", e.target.value);
@@ -186,9 +183,9 @@ export default function TenantsPage() {
                 onChange={(e) => {
                   updateFilter("status", e.target.value);
                 }}
-                className="!h-11 border-stone-200 focus:border-teal-500/50"
+                className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
               >
-                <option value="all">All Statuses</option>
+                <option value="all">{FILTER_ALL_OPTION}</option>
                 {Object.entries(TENANT_STATUS_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}
@@ -201,7 +198,7 @@ export default function TenantsPage() {
           items={[
             {
               key: "query",
-              label: "Search",
+              label: "Tenants",
               value: query,
               onClear: () => {
                 updateFilter("query", "");
@@ -209,7 +206,7 @@ export default function TenantsPage() {
             },
             {
               key: "status",
-              label: "Status",
+              label: "Tenant Status",
               value: statusFilter !== "all" ? TENANT_STATUS_LABELS[statusFilter] || statusFilter : "",
               onClear: () => {
                 updateFilter("status", "all");
@@ -233,13 +230,17 @@ export default function TenantsPage() {
         >
           <Card className="overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-md hs-glass-effect">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Tenant Directory</h2>
+              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">TENANT DIRECTORY</h2>
               <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
-                {listMeta?.total ?? sortedFiltered.length} records matching
+                {listMeta?.total ?? sortedFiltered.length} TENANTS MATCHING
               </div>
             </div>
             <Table
               embedded
+              sortable
+              sortColumn={sort.by}
+              sortDirection={sort.dir}
+              onSortChange={onSortChange}
               columns={[
                 { key: "id", label: "TENANT ID", sortable: true, className: "pl-8" },
                 { key: "name", label: "TENANT", sortable: true },
@@ -249,9 +250,6 @@ export default function TenantsPage() {
                 { key: "status", label: "STATUS", sortable: true, className: "text-center" },
                 { key: "actions", label: "", className: "text-right w-16 px-8" },
               ]}
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSortChange={onSortChange}
               rows={sortedFiltered.map((tenant) => (
                 <tr
                   key={tenant.tenant_id}
@@ -293,7 +291,7 @@ export default function TenantsPage() {
                     <div className="flex items-center justify-center">
                       {tenant.room_code ? (
                         <div className="flex flex-col items-center">
-                          <span className="text-xs font-black text-stone-900 uppercase tracking-wide">Room {tenant.room_code}</span>
+                          <span className="text-xs font-black text-stone-900 uppercase tracking-wide">{tenant.room_code}</span>
                           <span className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none mt-1">{tenant.bed_label || "No Bed"}</span>
                         </div>
                       ) : (

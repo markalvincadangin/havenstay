@@ -12,6 +12,7 @@ use App\Models\Room;
 use App\Models\User;
 use App\Services\Concerns\ManagesWorkflows;
 use App\Support\Inventory;
+use App\Support\OperationalHardening;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -146,7 +147,12 @@ class RoomService
                                 'bed_spaces' => ["Cannot delete occupied bed: {$bedToDelete->bed_label}"],
                             ]);
                         }
-                        $contractRefs = Contract::where('bed_space_id', $bedToDelete->bed_space_id)->count();
+                        // Count ALL contract references — including soft-deleted ones.
+                        // Without withTrashed(), an archived contract would be invisible,
+                        // allowing a historically-referenced bed to be hard-deleted.
+                        $contractRefs = Contract::withTrashed()
+                            ->where('bed_space_id', $bedToDelete->bed_space_id)
+                            ->count();
                         if ($contractRefs > 0) {
                             throw ValidationException::withMessages([
                                 'bed_spaces' => ["Cannot delete bed \"{$bedToDelete->bed_label}\": {$contractRefs} contract record(s) reference this bed."],
@@ -224,20 +230,46 @@ class RoomService
         }
 
         if (!empty($filters['q'])) {
-            $needle = $filters['q'];
-            $query->where(function ($w) use ($needle): void {
-                $w->where('room_code', 'LIKE', "%{$needle}%")
-                    ->orWhere('amenities', 'LIKE', "%{$needle}%")
-                    ->orWhere('description', 'LIKE', "%{$needle}%")
-                    ->orWhereHas('bedSpaces.contracts.tenant', function ($q) use ($needle): void {
-                        $q->where('first_name', 'LIKE', "%{$needle}%")
-                            ->orWhere('last_name', 'LIKE', "%{$needle}%");
-                    });
+            $needle = trim((string) $filters['q']);
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $query->where(function ($w) use ($needle, $forensicId): void {
+                if ($forensicId) {
+                    $w->where('room_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $w->where('room_code', 'LIKE', "%{$stripped}%")
+                        ->orWhere('amenities', 'LIKE', "%{$stripped}%")
+                        ->orWhere('description', 'LIKE', "%{$stripped}%")
+                        ->orWhereHas('bedSpaces.contracts.tenant', function ($q) use ($stripped): void {
+                            $q->where('first_name', 'LIKE', "%{$stripped}%")
+                                ->orWhere('last_name', 'LIKE', "%{$stripped}%");
+                        });
+                }
             });
         }
 
-        return $query->orderBy('room_code')
-            ->paginate($perPage, ['*'], 'page', $page);
+        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortDir = $filters['sort_dir'] ?? 'asc';
+
+        if ($sortByRaw === 'id') {
+            $query->orderBy('room_id', $sortDir);
+        } elseif ($sortByRaw === 'type') {
+            $query->orderBy('room_type', $sortDir)->orderBy('room_code', 'asc');
+        } elseif ($sortByRaw === 'status') {
+            $query->orderBy('status', $sortDir)->orderBy('room_code', 'asc');
+        } elseif ($sortByRaw === 'monthly_rate') {
+            $query->orderBy('monthly_rate', $sortDir)->orderBy('room_code', 'asc');
+        } elseif ($sortByRaw === 'capacity') {
+            $query->orderBy('capacity', $sortDir)->orderBy('room_code', 'asc');
+        } else {
+            $query->orderBy('room_code', $sortDir);
+        }
+
+        // Secondary tie-breaker for all
+        $query->orderBy('room_id', $sortDir);
+
+        return $query->paginate($perPage, ['*'], 'page', $page);
     }
 
     /**

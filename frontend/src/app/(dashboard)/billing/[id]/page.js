@@ -126,10 +126,10 @@ export default function BillingDetailsPage() {
                   <MetricItem label="Room / Bed" icon={Building2}>
                     {roomId ? (
                       <Link href={`/rooms/${roomId}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
-                        Room {roomCode}{bedSpace?.bed_label ? ` / ${bedSpace.bed_label}` : ""}
+                        {roomCode}{bedSpace?.bed_label ? ` / ${bedSpace.bed_label}` : ""}
                       </Link>
                     ) : (
-                      `Room ${roomCode}${bedSpace?.bed_label ? " / " + bedSpace.bed_label : ""}`
+                      `${roomCode}${bedSpace?.bed_label ? " / " + bedSpace.bed_label : ""}`
                     )}
                   </MetricItem>
                   <MetricItem label="Billing Cycle" icon={Calendar}>

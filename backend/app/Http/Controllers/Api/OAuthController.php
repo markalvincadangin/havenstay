@@ -59,7 +59,9 @@ class OAuthController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             // Known business rule failure: deactivated or unregistered account
-            $errorMessage = $e->getMessage();
+            $errors = $e->errors();
+            $errorMessage = $errors['oauth'][0] ?? $e->getMessage();
+            
             $errorType = str_contains($errorMessage, 'not registered') ? 'account_not_found' : 'account_deactivated';
             $logReason = str_contains($errorMessage, 'not registered') ? 'Unregistered account — OAuth access denied' : 'Account deactivated — OAuth access denied';
 

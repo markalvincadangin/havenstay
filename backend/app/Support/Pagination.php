@@ -7,24 +7,27 @@ use Illuminate\Http\JsonResponse;
 
 final class Pagination
 {
-    /** Merge into `$request->validate([...])` for list endpoints. */
     public static function queryRules(): array
     {
         return [
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'sort_by' => ['sometimes', 'string', 'max:50'],
+            'sort_dir' => ['sometimes', 'string', 'in:asc,desc'],
         ];
     }
 
     /**
      * @param  array<string, mixed>  $validated
-     * @return array{page: int, per_page: int}
+     * @return array{page: int, per_page: int, sort_by: string|null, sort_dir: string}
      */
     public static function normalizePageParams(array $validated): array
     {
         return [
             'page' => max(1, (int) ($validated['page'] ?? 1)),
             'per_page' => min(100, max(1, (int) ($validated['per_page'] ?? 25))),
+            'sort_by' => $validated['sort_by'] ?? null,
+            'sort_dir' => $validated['sort_dir'] ?? 'asc',
         ];
     }
 

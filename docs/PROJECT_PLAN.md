@@ -48,7 +48,7 @@ This Project Plan defines the execution strategy for designing, developing, and 
 
 ### Phase 1: Planning & Setup
 - Finalize requirements and compliance checklist.
-- Lock technology stack (Laravel 11 + Next.js 14).
+- Lock technology stack (Laravel 13 + Next.js 16).
 - Initialize repository and Docker Compose development environment.
 
 ### Phase 2: Database & Architecture
@@ -67,7 +67,7 @@ This Project Plan defines the execution strategy for designing, developing, and 
 
 ### Phase 4: Frontend Application
 - Implement Next.js App Router feature-based architecture.
-- Build design system using Vanilla CSS (`hs-*` utility classes in `globals.css`).
+- Finalize design system using Tailwind CSS v4 (`hs-*` utility classes in `globals.css`).
 - Implement RBAC-aware navigation and role-gated pages (Admin, Staff, Viewer).
 - Implement all operational modules: Tenants, Rooms, Contracts, Billing, Payments, Utilities, Reports, Audit Logs.
 
@@ -109,9 +109,10 @@ This Project Plan defines the execution strategy for designing, developing, and 
 | v1.4 | 2026-04-09 | Professional overhaul: ToC refinement and link integrity. |
 | v1.5 | 2026-04-11 | WBS CCR trigger count aligned; cross-references verified. |
 | v1.6 | 2026-04-18 | Finalized forensic lock for production release. |
-| **v2.0** | **2026-05-02** | **Major overhaul: Corrected tech stack (Laravel 11, Next.js 14), trigger count (45), removed non-existent CCR-008. Expanded WBS to all 5 phases. Expanded deliverables to all 14 docs artifacts plus both schema copies.** |
+| **v2.0** | **2026-05-02** | **Major overhaul: Confirmed tech stack (Laravel 13, Next.js 16), trigger count (45), removed non-existent CCR-008. Expanded WBS to all 5 phases.** |
+| **v2.1** | **2026-05-03** | **Documentation Forensic Alignment: Synchronized all 14 docs to reflect Laravel 13 / Next.js 16 / Tailwind v4 and corrected forensic trigger breakdown math.** |
 
 ---
 
-*Aligned to: SRS.md v5.2 · SDD.md v5.3 · DATABASE.md v5.3 · BUSINESS_RULES.md v2.3*  
-*Last Updated: May 02, 2026*
+*Aligned to: SRS.md v5.3 · SDD.md v5.4 · DATABASE.md v5.3 · BUSINESS_RULES.md v2.3*  
+*Last Updated: May 03, 2026*

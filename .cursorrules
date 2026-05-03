@@ -45,6 +45,6 @@
     "utility_registry": "utilities / utility_rates (rate creation: POST /api/utilities/rates — NOT /api/utility-rates)",
     "meter_management": "meters / meter_assignments / meter_readings",
     "human_entities": "tenants (NOT boarders) / users",
-    "styling": "Vanilla CSS with hs-* utility classes — NOT Tailwind CSS"
+    "styling": "Tailwind CSS v4 with HS-Utility layer (Modern CSS-in-JS patterns supported)"
   }
 }

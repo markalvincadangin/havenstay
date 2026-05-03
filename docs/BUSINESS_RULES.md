@@ -79,19 +79,17 @@ in the system.
 A tenant may hold at most one active contract at any given time.
 
 **BR-TEN-004**
-A tenant's status is maintained automatically from their contract history
-and must not be set manually except for the `archived` state:
-- `active` — the tenant has at least one active contract
-- `moved_out` — the tenant has no active contracts but has
-  at least one completed or terminated contract
-- `archived` — manually set by an Admin; prevents new contracts
-  from being created for this tenant
+A tenant's status is maintained automatically from their contract history and must not be set manually except for the `archived` state:
+- `onboarded` — newly registered tenant with zero contract history. (System-managed default)
+- `active` — the tenant has at least one active or pending contract.
+- `moved_out` — the tenant has no active contracts but has at least one completed or terminated contract.
+- `archived` — manually set by an Admin; prevents new contracts from being created for this tenant.
 
 **BR-TEN-005**
-An archived tenant cannot be assigned to a new contract unless
-their status is first restored to active or moved_out by an Admin.
-`Archived` is an operational status; it is distinct from forensic
-soft-deletion (`deleted_at`).
+An archived tenant cannot be assigned to a new contract unless their status is first restored to `onboarded`, `active`, or `moved_out` by an Admin (based on their remaining history). `Archived` is an operational status; it is distinct from forensic soft-deletion (`deleted_at`).
+
+**BR-TEN-006**
+A tenant profile can only be archived if it has no `active` or `pending_payment` contracts. This ensures that operational residents cannot be hidden from the ledger while they still possess active occupancy rights.
 
 ---
 
@@ -185,8 +183,7 @@ in a single transaction:
 - Records the actual move-out date
 - Sets the bed space status to `vacant`
 - Recalculates the room's derived status
-- Updates the tenant's status to `moved_out` if they have no
-  other active contracts
+- Synchronizes the tenant's profile status based on their remaining contract history (BR-TEN-004).
 
 **BR-CON-009**
 A contract may be terminated early by an Admin. Termination
@@ -428,7 +425,7 @@ A correlation ID shall be included in each audit log entry to group mutations pr
 
 ---
 
-## 11. Analytical and Reporting Rules
+## 10. Analytical and Reporting Rules
 
 **BR-ANL-001**
 The outstanding balance of a billing cycle is computed dynamically. There is no stored balance column in the database.
@@ -444,14 +441,14 @@ The Collection Rate KPI measures performance efficiency by comparing cash inflow
 
 ---
 
-## 12. Revision History
+## 11. Revision History
 
 | Version | Date | Changes |
 | :--- | :--- | :--- |
 | v1.0–v1.7 | Mar–Apr 2026 | Prior iterations (see git history) |
 | v1.8 | Apr 20, 2026 | Consolidated meter and utility rules; deposit rollover rules added. |
 | v1.9 | Apr 21, 2026 | Added BR-CON-012 (voided contract), BR-CON-013 (monthly_rate_override), BR-PAY-010 (is_cleared). Amended BR-MET-005 rollover max default. Corrected BR-TEN-004, BR-ROM-003, BR-BIL-007 wording from "derived" to "maintained automatically". |
-| **v2.0** | **Apr 29, 2026** | **Major Stabilization: Added BR-BIL-011 (Resilient Batch Billing), BR-PAY-011 (Forensic Context Resolution), and BR-PAY-012 (Collection Rate Logic).** |
+| **v2.0** | **Apr 29, 2026** | **Major Stabilization: Added BR-PAY-011 (Forensic Context Resolution) and updated financial formula logic.** |
 | **v2.1** | **Apr 29, 2026** | **Reorganized formulas into a new Analytical Rules (ANL) category for reporting transparency. Migrated Balance, Consumption, and Collection Rate formulas.** |
 | **v2.2** | **Apr 29, 2026** | **Clean State Release: Fully removed migrated placeholders and renumbered all rules to be continuous.** |
 | **v2.3** | **May 02, 2026** | **Added BR-GEN-009 (Self-Account Restriction) to reinforce system security policy during lifecycle standardization.** |

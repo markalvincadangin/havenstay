@@ -13,23 +13,19 @@ import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import FilterChips from "@/components/ui/FilterChips";
+import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import { Field, Input } from "@/components/ui/Fields";
 import { SkeletonListPage } from "@/components/ui/Skeleton";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Table } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Receipt, Calendar, Landmark, DollarSign, Activity } from "lucide-react";
+import { Receipt, Calendar, Landmark, DollarSign, Activity, Search } from "lucide-react";
 import ResourceView from "@/components/ui/ResourceView";
 import TablePagination from "@/components/ui/TablePagination";
 import StandardPage from "@/components/ui/StandardPage";
-import {
-  buildReportListQuery,
-  normalizeReportRows,
-  readStoredPerPage,
-} from "@/lib/pagination";
+import { normalizeReportRows } from "@/lib/pagination";
+import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
-import ReportFilterCard from "@/components/ui/ReportFilterCard";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 export default function BillingSummaryReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
@@ -39,18 +35,27 @@ export default function BillingSummaryReportPage() {
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
-  const [filters, setFilters] = useState({ start_date: "", end_date: "" });
-  const [appliedFilters, setAppliedFilters] = useState({ start_date: "", end_date: "" });
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
-  const reportQs = useMemo(() => {
-    const extra = {};
-    if (appliedFilters.start_date) extra.start_date = appliedFilters.start_date;
-    if (appliedFilters.end_date) extra.end_date = appliedFilters.end_date;
-    return buildReportListQuery(page, perPage, extra);
-  }, [appliedFilters, page, perPage]);
+
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { start_date: "", end_date: "" },
+    buildExtraParams: ({ filters: current }) => {
+      const extra = {};
+      if (current.start_date) extra.start_date = current.start_date;
+      if (current.end_date) extra.end_date = current.end_date;
+      return extra;
+    },
+  });
   const { data: reportData, error: reportError, mutate: loadReport, isValidating } = useSWR(
-    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/billing-summary${reportQs}` : null,
+    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/billing-summary${queryString}` : null,
     fetcher,
     { keepPreviousData: true, dedupingInterval: 600000 }
   );
@@ -74,13 +79,9 @@ export default function BillingSummaryReportPage() {
       setTableMeta(normalizeReportRows(reportData, "rows").meta);
     }
   }, [reportData]);
-  const onApplyFilters = (event) => {
-    event.preventDefault();
-    if (apiUnavailable) return;
-    setApiError("");
-    setAppliedFilters({ ...filters });
-    setPage(1);
-  };
+
+  const hasActiveFilters = Boolean(filters.start_date) || Boolean(filters.end_date);
+
   const onExport = async () => {
     if (apiUnavailable) return;
     setApiError("");
@@ -88,7 +89,7 @@ export default function BillingSummaryReportPage() {
     try {
       await exportReportCsv({
         endpoint: "/api/reports/billing-summary/export",
-        filters: appliedFilters,
+        filters,
         filenamePrefix: "billing-summary-report",
       });
     } catch (error) {
@@ -165,19 +166,14 @@ export default function BillingSummaryReportPage() {
            className="hs-glass-effect"
         />
       </div>
-      <ReportFilterCard onRefresh={() => loadReport()} className="hs-glass-effect">
-            <form
-            className="grid gap-6 sm:grid-cols-4"
-            onSubmit={onApplyFilters}
-            >
+      <FilterPanelCard icon={Search}>
+            <div className="grid gap-6 sm:grid-cols-4">
             <Field label="Billing From" icon={Calendar}>
                 <Input
                 type="date"
                 value={filters.start_date}
                 disabled={apiUnavailable}
-                onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, start_date: event.target.value }))
-                }
+                onChange={(event) => updateFilter("start_date", event.target.value)}
                 className="!h-11"
                 />
             </Field>
@@ -186,52 +182,28 @@ export default function BillingSummaryReportPage() {
                 type="date"
                 value={filters.end_date}
                 disabled={apiUnavailable}
-                onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, end_date: event.target.value }))
-                }
+                onChange={(event) => updateFilter("end_date", event.target.value)}
                 className="!h-11"
                 />
             </Field>
-            <div className="flex items-end">
-                <Button
-                type="submit"
-                variant="secondary"
-                disabled={apiUnavailable}
-                className="w-full !h-11 shadow-sm"
-                >
-                Apply filters
-                </Button>
             </div>
-            </form>
             <div className="mt-6">
                 <FilterChips
                 items={[
                     {
                     key: "start_date",
                     label: "Start",
-                    value: appliedFilters.start_date,
-                    onClear: () => {
-                      setFilters((prev) => ({ ...prev, start_date: "" }));
-                      setAppliedFilters((prev) => ({ ...prev, start_date: "" }));
-                      setPage(1);
-                    },
+                    value: filters.start_date,
+                    onClear: () => updateFilter("start_date", ""),
                     },
                     {
                     key: "end_date",
                     label: "End",
-                    value: appliedFilters.end_date,
-                    onClear: () => {
-                      setFilters((prev) => ({ ...prev, end_date: "" }));
-                      setAppliedFilters((prev) => ({ ...prev, end_date: "" }));
-                      setPage(1);
-                    },
+                    value: filters.end_date,
+                    onClear: () => updateFilter("end_date", ""),
                     },
                 ]}
-                onClearAll={() => {
-                  setFilters({ start_date: "", end_date: "" });
-                  setAppliedFilters({ start_date: "", end_date: "" });
-                  setPage(1);
-                }}
+                onClearAll={resetFilters}
                 />
             </div>
             {apiUnavailable ? (
@@ -244,7 +216,7 @@ export default function BillingSummaryReportPage() {
                 {apiError}
             </Alert>
             ) : null}
-      </ReportFilterCard>
+      </FilterPanelCard>
       <ResourceView
         isLoading={loading}
         isSyncing={isValidating}
@@ -253,11 +225,26 @@ export default function BillingSummaryReportPage() {
         onRetry={() => loadReport()}
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
-          title: "No billing records found",
-          message: "Adjust your date filters or clear the range to check for billing records."
+          title: "No billing summary records",
+          description: "No cycles matched your filters. Adjust date range or generate new bills.",
+          action: hasActiveFilters ? (
+            <Button
+              variant="secondary"
+              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              onClick={resetFilters}
+            >
+              Clear filters
+            </Button>
+          ) : null
         }}
       >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">BILLING SUMMARY DIRECTORY</h2>
+            <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+              {tableMeta?.total ?? rows.length} RECORDS MATCHING
+            </div>
+          </div>
           <Table
               embedded={true}
               caption="Billing Summary"

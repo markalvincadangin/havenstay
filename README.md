@@ -1,67 +1,85 @@
-# HavenStay Boarding House Management System
+# HavenStay
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Laravel](https://img.shields.io/badge/Backend-Laravel%2014-red?logo=laravel)](https://laravel.com)
-[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-black?logo=next.js)](https://nextjs.org)
-[![Docker](https://img.shields.io/badge/Infrastructure-Docker-blue?logo=docker)](https://www.docker.com/)
+HavenStay is a management system for boarding house operations focused on forensic data integrity and automated utility billing. It provides a centralized solution for tracking bed-level occupancy, lease lifecycles, and pro-rated utility consumption across shared residential units.
 
-HavenStay is a centralized, high-performance boarding house management system designed for operational efficiency, audit compliance, and data integrity.
+![HavenStay Dashboard Mockup](assets/havenstay_dashboard.png)
 
-### 🚀 Live Environments
-*   **Production Application**: [https://havenstay-theta.vercel.app/](https://havenstay-theta.vercel.app/)
-*   **Production API**: [https://havenstay-qhun.onrender.com/api/health](https://havenstay-qhun.onrender.com/api/health)
+[![Backend](https://img.shields.io/badge/Laravel-13-red)](https://laravel.com)
+[![Frontend](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
+[![Infrastructure](https://img.shields.io/badge/Docker-Compose-blue)](https://www.docker.com/)
+[![Audit](https://img.shields.io/badge/Forensics-Trigger--Based-teal)](docs/DATABASE.md)
 
----
 
-## 🛠️ Getting Started
+## System Architecture
 
-We provide three ways to run HavenStay locally. Choose the one that fits your workflow.
+HavenStay utilizes a decoupled three-tier architecture optimized for scalability and reliability.
 
-1.  **[Docker Setup (Recommended)](./docs/DEV_SETUP.md#profile-a--docker-recommended)**: The fastest way to get the full distributed stack running.
-2.  **[Manual Setup](./docs/DEV_SETUP.md#profile-b--manual-no-docker)**: For developers who prefer running processes natively on their host machine.
-3.  **[Tunnel / Port-Forwarding Setup](./docs/DEV_SETUP.md#profile-c--port-forwarding--tunnel)**: For testing with remote services (Vercel previews, mobile devices, TestSprite) calling your local machine.
+### Backend (The Core)
+- **Framework:** Laravel 13.x (PHP 8.3+)
+- **Database:** MySQL 8.4 (Primary-Replica Topology)
+- **Security:** Laravel Sanctum (Token-Based Auth) + Centralized RBAC
+- **Audit:** 45 Database Triggers + Session-Aware Correlation IDs
 
-See the **[Development Setup Guide](./docs/DEV_SETUP.md)** for detailed instructions.
-
----
-
-## Key Features
-
-- **Distributed Architecture**: Multi-node database strategy using a **MySQL Primary-Replica** topology, ensuring high availability and read-heavy optimization (Satisfies CCR-002).
-- **Audit Trails**: Complete row-level audit trail powered by database triggers capturing full JSON snapshots.
-- **Modern UI/UX**: Professional interface using structural skeletons for layout stability and clarity.
-- **Transaction Reliability**: Robust workflow logging and explicit `DB::transaction()` boundaries for all financial operations (Satisfies CCR-006).
-- **Operational Intelligence**: Real-time dashboards and professional CSV reports using SQL Joins and Canonical Views (Satisfies CCR-005).
+### Frontend (The Interface)
+- **Framework:** Next.js 16.x (App Router) + React 19
+- **Styling:** Tailwind CSS v4 + Custom "HS Glass" Utility Layer
+- **State:** SWR (Stale-While-Revalidate) for high-performance data fetching
+- **Typography:** Plus Jakarta Sans & DM Sans
 
 ---
 
-## Technical Architecture
+## ⚙️ Quick Start
 
-HavenStay is built on a mission-critical stack designed for data integrity and performance.
+HavenStay is fully containerized for a seamless development experience.
 
-- **Frontend**: [Next.js 16](https://nextjs.org/) (App Router) + [React 19](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/).
-- **Backend**: [Laravel 14](https://laravel.com/) (PHP 8.3+) with Service-Oriented Architecture and Read/Write DB splitting.
-- **Database**: [MySQL 8.4](https://www.mysql.com/) Primary (Read/Write) + MySQL 8.4 Replica (Read-Only).
-- **Infrastructure**: [Docker](https://www.docker.com/) (Local) | [Render](https://render.com/) (Backend) | [Vercel](https://vercel.com/) (Frontend) | [Aiven](https://aiven.io/) (Database).
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Git](https://git-scm.com/)
+
+### Installation
+
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/markalvincadangin/havenstay.git
+    cd havenstay
+    ```
+
+2.  **Orchestrate Services**
+    ```bash
+    docker compose up -d
+    ```
+
+3.  **Bootstrap Environment**
+    ```bash
+    # Run migrations and seed the demo dataset
+    docker compose exec backend php artisan migrate:fresh --seed
+    ```
+
+4.  **Access the Dashboard**
+    - **Frontend:** [http://localhost:3000](http://localhost:3000)
+    - **API Health:** [http://localhost:8000/api/health](http://localhost:8000/api/health)
 
 ---
 
-## Documentation Index
+## 📂 Documentation
 
-- [**docs/DEV_SETUP.md**](docs/DEV_SETUP.md): **Start Here.** Comprehensive local setup guide.
-- [**docs/DEPLOYMENT.md**](docs/DEPLOYMENT.md): Production deployment guide (Render/Vercel/Aiven).
-- [**docs/DATABASE.md**](docs/DATABASE.md): Schema overview, reporting views, and audit triggers.
-- [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md): Endpoint listing and authentication guide.
-- [**docs/BUSINESS_RULES.md**](docs/BUSINESS_RULES.md): The "Laws of HavenStay" governing all logic.
-- [**CLAUDE.md**](CLAUDE.md): Engineering reference and coding standards.
-
----
-
-## Demo Credentials (Local/Dev)
-- **Admin**: `admin@havenstay.ph` / `HavenStay123!`
-- **Staff**: `staff@havenstay.local` / `HavenStay123!`
-- **Viewer**: `viewer@havenstay.local` / `HavenStay123!`
+| Documentation | Description |
+| :--- | :--- |
+| [**Business Rules**](docs/BUSINESS_RULES.md) | The authoritative logic manual for system operations. |
+| [**System Design (SDD)**](docs/SDD.md) | Technical architecture and data relationship maps. |
+| [**API Reference**](docs/API_REFERENCE.md) | Comprehensive RESTful endpoint documentation. |
+| [**Dev Runbook**](docs/DEV_SETUP.md) | Detailed installation and troubleshooting guide. |
 
 ---
 
-*HavenStay is released under the [MIT License](LICENSE).*
+## 🤝 Demo Accounts
+
+| Role | Email | Password |
+| :--- | :--- | :--- |
+| **System Admin** | `havenstay.admin@havenstay.com` | `HavenStay123!` |
+| **Property Staff** | `havenstay.staff@havenstay.com` | `HavenStay123!` |
+| **Viewer (Audit)** | `viewer@havenstay.com` | `HavenStay123!` |
+
+---
+
+*Built with precision by [Mark Alvin Cadangin](https://github.com/markalvincadangin).*

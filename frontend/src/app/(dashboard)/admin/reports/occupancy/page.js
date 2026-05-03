@@ -12,6 +12,8 @@ import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Card } from "@/components/ui/Card";
 import FilterChips from "@/components/ui/FilterChips";
+import FilterPanelCard from "@/components/ui/FilterPanelCard";
+import Button from "@/components/ui/Button";
 import { Field, Select } from "@/components/ui/Fields";
 import { SkeletonListPage } from "@/components/ui/Skeleton";
 import { KpiCard } from "@/components/ui/KpiCard";
@@ -21,16 +23,12 @@ import ResourceView from "@/components/ui/ResourceView";
 import TablePagination from "@/components/ui/TablePagination";
 import StandardPage from "@/components/ui/StandardPage";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
-import ReportFilterCard from "@/components/ui/ReportFilterCard";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import OccupancyBar from "@/components/ui/OccupancyBar";
 import { ROOM_TYPE_LABELS } from "@/lib/constants";
-import {
-  buildReportListQuery,
-  normalizeReportRows,
-  readStoredPerPage,
-} from "@/lib/pagination";
-import { BarChart3, Home, Users, CheckCircle } from "lucide-react";
+import { normalizeReportRows } from "@/lib/pagination";
+import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { BarChart3, Home, Users, CheckCircle, Search } from "lucide-react";
 
 export default function OccupancyReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
@@ -40,20 +38,29 @@ export default function OccupancyReportPage() {
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
-  const [roomTypeFilter, setRoomTypeFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
-  const reportQs = useMemo(() => {
-    const extra = {};
-    if (roomTypeFilter !== "all") {
-      extra.room_type = roomTypeFilter;
-    }
-    return buildReportListQuery(page, perPage, extra);
-  }, [page, perPage, roomTypeFilter]);
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { room_type: "all" },
+    buildExtraParams: ({ filters: current }) => {
+      const extra = {};
+      if (current.room_type !== "all") {
+        extra.room_type = current.room_type;
+      }
+      return extra;
+    },
+  });
 
   const { data: reportData, error: reportError, mutate: loadReport, isValidating } = useSWR(
-    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/occupancy${reportQs}` : null,
+    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/occupancy${queryString}` : null,
     fetcher,
     { keepPreviousData: true }
   );
@@ -81,6 +88,8 @@ export default function OccupancyReportPage() {
     }
   }, [reportData]);
 
+  const hasActiveFilters = filters.room_type !== "all";
+
   const { rows } = normalizeReportRows(report, "rows");
 
   const onExport = async () => {
@@ -90,7 +99,7 @@ export default function OccupancyReportPage() {
     try {
       await exportReportCsv({
         endpoint: "/api/reports/occupancy/export",
-        filters: roomTypeFilter !== "all" ? { room_type: roomTypeFilter } : {},
+        filters: filters.room_type !== "all" ? { room_type: filters.room_type } : {},
         filenamePrefix: "occupancy-report",
       });
     } catch (error) {
@@ -161,15 +170,12 @@ export default function OccupancyReportPage() {
         />
       </div>
 
-      <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={apiUnavailable} className="hs-glass-effect">
+      <FilterPanelCard icon={Search}>
         <div className="grid gap-6 sm:grid-cols-4">
           <Field label="Filter by Room Type">
             <Select
-              value={roomTypeFilter}
-              onChange={(event) => {
-                setRoomTypeFilter(event.target.value);
-                setPage(1);
-              }}
+              value={filters.room_type}
+              onChange={(event) => updateFilter("room_type", event.target.value)}
               disabled={apiUnavailable}
               className="!h-11"
             >
@@ -182,27 +188,19 @@ export default function OccupancyReportPage() {
             </Select>
           </Field>
         </div>
-        {roomTypeFilter !== "all" && (
-          <div className="mt-6">
-            <FilterChips
-              items={[
-                {
-                  key: "room_type",
-                  label: "Room type",
-                  value: roomTypeFilter !== "all" ? roomTypeFilter : "",
-                  onClear: () => {
-                    setRoomTypeFilter("all");
-                    setPage(1);
-                  },
-                },
-              ]}
-              onClearAll={() => {
-                setRoomTypeFilter("all");
-                setPage(1);
-              }}
-            />
-          </div>
-        )}
+        <div className="mt-6">
+          <FilterChips
+            items={[
+              {
+                key: "room_type",
+                label: "Room type",
+                value: filters.room_type !== "all" ? ROOM_TYPE_LABELS[filters.room_type] || filters.room_type : "",
+                onClear: () => updateFilter("room_type", "all"),
+              },
+            ]}
+            onClearAll={resetFilters}
+          />
+        </div>
 
         {apiUnavailable ? (
           <Alert variant="info" className="mt-6" title="Report unavailable">
@@ -210,7 +208,7 @@ export default function OccupancyReportPage() {
           </Alert>
         ) : null}
         {apiError ? <Alert variant="error" className="mt-6" title="Sync Issue">{apiError}</Alert> : null}
-      </ReportFilterCard>
+      </FilterPanelCard>
 
       <ResourceView
         isLoading={loading}
@@ -220,11 +218,26 @@ export default function OccupancyReportPage() {
         onRetry={() => loadReport()}
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
-          title: "No occupancy records found",
-          message: "Adjust filters or check for archive entries."
+          title: "No rooms matched filters",
+          description: "No rooms currently match your filtering criteria. Adjust room type or reset filters.",
+          action: hasActiveFilters ? (
+            <Button
+              variant="secondary"
+              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              onClick={resetFilters}
+            >
+              Clear filters
+            </Button>
+          ) : null
         }}
       >
-        <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
+        <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-md rounded-2xl hs-glass-effect">
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">ROOM OCCUPANCY DIRECTORY</h2>
+            <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+              {tableMeta?.total ?? rows.length} RECORDS MATCHING
+            </div>
+          </div>
           <Table
             embedded={true}
             caption="Bed Utilization Directory"

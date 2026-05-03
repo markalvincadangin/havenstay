@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 export function QuickEditFormShell({
   onSubmit,
   isSubmitting,
+  isSubmitDisabled = false,
   apiError,
   onCancel,
   submitLabel = "Save Changes",
@@ -19,7 +20,7 @@ export function QuickEditFormShell({
         <Button variant="secondary" onClick={onCancel} disabled={isSubmitting} type="button">
           Cancel
         </Button>
-        <Button type="submit" variant="primary" loading={isSubmitting} disabled={isSubmitting} className="h-10 px-6 rounded-xl font-black uppercase tracking-widest text-[10px]">
+        <Button type="submit" variant="primary" loading={isSubmitting} disabled={isSubmitting || isSubmitDisabled} className="h-10 px-6 rounded-xl font-black uppercase tracking-widest text-xs">
           {submitLabel}
         </Button>
       </div>

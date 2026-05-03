@@ -234,7 +234,7 @@ composer test:mysql                # All tests against MySQL
 
 ```bash
 cd frontend
-npm run dev        # Dev server on :3000 (Turbopack)
+npm run dev        # Dev server on :3000 (Webpack)
 npm run build      # Production build
 npm run lint       # ESLint check
 npm run test       # Vitest unit tests

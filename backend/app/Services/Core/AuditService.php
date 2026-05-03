@@ -217,7 +217,7 @@ class AuditService
             'event_category'  => EventCategory::SECURITY,
             'target_table'    => 'users',
             'record_id'       => 0,
-            'changed_by'      => 0,
+            'changed_by'      => null,
             'is_success'      => false,
             'error_message'   => $reason,
             'request_id'      => $request?->attributes->get('request_id'),
@@ -229,6 +229,34 @@ class AuditService
                 'origin'   => 'web',
                 'provider' => $provider,
                 'email'    => $email,
+            ],
+            'changed_at'      => now(),
+        ]);
+    }
+
+    /**
+     * Specialized: Log a failed regular login attempt.
+     */
+    public static function logFailedLogin(string $identifier, string $reason): void
+    {
+        $request = request();
+
+        AuditLog::create([
+            'action'          => AuditAction::FAILED_LOGIN,
+            'event_category'  => EventCategory::SECURITY,
+            'target_table'    => 'users',
+            'record_id'       => 0,
+            'changed_by'      => null,
+            'is_success'      => false,
+            'error_message'   => $reason,
+            'request_id'      => $request?->attributes->get('request_id'),
+            'ip_address'      => $request?->ip(),
+            'correlation_id'  => $request?->attributes->get('correlation_id'),
+            'endpoint'        => $request?->fullUrl(),
+            'http_method'     => $request?->method(),
+            'metadata'        => [
+                'origin'     => 'web',
+                'identifier' => $identifier,
             ],
             'changed_at'      => now(),
         ]);

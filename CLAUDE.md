@@ -52,7 +52,21 @@ architectural constraints. They must not be removed or worked around.
 | CCR-006 | Explicit transactions              | `DB::transaction()` in write services      |
 | CCR-007 | DB triggers for change logging     | 45 triggers in schema, fire into `audit_logs` |
 
+### 3.1 Forensic Trigger Architecture (CCR-007)
+
+The system enforces 100% forensic attribution via **45 database triggers** on the MySQL primary. The math is non-standard due to specific integrity guards:
+
+| Component | Math | Total |
+| :--- | :--- | :--- |
+| **Standard Tables (13)** | 13 tables × 3 AFTER triggers (I/U/D) | 39 |
+| **Meter Assignments (1)** | 3 AFTER triggers (I/U/D) + 1 BEFORE INSERT guard | 4 |
+| **Audit Logs (1)** | 2 BEFORE triggers (U/D) for immutability | 2 |
+| **Total Forensic Engine** | **(13 × 3) + (1 × 4) + 2 = 45** | **45** |
+
+> **Hardening Note:** `meter_assignments` is the only operational table with 4 triggers (the 4th is `trg_meter_assignments_bi` which prevents double-assigning active meters).
+
 > **Decommissioned:** `transaction_logs` table and `TransactionService` have been retired. Forensic integrity is handled exclusively by the 45 unified trigger-based `audit_logs` and `AuditService`. Do not reference or reintroduce `TransactionService` or `transaction_logs`.
+
 
 ---
 
@@ -166,7 +180,7 @@ Authentication token is stored in `localStorage` under `havenstay_token`.
 - Table row IDs use the mono prefix format: `#AUDIT-{id}`,
   `#TENANT-{id}`, `#CONTRACT-{id}`, `#PAY-{id}`, etc. Never display bare integers in ID columns.
 - Status values must use `<StatusBadge />`. Never hardcode badge colors inline.
-- All styling uses `hs-*` CSS classes from `globals.css`. **Do not use Tailwind CSS utilities.**
+- All styling uses Tailwind CSS v4 with the HS-Utility layer. Ensure utility classes follow semantic patterns defined in globals.css.
 
 ### Tunnel / Port-Forwarding (Dev)
 

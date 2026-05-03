@@ -10,8 +10,6 @@ import { apiRequest, fetcher } from "@/lib/api";
 import { flattenApiErrors } from "@/lib/errors";
 import { canManageUsers } from "@/lib/auth";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { useTableSort } from "@/hooks/useTableSort";
-import { sortClientRows } from "@/lib/tableSort";
 import { useToasts } from "@/context/ToastContext";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
@@ -31,7 +29,7 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import Avatar from "@/components/ui/Avatar";
 import Link from "next/link";
-import { ROLE_NAME_LABELS, USER_ACCOUNT_STATUS_FILTER_LABELS } from "@/lib/constants";
+import { ROLE_NAME_LABELS, USER_ACCOUNT_STATUS_FILTER_LABELS, SEARCH_LABELS, SEARCH_PLACEHOLDERS, ROLE_FILTER_LABELS } from "@/lib/constants";
 import { normalizePaginatedList } from "@/lib/pagination";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
@@ -44,19 +42,30 @@ export default function UsersPage() {
   const _router = useRouter();
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
-    usePaginatedFilters({
-      initialFilters: { query: "", role: "all", status: "all" },
-      debounceKeys: ["query"],
-      buildExtraParams: ({ filters: current, debounced }) => {
-        const extra = {};
-        const q = String(debounced.query ?? "").trim();
-        if (q) extra.q = q;
-        if (current.role !== "all") extra.role = current.role;
-        if (current.status !== "all") extra.account_status = current.status;
-        return extra;
-      },
-    });
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    sort,
+    onSortChange,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { query: "", role: "all", status: "all" },
+    initialSort: { by: "id", dir: "desc" },
+    debounceKeys: ["query"],
+    buildExtraParams: ({ filters: current, debounced }) => {
+      const extra = {};
+      const q = String(debounced.query ?? "").trim();
+      if (q) extra.q = q;
+      if (current.role !== "all") extra.role = current.role;
+      if (current.status !== "all") extra.account_status = current.status;
+      return extra;
+    },
+  });
   const [actionLoading, setActionLoading] = useState(null);
   const [confirmDeactivateUser, setConfirmDeactivateUser] = useState(null);
   const [confirmReactivateUser, setConfirmReactivateUser] = useState(null);
@@ -64,7 +73,6 @@ export default function UsersPage() {
   const [confirmInput, setConfirmInput] = useState("");
   const [editingUser, setEditingUser] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
-  const { sortColumn, sortDirection, _onSortChange } = useTableSort();
   const canAccess = useMemo(() => canManageUsers(currentUser), [currentUser]);
   const viewDenied = !authLoading && currentUser !== null && !canAccess;
   const { data: usersData, error: usersError, isValidating: isSyncing, mutate: refetchUsers } = useSWR(
@@ -82,21 +90,9 @@ export default function UsersPage() {
     return normalizePaginatedList(usersData);
   }, [usersData]);
   const loading = !usersData && !usersError;
+  const hasActiveFilters = Boolean(String(filters.query ?? "").trim()) || filters.role !== "all" || filters.status !== "all";
   const stats = useMemo(() => summaryData || {}, [summaryData]);
-  const sortedRows = useMemo(() => {
-    if (!sortColumn) return users;
-    return sortClientRows(users, sortColumn, sortDirection, (u) => {
-      switch (sortColumn) {
-        case "user_id": return Number(u.user_id) || 0;
-        case "user": return [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
-        case "username": return (u.username || "").toLowerCase();
-        case "email": return (u.email || "").toLowerCase();
-        case "role": return (u?.role?.role_name || "").toLowerCase();
-        case "status": return u.is_active ? "active" : "inactive";
-        default: return "";
-      }
-    });
-  }, [users, sortColumn, sortDirection]);
+  const sortedRows = users;
   async function handleDeactivate(user) {
     if (user.username !== confirmInput) {
       showToast(`Access Denied: Input '${confirmInput}' does not match username '${user.username}'.`, "error");
@@ -225,14 +221,14 @@ export default function UsersPage() {
             <FilterPanelCard icon={Users}>
               <div className="grid items-end gap-6 md:grid-cols-12">
                 <div className="md:col-span-12 lg:col-span-6">
-                  <Field label="Search Users">
+                  <Field label={SEARCH_LABELS.users}>
                     <div className="group relative">
                       <Search className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-teal-600" aria-hidden />
                       <Input
                         value={filters.query}
                         onChange={(e) => updateFilter("query", e.target.value)}
-                        placeholder="Name, username, email, or user ID…"
-                        className="!h-12 border-stone-200 pl-11 font-medium focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
+                        placeholder={SEARCH_PLACEHOLDERS.users}
+                        className="!h-12 border-stone-200 pl-11 font-bold focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
                       />
                     </div>
                   </Field>
@@ -244,8 +240,7 @@ export default function UsersPage() {
                       onChange={(e) => updateFilter("role", e.target.value)}
                       className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                     >
-                      <option value="all">All roles</option>
-                      {Object.entries(ROLE_NAME_LABELS).map(([value, label]) => (
+                      {Object.entries(ROLE_FILTER_LABELS).map(([value, label]) => (
                         <option key={value} value={value}>{label}</option>
                       ))}
                     </Select>
@@ -264,11 +259,29 @@ export default function UsersPage() {
                     </Select>
                   </Field>
                 </div>
+                <div className="md:col-span-6 lg:col-span-3">
+                  <Field label="Sort By">
+                    <Select
+                      value={`${sort.by}-${sort.dir}`}
+                      onChange={(e) => {
+                        const [by, dir] = e.target.value.split("-");
+                        onSortChange(by, dir);
+                      }}
+                      className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
+                    >
+                      <option value="id-desc">Newest First</option>
+                      <option value="id-asc">Oldest First</option>
+                      <option value="username-asc">Username (A-Z)</option>
+                      <option value="username-desc">Username (Z-A)</option>
+                      <option value="role_id-asc">Role</option>
+                    </Select>
+                  </Field>
+                </div>
               </div>
               <FilterChips
                 className="mt-6"
                 items={[
-                  { key: "q", label: "Query", value: filters.query, onClear: () => updateFilter("query", "") },
+                  { key: "q", label: "Users", value: filters.query, onClear: () => updateFilter("query", "") },
                   {
                     key: "role",
                     label: "Role",
@@ -277,7 +290,7 @@ export default function UsersPage() {
                   },
                   {
                     key: "status",
-                    label: "Status",
+                    label: "Account Status",
                     value: filters.status !== "all" ? USER_ACCOUNT_STATUS_FILTER_LABELS[filters.status] || filters.status : "",
                     onClear: () => updateFilter("status", "all"),
                   },
@@ -294,120 +307,138 @@ export default function UsersPage() {
               skeleton={<SkeletonGridPage cards={8} />}
               emptyProps={{
                 title: "No users match filters",
-                description: "Clear filters or adjust search criteria to see system accounts."
+                description: "Clear filters or adjust search criteria to see system accounts.",
+                action: hasActiveFilters ? (
+                  <Button
+                    variant="secondary"
+                    className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+                    onClick={resetFilters}
+                  >
+                    Clear filters
+                  </Button>
+                ) : null
               }}
             >
-              <div className="mt-2 grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {sortedRows.map((row) => {
-                  const displayName = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "—";
-                    const isSelf = row.user_id === currentUser?.user_id;
-                    const isArchived = !!row.deleted_at;
-                    return (
-                      <Link
-                        key={row.user_id}
-                        href={`/admin/users/${row.user_id}`}
-                        className={`group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${
-                          isArchived ? 'opacity-60 grayscale-[0.5]' : ''
-                        }`}
-                      >
-                        <Card className={`relative h-full flex flex-col !p-0 overflow-hidden rounded-2xl border-stone-200 bg-white transition-all duration-300 group-hover:border-teal-200 group-hover:shadow-xl group-hover:shadow-teal-900/5 group-hover:-translate-y-1 hs-glass-effect ${
-                          isArchived ? 'bg-stone-50/50' : ''
-                        }`}>
-                          {/* Card Header Strip */}
-                          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-5 py-3.5">
-                            <ResourceIdCell id={row.user_id} type="user" />
-                            <StatusBadge size="xs" variant={isArchived ? "neutral" : (row.is_active ? "success" : "neutral")} className="shadow-sm">
-                              {isArchived ? "archived" : (row.is_active ? "active" : "inactive")}
-                            </StatusBadge>
-                          </div>
-                        {/* Hero Identity Section */}
-                        <div className="p-6 pb-4">
-                          <div className="flex items-center gap-4">
-                            <Avatar
-                              user={row}
-                              variant="teal"
-                              size="lg"
-                              className="group-hover:scale-105 transition-transform"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <h3 className="text-base font-black text-stone-900 leading-[1.2] group-hover:text-teal-700 transition-colors line-clamp-2">
-                                {displayName}
-                              </h3>
-                              <p className="mt-1 text-[10px] font-black tracking-widest text-teal-600/70 uppercase">
-                                Role: {row?.role?.role_name || "—"}
-                              </p>
+              <div className="mb-6 overflow-hidden rounded-2xl border border-stone-200 bg-white hs-glass-effect">
+                <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+                  <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">USER DIRECTORY</h2>
+                  <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+                    {users.length} USERS MATCHING
+                  </div>
+                </div>
+                <div className="p-8">
+                  <div className="mt-2 grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+
+                    {sortedRows.map((row) => {
+                      const displayName = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "—";
+                      const isSelf = row.user_id === currentUser?.user_id;
+                      const isArchived = !!row.deleted_at;
+                      return (
+                        <Link
+                          key={row.user_id}
+                          href={`/admin/users/${row.user_id}`}
+                          className={`group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${isArchived ? 'opacity-60 grayscale-[0.5]' : ''
+                            }`}
+                        >
+                          <Card className={`relative h-full flex flex-col !p-0 overflow-hidden rounded-2xl border-stone-200 bg-white transition-all duration-300 group-hover:border-teal-200 group-hover:shadow-xl group-hover:shadow-teal-900/5 group-hover:-translate-y-1 hs-glass-effect ${isArchived ? 'bg-stone-50/50' : ''
+                            }`}>
+                            {/* Card Header Strip */}
+                            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-5 py-3.5">
+                              <ResourceIdCell id={row.user_id} type="user" />
+                              <StatusBadge size="xs" variant={isArchived ? "neutral" : (row.is_active ? "success" : "neutral")} className="shadow-sm">
+                                {isArchived ? "archived" : (row.is_active ? "active" : "inactive")}
+                              </StatusBadge>
                             </div>
-                          </div>
-                          <div className="mt-5 space-y-2 border-l-2 border-stone-50 pl-4 py-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono font-bold text-stone-400">@</span>
-                              <span className="text-[11px] font-mono font-bold text-stone-600 tracking-tight lowercase">{row.username}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Mail size={10} className="text-stone-300" />
-                              <span className="text-[11px] font-medium text-stone-500 truncate" title={row.email}>
-                                {row.email || "—"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        {/* Contextual Footer Well */}
-                        <div className="flex items-center justify-between border-t border-stone-100 bg-stone-50/30 px-6 py-3.5 mt-auto transition-colors group-hover:bg-teal-50/20">
-                          <span className="text-[10px] font-black tracking-[0.15em] text-stone-400 group-hover:text-teal-600 transition-colors uppercase">
-                            Actions
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {isArchived ? (
-                              <Button
-                                variant="primary"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setConfirmRestoreUser(row);
-                                }}
-                                className="!h-8 rounded-lg px-4 text-[10px] font-black uppercase tracking-widest bg-teal-600 text-white shadow-sm"
-                              >
-                                Restore
-                              </Button>
-                            ) : (
-                              <>
-                                <QuickEditRowAction
-                                  disabled={isSelf}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setEditingUser(row);
-                                  }}
-                                  className="shadow-sm"
-                                  title="Update Details"
+                            {/* Hero Identity Section */}
+                            <div className="p-6 pb-4">
+                              <div className="flex items-center gap-4">
+                                <Avatar
+                                  user={row}
+                                  variant="teal"
+                                  size="lg"
+                                  className="group-hover:scale-105 transition-transform"
                                 />
-                                <Button
-                                  variant="ghost"
-                                  loading={actionLoading === row.user_id}
-                                  disabled={isSelf}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    if (row.is_active) {
-                                      setConfirmDeactivateUser(row);
-                                    } else {
-                                      setConfirmReactivateUser(row);
-                                    }
-                                    setConfirmInput("");
-                                  }}
-                                  className={`!h-8 !w-8 !p-0 border bg-white shadow-sm ring-1 ring-inset ${row.is_active ? 'border-stone-200 ring-transparent text-rose-400 hover:text-rose-600 hover:border-rose-300' : 'border-stone-200 ring-transparent text-emerald-400 hover:text-emerald-600 hover:border-emerald-300'}`}
-                                  title={row.is_active ? "Revoke Access" : "Grant Access"}
-                                >
-                                  {row.is_active ? <ShieldOff size={14} /> : <UserCheck size={14} />}
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
-                    </Link>
-                  );
-                })}
+                                <div className="min-w-0 flex-1">
+                                  <h3 className="text-base font-black text-stone-900 leading-[1.2] group-hover:text-teal-700 transition-colors line-clamp-2">
+                                    {displayName}
+                                  </h3>
+                                  <p className="mt-1 text-[10px] font-black tracking-widest text-teal-600/70 uppercase">
+                                    Role: {row?.role?.role_name || "—"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-5 space-y-2 border-l-2 border-stone-50 pl-4 py-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-mono font-bold text-stone-400">@</span>
+                                  <span className="text-[11px] font-mono font-bold text-stone-600 tracking-tight lowercase">{row.username}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Mail size={10} className="text-stone-300" />
+                                  <span className="text-[11px] font-medium text-stone-500 truncate" title={row.email}>
+                                    {row.email || "—"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            {/* Contextual Footer Well */}
+                            <div className="flex items-center justify-between border-t border-stone-100 bg-stone-50/30 px-6 py-3.5 mt-auto transition-colors group-hover:bg-teal-50/20">
+                              <span className="text-[10px] font-black tracking-[0.15em] text-stone-400 group-hover:text-teal-600 transition-colors uppercase">
+                                Actions
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {isArchived ? (
+                                  <Button
+                                    variant="primary"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setConfirmRestoreUser(row);
+                                    }}
+                                    className="!h-8 rounded-lg px-4 text-[10px] font-black uppercase tracking-widest bg-teal-600 text-white shadow-sm"
+                                  >
+                                    Restore
+                                  </Button>
+                                ) : (
+                                  <>
+                                    <QuickEditRowAction
+                                      disabled={isSelf}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setEditingUser(row);
+                                      }}
+                                      className="shadow-sm"
+                                      title="Update Details"
+                                    />
+                                    <Button
+                                      variant="ghost"
+                                      loading={actionLoading === row.user_id}
+                                      disabled={isSelf}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (row.is_active) {
+                                          setConfirmDeactivateUser(row);
+                                        } else {
+                                          setConfirmReactivateUser(row);
+                                        }
+                                        setConfirmInput("");
+                                      }}
+                                      className={`!h-8 !w-8 !p-0 border bg-white shadow-sm ring-1 ring-inset ${row.is_active ? 'border-stone-200 ring-transparent text-rose-400 hover:text-rose-600 hover:border-rose-300' : 'border-stone-200 ring-transparent text-emerald-400 hover:text-emerald-600 hover:border-emerald-300'}`}
+                                      title={row.is_active ? "Revoke Access" : "Grant Access"}
+                                    >
+                                      {row.is_active ? <ShieldOff size={14} /> : <UserCheck size={14} />}
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </ResourceView>
             {listMeta && listMeta.total > 0 && (
@@ -416,7 +447,10 @@ export default function UsersPage() {
                 page={page}
                 perPage={perPage}
                 onPageChange={setPage}
-                onPerPageChange={(v) => { setPage(1); setPerPage(v); }}
+                onPerPageChange={(v) => {
+                  setPage(1);
+                  setPerPage(v);
+                }}
                 disabled={loading || isSyncing}
                 className="mt-4 rounded-2xl border border-stone-200 bg-white hs-glass-effect"
               />

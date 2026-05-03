@@ -124,4 +124,4 @@ Before final submission to the evaluator, the following must be successfully dem
 | v2.0 | 2026-04-29 | Major Stabilization: Added TC-11 (Resilient Batching), TC-12 (Dual-Path Resolution), and TC-13 (Idempotency). Aligned to Docs v5.1 / BR v2.1. |
 | **v2.1** | **2026-04-29** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2). Aligned to Docs v5.2.** |
 
-*Aligned to: SRS.md v5.2 · SDD.md v5.2 · DATABASE.md v5.2 · BUSINESS_RULES.md v2.2*
+*Aligned to: SRS.md v5.3 · SDD.md v5.4 · DATABASE.md v5.3 · BUSINESS_RULES.md v2.3*

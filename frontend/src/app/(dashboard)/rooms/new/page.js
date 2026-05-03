@@ -21,10 +21,15 @@ import { FormSection } from "@/components/ui/FormSection";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import { useToasts } from "@/context/ToastContext";
+
 export default function NewRoomPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const { showToast } = useToasts();
+  
+  const [scannedDuplicate, setScannedDuplicate] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -33,6 +38,7 @@ export default function NewRoomPage() {
     setError,
     formState: { errors, isSubmitting, isDirty },
   } = useForm({
+    mode: "onChange",
     defaultValues: {
       room_code: "",
       room_type: "private",
@@ -44,23 +50,42 @@ export default function NewRoomPage() {
       bed_spaces: [{ bed_label: "Bed 1", status: "vacant" }],
     },
   });
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: "bed_spaces",
   });
+
   useUnsavedChangesWarning(isDirty && !isSubmitting);
   const roomType = useWatch({ control, name: "room_type" });
 
   useEffect(() => {
     if (roomType === "private") {
       setValue("capacity", "1");
-      // For private rooms, we reset bed spaces to a single default one
       setValue("bed_spaces", [{ bed_label: "Bed 1", status: "vacant" }]);
     } else {
-      // For shared rooms, capacity is derived from the number of bed fields
       setValue("capacity", fields.length.toString());
     }
   }, [roomType, fields.length, setValue]);
+
+  const checkUniqueness = async (value) => {
+    if (!value || value.trim().length < 2) {
+      setScannedDuplicate(null);
+      return;
+    }
+    setIsScanning(true);
+    try {
+      const results = await apiRequest(`/api/rooms?q=${encodeURIComponent(value.trim())}`);
+      const rows = results?.data || results || [];
+      const match = rows.find(r => r.room_code?.toLowerCase().trim() === value.trim().toLowerCase());
+      setScannedDuplicate(match ? match.room_id : null);
+    } catch (e) {
+      // Silently fail scanning
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const onSubmit = async (values) => {
     if (!canManageRooms(currentUser)) return;
     try {
@@ -102,7 +127,9 @@ export default function NewRoomPage() {
       applyServerFieldErrors(error, setError, { showToast });
     }
   };
+
   const readOnly = !canManageRooms(currentUser);
+
   return (
     <StandardPage
       title="Register Room"
@@ -131,14 +158,17 @@ export default function NewRoomPage() {
                 label="Room Code"
                 required
                 error={errors.room_code?.message}
+                warning={scannedDuplicate ? "A room with this code already exists." : null}
                 helpText="Unique system identifier (e.g. 101 or RM-101)."
               >
                 <Input
                   autoFocus
+                  hasError={Boolean(errors.room_code || scannedDuplicate)}
                   placeholder="e.g. 101"
                   className="!h-11 border-stone-200 focus:border-teal-500/50 font-mono"
                   disabled={readOnly}
                   {...register("room_code", { required: "Room code is required." })}
+                  onBlur={(e) => checkUniqueness(e.target.value)}
                 />
               </Field>
             </div>
@@ -148,6 +178,7 @@ export default function NewRoomPage() {
                   type="number"
                   step="1"
                   prefix="₱"
+                  hasError={Boolean(errors.monthly_rate)}
                   placeholder="5000"
                   className="!h-11 border-stone-200 font-mono focus:border-teal-500/50 tabular-nums font-bold"
                   disabled={readOnly}
@@ -155,7 +186,7 @@ export default function NewRoomPage() {
                 />
               </Field>
               <Field label="Room Type" required error={errors.room_type?.message}>
-                <Select className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("room_type")}>
+                <Select hasError={Boolean(errors.room_type)} className="!h-11 border-stone-200 font-bold" disabled={readOnly} {...register("room_type")}>
                   {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
                   ))}
@@ -194,6 +225,7 @@ export default function NewRoomPage() {
                   <Field label="Bed Label" className="flex-1">
                     <Input
                       placeholder="Bed A"
+                      hasError={Boolean(errors?.bed_spaces?.[index]?.bed_label)}
                       className="!h-10 border-stone-200 bg-white font-mono"
                       disabled={readOnly}
                       {...register(`bed_spaces.${index}.bed_label`, { required: true })}
@@ -257,7 +289,7 @@ export default function NewRoomPage() {
         <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:justify-end">
           <Link
             href="/rooms"
-            className={secondaryOutlineLinkClass + " px-10"}
+            className="flex h-12 items-center justify-center rounded-xl border border-stone-200 px-10 text-xs font-black uppercase tracking-widest text-stone-500 transition-all hover:bg-stone-50 active:scale-95"
           >
             Cancel
           </Link>
@@ -265,8 +297,8 @@ export default function NewRoomPage() {
             type="submit"
             variant="primary"
             loading={isSubmitting}
-            disabled={readOnly || isSubmitting}
-            className={primaryLinkCtaClass + " px-12 border-0"}
+            disabled={readOnly || isSubmitting || scannedDuplicate}
+            className="h-12 rounded-xl px-12 text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 active:scale-95 transition-all"
           >
             Register Room
           </Button>

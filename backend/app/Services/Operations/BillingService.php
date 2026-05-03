@@ -13,6 +13,7 @@ use App\Models\MeterReading;
 use App\Models\User;
 use App\Services\Concerns\ManagesWorkflows;
 use App\Support\Financials;
+use App\Support\OperationalHardening;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
@@ -206,7 +207,29 @@ class BillingService
      */
     public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
     {
-        return self::listQueryWithSums($filters)->paginate($perPage, ['*'], 'page', $page);
+        $query = self::listQueryWithSums($filters);
+        
+        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortDir = $filters['sort_dir'] ?? 'desc';
+        
+        if ($sortByRaw === 'id') {
+            $query->orderBy('billing_id', $sortDir);
+        } elseif ($sortByRaw === 'period') {
+            $query->orderBy('billing_period_from', $sortDir)->orderBy('billing_id', $sortDir);
+        } elseif ($sortByRaw === 'due') {
+            $query->orderBy('due_date', $sortDir)->orderBy('billing_id', $sortDir);
+        } elseif ($sortByRaw === 'status') {
+            $query->orderBy('status', $sortDir)->orderBy('billing_id', $sortDir);
+        } elseif ($sortByRaw === 'amount') {
+            $query->orderBy('total_amount', $sortDir)->orderBy('billing_id', $sortDir);
+        } elseif ($sortByRaw === 'balance') {
+            $query->orderByRaw('(IFNULL(total_amount, 0) - IFNULL(total_paid, 0)) ' . ($sortDir === 'desc' ? 'DESC' : 'ASC'))
+                  ->orderBy('billing_id', $sortDir);
+        } else {
+            $query->orderByDesc('billing_id');
+        }
+        
+        return $query->paginate($perPage, ['*'], 'page', $page);
     }
 
     /**
@@ -217,8 +240,9 @@ class BillingService
         $query = Billing::query()
             ->with([
                 'contract' => fn ($q) => $q->withTrashed(),
-                'contract.tenant' => fn ($q) => $q->withTrashed(),
-                'contract.room' => fn ($q) => $q->withTrashed(),
+                'contract.tenant',
+                'contract.room',
+                'contract.bedSpace',
             ])
             ->withSum([
                 'lineItems as total_amount' => function ($q) {
@@ -249,7 +273,24 @@ class BillingService
                 ->where('status', '!=', BillingStatus::PAID->value);
         }
 
-        $query->orderByDesc('billing_id');
+        if (! empty($filters['q'])) {
+            $needle = trim((string) $filters['q']);
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $query->where(function ($w) use ($needle, $forensicId) {
+                if ($forensicId) {
+                    $w->where('billing_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $w->where('billing_id', 'like', "%{$stripped}%")
+                        ->orWhereHas('contract.tenant', function ($t) use ($stripped) {
+                            $t->where('first_name', 'like', "%{$stripped}%")
+                                ->orWhere('last_name', 'like', "%{$stripped}%")
+                                ->orWhere('contact_number', 'like', "%{$stripped}%");
+                        });
+                }
+            });
+        }
 
         return $query;
     }

@@ -66,7 +66,7 @@ class ContractService
 
         self::validateCreateInput($data);
 
-        $contract = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'TENANT_CHECKIN',
             payload: [
@@ -103,6 +103,9 @@ class ContractService
                 // Auto-initialize first billing cycle (optional, but standard)
                 BillingService::initializeContractBilling($actor, (int) $contract->contract_id);
 
+                TenantService::syncStatus((int) $data['tenant_id']);
+                self::clearCache($data['tenant_id'] ?? null);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator', 'latestBilling']);
             },
             resultDetails: fn (Contract $contract): array => [
@@ -110,10 +113,6 @@ class ContractService
                 'bed_space_id' => $contract->bed_space_id,
             ]
         );
-
-        self::clearCache($data['tenant_id'] ?? null);
-
-        return $contract;
     }
 
     /**
@@ -141,21 +140,50 @@ class ContractService
 
         if (! empty($filters['q'])) {
             $needle = trim((string) $filters['q']);
-            $query->where(function ($w) use ($needle): void {
-                $w->where('contracts.contract_id', 'like', "%{$needle}%")
-                    ->orWhereHas('tenant', function ($t) use ($needle): void {
-                        $t->where('first_name', 'like', "%{$needle}%")
-                            ->orWhere('last_name', 'like', "%{$needle}%")
-                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$needle}%"]);
-                    })
-                    ->orWhereHas('room', function ($r) use ($needle): void {
-                        $r->where('room_code', 'like', "%{$needle}%");
-                    });
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $query->where(function ($w) use ($needle, $forensicId): void {
+                if ($forensicId) {
+                    $w->where('contracts.contract_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $w->where('contracts.contract_id', 'like', "%{$stripped}%")
+                        ->orWhereHas('tenant', function ($t) use ($stripped): void {
+                            $t->where('first_name', 'like', "%{$stripped}%")
+                                ->orWhere('last_name', 'like', "%{$stripped}%")
+                                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$stripped}%"]);
+                        })
+                        ->orWhereHas('room', function ($r) use ($stripped): void {
+                            $r->where('room_code', 'like', "%{$stripped}%");
+                        });
+                }
             });
         }
 
-        $paginator = $query->orderByDesc('contract_id')
-            ->paginate($perPage, ['*'], 'page', $page);
+        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortDir = $filters['sort_dir'] ?? 'desc';
+
+        if ($sortByRaw === 'id') {
+            $query->orderBy('contracts.contract_id', $sortDir);
+        } elseif ($sortByRaw === 'tenant') {
+            $query->leftJoin('tenants', 'contracts.tenant_id', '=', 'tenants.tenant_id')
+                  ->orderBy('tenants.last_name', $sortDir)
+                  ->orderBy('tenants.first_name', $sortDir)
+                  ->orderBy('contracts.contract_id', $sortDir)
+                  ->select('contracts.*');
+        } elseif ($sortByRaw === 'start_date') {
+            $query->orderBy('start_date', $sortDir)->orderBy('contracts.contract_id', $sortDir);
+        } elseif ($sortByRaw === 'end_date') {
+            $query->orderBy('expected_move_out_date', $sortDir)->orderBy('contracts.contract_id', $sortDir);
+        } elseif ($sortByRaw === 'rate') {
+            $query->orderBy('monthly_rate', $sortDir)->orderBy('contracts.contract_id', $sortDir);
+        } elseif ($sortByRaw === 'status') {
+            $query->orderBy('status', $sortDir)->orderBy('contracts.contract_id', $sortDir);
+        } else {
+            $query->orderByDesc('contracts.contract_id');
+        }
+
+        $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
         // Optimization: only load unbilled readings for active contract lists (e.g. Billing Wizard)
         if (isset($filters['status']) && $filters['status'] === 'active') {
@@ -248,7 +276,7 @@ class ContractService
             ]);
         }
 
-        $contract = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'UPDATE_CONTRACT',
             payload: ['contract_id' => $contract->contract_id, 'old_rate_fact' => $contract->monthly_rate],
@@ -260,13 +288,11 @@ class ContractService
 
                 $contract->update($data);
 
+                self::clearCache($contract->tenant_id, $contract->contract_id);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace']);
             }
         );
-
-        self::clearCache($contract->tenant_id, $contract->contract_id);
-
-        return $contract;
     }
 
     /**
@@ -305,7 +331,7 @@ class ContractService
             ]);
         }
 
-        $contract = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'TENANT_MOVEOUT',
             payload: ['contract_id' => $contract->contract_id, 'move_out_date_fact' => $actualMoveOut],
@@ -321,13 +347,11 @@ class ContractService
                     $contract->bedSpace->save();
                 }
 
+                self::clearCache($contract->tenant_id, $contract->contract_id);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
             }
         );
-
-        self::clearCache($contract->tenant_id, $contract->contract_id);
-
-        return $contract;
     }
 
     /**

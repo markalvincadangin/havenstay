@@ -18,7 +18,6 @@ import { useAction } from "@/hooks/useAction";
 import { applyServerFieldErrors } from "@/lib/forms";
 import { formatPHP, formatDateRange } from "@/lib/formatters";
 import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
-import { useFocusTrap } from "@/hooks/useFocusTrap";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
@@ -41,7 +40,6 @@ const pageVariants = {
   transition: { duration: 0.2, ease: "easeOut" },
 };
 
-/** Billing summary — nested panel inside registry card. */
 function BillingSummaryPanel({ selectedBilling, paymentAmount }) {
   if (!selectedBilling) return null;
 
@@ -87,10 +85,6 @@ function BillingSummaryPanel({ selectedBilling, paymentAmount }) {
   );
 }
 
-
-/**
- * PaymentWizard — Single-page flow for recording payments.
- */
 export default function PaymentWizard() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
@@ -102,8 +96,8 @@ export default function PaymentWizard() {
   const [billingOptions, setBillingOptions] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingValues, setPendingValues] = useState(null);
+  const [scannedDuplicateRef, setScannedDuplicateRef] = useState(null);
 
-  // Refund Deep Link Support
   const [isRefundMode, setIsRefundMode] = useState(false);
   const [refundTargetContract, setRefundTargetContract] = useState(null);
 
@@ -117,6 +111,7 @@ export default function PaymentWizard() {
     trigger,
     formState: { errors, isDirty },
   } = useForm({
+    mode: "onChange",
     defaultValues: {
       billing_id: "",
       contract_id: "",
@@ -140,10 +135,26 @@ export default function PaymentWizard() {
     if (isPaymentMethodCash(watchedMethod)) {
       setValue("reference_number", "", { shouldDirty: false });
       clearErrors("reference_number");
+      setScannedDuplicateRef(null);
     } else {
       void trigger("reference_number");
     }
   }, [watchedMethod, setValue, clearErrors, trigger]);
+
+  const checkReferenceUniqueness = async (value) => {
+    if (isPaymentMethodCash(watchedMethod) || !value || value.trim().length < 5) {
+      setScannedDuplicateRef(null);
+      return;
+    }
+    try {
+      const results = await apiRequest(`/api/payments?q=${encodeURIComponent(value.trim())}`);
+      const list = results?.data || results || [];
+      const match = list.find(p => p.reference_number?.trim() === value.trim() && !p.voided_at);
+      setScannedDuplicateRef(match ? match.payment_id : null);
+    } catch (e) {
+      // Ignore
+    }
+  };
 
   const selectedBilling = useMemo(
     () => billingOptions.find((b) => String(b.billing_id) === String(selectedBillingId)) || null,
@@ -174,14 +185,12 @@ export default function PaymentWizard() {
 
   const loading = !billingData && !billingError;
 
-  // Refund/Deposit Target Context
   const contractId = watch("contract_id");
   const { data: contractData } = useSWR(
     (isRefundMode || isDepositMode) && Number(contractId) > 0 ? `/api/contracts/${contractId}` : null,
     fetcher
   );
 
-  // Fetch pending contracts for the dropdown
   const { data: pendingContractsData } = useSWR(
     isDepositMode ? "/api/contracts?status=pending_payment&per_page=100" : null,
     fetcher
@@ -189,19 +198,16 @@ export default function PaymentWizard() {
   const pendingContracts = useMemo(() => normalizePaginatedList(pendingContractsData).rows, [pendingContractsData]);
 
   const residentName = useMemo(() => {
-    // 1. Check direct contract fetch (detailed context)
     if ((isRefundMode || isDepositMode) && contractData) {
       const t = contractData.data?.tenant || contractData.tenant;
       if (t) return `${t.last_name}, ${t.first_name}`.trim();
     }
-    // 2. Check pending contracts list (immediate fallback for dropdown selection)
     if (isDepositMode && contractId) {
       const selected = pendingContracts.find(c => String(c.contract_id) === String(contractId));
       if (selected && selected.tenant) {
         return `${selected.tenant.last_name}, ${selected.tenant.first_name}`.trim();
       }
     }
-    // 3. Fallback to billing link
     return selectedBilling?.tenant_name || "";
   }, [isRefundMode, isDepositMode, contractData, selectedBilling, pendingContracts, contractId]);
 
@@ -256,7 +262,6 @@ export default function PaymentWizard() {
       const matching = billingOptions.find((b) => String(b.contract_id) === String(cId));
       if (matching) setValue("billing_id", String(matching.billing_id));
       else if (category === "deposit") {
-         // If it's a deposit deep link but no bill exists, we just set the contract_id
          setValue("contract_id", cId);
       }
     } else if (tId) {
@@ -384,7 +389,6 @@ export default function PaymentWizard() {
                           <ShieldCheck className="text-amber-600" size={20} />
                        </div>
                        
-                       {/* CCR-012: Unified Target Selection (Editable even if deep-linked) */}
                        {isDepositMode ? (
                           <Select 
                             className="!h-11 border-amber-200 font-bold focus:ring-amber-500"
@@ -444,7 +448,12 @@ export default function PaymentWizard() {
                     </Select>
                   </Field>
                 </div>
-                <Field label="Reference No." required={!isPaymentMethodCash(watchedMethod)} error={errors.reference_number?.message}>
+                <Field 
+                  label="Reference No." 
+                  required={!isPaymentMethodCash(watchedMethod)} 
+                  error={errors.reference_number?.message}
+                  warning={scannedDuplicateRef ? "This reference number has already been recorded in a previous transaction." : null}
+                >
                   <Input
                     type="text"
                     placeholder={
@@ -457,8 +466,10 @@ export default function PaymentWizard() {
                             : "Enter transaction reference number"
                     }
                     disabled={isPaymentMethodCash(watchedMethod)}
-                    className="!h-12 border-stone-200 font-mono"
+                    className="!h-12 border-stone-200 font-mono font-bold"
                     {...register("reference_number", { validate: (v) => isPaymentMethodCash(watchedMethod) || !!v || "Required." })}
+                    onBlur={(e) => checkReferenceUniqueness(e.target.value)}
+                    hasError={Boolean(errors.reference_number || scannedDuplicateRef)}
                   />
                 </Field>
                 <Field label="Notes" error={errors.remarks?.message}>
@@ -485,7 +496,8 @@ export default function PaymentWizard() {
                   type="submit"
                   variant={isRefundMode || isDepositMode ? "primary" : "primary"}
                   loading={isSubmitting}
-                  className={`w-full !h-12 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl ${isRefundMode || isDepositMode ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/10' : 'shadow-teal-900/10'}`}
+                  disabled={isSubmitting || !!scannedDuplicateRef}
+                  className={`w-full !h-12 rounded-xl text-xs font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isRefundMode || isDepositMode ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/10' : 'shadow-teal-900/10'}`}
                 >
                   {isRefundMode ? "Confirm Refund Disbursement" : isDepositMode ? "Confirm Deposit Receipt" : "Record Payment"}
                 </Button>
@@ -493,7 +505,7 @@ export default function PaymentWizard() {
                   type="button"
                   variant="ghost"
                   onClick={() => router.push("/payments")}
-                  className="w-full !h-10 text-[9px] font-bold text-stone-400 hover:text-stone-600"
+                  className="w-full !h-12 rounded-xl text-xs font-black uppercase tracking-widest text-stone-400 hover:text-stone-600 transition-all active:scale-95"
                 >
                   Cancel Transaction
                 </Button>

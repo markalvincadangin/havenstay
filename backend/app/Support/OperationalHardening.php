@@ -46,4 +46,24 @@ class OperationalHardening
             ]);
         }
     }
+    /**
+     * Parse a forensic ID (e.g., "BILL-000003" or "#CONTRACT-000005") 
+     * into its raw integer component for database lookup.
+     */
+    public static function parseForensicId(string $query): ?int
+    {
+        $clean = ltrim(trim($query), '#');
+        
+        // Match standard HavenStay forensic patterns: PREFIX-DIGITS
+        if (preg_match('/^[A-Z]{2,10}-(\d+)$/i', $clean, $matches)) {
+            return (int) $matches[1];
+        }
+
+        // If it's just digits (e.g. 000005), treat as potential ID
+        if (ctype_digit($clean)) {
+            return (int) $clean;
+        }
+
+        return null;
+    }
 }

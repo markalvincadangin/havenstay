@@ -129,11 +129,11 @@ class DemoSeeder extends Seeder
     {
         $rooms = [];
         $roomData = [
-            'sharedFour' => ['code' => 'UNIT-101', 'type' => RoomType::SHARED, 'cap' => 4, 'rate' => 5800.00, 'desc' => 'Sampaloc Shared-4 (U-Belt)'],
-            'sharedTwin' => ['code' => 'UNIT-102', 'type' => RoomType::SHARED, 'cap' => 2, 'rate' => 8200.00, 'desc' => 'España Twin (Quiet Zone)'],
-            'soloStandard' => ['code' => 'UNIT-201', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 14500.00, 'desc' => 'Loyola Studio (Student Solo)', 'metered' => true],
-            'soloExecutive' => ['code' => 'UNIT-202', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 16800.00, 'desc' => 'Katipunan Executive (Professional Solo)', 'metered' => true],
-            'soloInclusive' => ['code' => 'UNIT-301', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 18500.00, 'desc' => 'BGC Premium (All-Inclusive)', 'metered' => false],
+            'sharedFour' => ['code' => 'ROOM-101', 'type' => RoomType::SHARED, 'cap' => 4, 'rate' => 5800.00, 'desc' => 'Sampaloc Shared-4 (U-Belt)'],
+            'sharedTwin' => ['code' => 'ROOM-102', 'type' => RoomType::SHARED, 'cap' => 2, 'rate' => 8200.00, 'desc' => 'España Twin (Quiet Zone)'],
+            'soloStandard' => ['code' => 'ROOM-201', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 14500.00, 'desc' => 'Loyola Studio (Student Solo)', 'metered' => true],
+            'soloExecutive' => ['code' => 'ROOM-202', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 16800.00, 'desc' => 'Katipunan Executive (Professional Solo)', 'metered' => true],
+            'soloInclusive' => ['code' => 'ROOM-301', 'type' => RoomType::PRIVATE , 'cap' => 1, 'rate' => 18500.00, 'desc' => 'BGC Premium (All-Inclusive)', 'metered' => false],
         ];
 
         foreach ($roomData as $key => $d) {
@@ -222,6 +222,9 @@ class DemoSeeder extends Seeder
 
         // 6. Scenario: The All-Inclusive Executive (Rico)
         $this->seedScenarioAllInclusive($users, $inventory);
+
+        // 7. Scenario: The Fresh Onboarded (Sarah) - Registered but no history
+        $this->seedScenarioFreshOnboarded($users, $inventory);
     }
 
     private function seedScenarioConsistentPayer(array $users, array $inventory): void
@@ -412,6 +415,19 @@ class DemoSeeder extends Seeder
         ]);
 
         $bed->update(['status' => BedSpaceStatus::OCCUPIED]);
+    }
+
+    private function seedScenarioFreshOnboarded(array $users, array $inventory): void
+    {
+        Tenant::updateOrCreate(['email' => 'sarah.lee@example.ph'], [
+            'first_name' => 'Sarah',
+            'last_name' => 'Lee',
+            'contact_number' => '09234445555',
+            'emergency_contact_name' => 'John Lee',
+            'emergency_contact_number' => '09230009999',
+            'address' => 'Quezon City, PH',
+            'status' => TenantStatus::ONBOARDED,
+        ]);
     }
 
     private function seedPaidBilling(Contract $contract, Carbon $month, int $staffId): void

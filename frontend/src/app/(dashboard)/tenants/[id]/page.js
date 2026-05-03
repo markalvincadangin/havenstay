@@ -131,7 +131,6 @@ export default function TenantDetailsPage() {
                 hasActiveContract={hasActiveContract}
                 busyAction={busyAction}
                 onDeactivate={() => runLifecycleAction("deactivate", `/api/tenants/${tenantId}/deactivate`)}
-                onReactivate={() => runLifecycleAction("reactivate", `/api/tenants/${tenantId}/reactivate`)}
                 onRestore={() => runLifecycleAction("restore", `/api/tenants/${tenantId}/restore`)}
                 onArchive={() => setShowArchiveModal(true)}
               />
@@ -246,7 +245,7 @@ export default function TenantDetailsPage() {
                     caption="History of tenant contracts"
                     columns={[
                       { key: "contract_id", label: "CONTRACT ID" },
-                      { key: "room", label: "ASSIGNED UNIT" },
+                      { key: "room", label: "ASSIGNED ROOM" },
                       { key: "dates", label: "CONTRACT PERIOD", className: "text-center" },
                       { key: "status", label: "STATUS", className: "text-center" },
                       { key: "actions", label: "", className: "text-right" },

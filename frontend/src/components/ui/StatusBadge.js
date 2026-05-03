@@ -72,6 +72,7 @@ export function StatusBadge({ children }) {
     void: "badge-neutral",
 
     // Tenant statuses
+    onboarded: "badge-neutral",
     active: "badge-success",
     inactive: "badge-neutral",
     moved_out: "badge-neutral",
@@ -143,6 +144,7 @@ export function StatusBadge({ children }) {
     posted: FileText,
     billing: CreditCard,
     void: XCircle,
+    onboarded: Clock,
   };
 
   const variant = variantMap[normalizedValue] || "badge-neutral";

@@ -24,11 +24,7 @@ export default function LifecycleActions({
   const archivedKey = isRoomMode ? "decommissioned" : "archived";
   const internalIsArchived = isUserMode ? isArchived : status === archivedKey;
   
-  // Reactivate logic (Tenant)
-  const isMovedOut = !isRoomMode && !isUserMode && status === "moved_out";
-  const canTenantReactivate = !isRoomMode && !isUserMode && !internalIsArchived && isMovedOut;
-
-  // Reactivate logic (User)
+  // Reactivate logic (User only - Tenant reactivation is now strictly contract-driven)
   const canUserReactivate = isUserMode && !internalIsArchived && !isActive;
   const canUserDeactivate = isUserMode && !internalIsArchived && isActive;
 
@@ -44,8 +40,8 @@ export default function LifecycleActions({
 
   return (
     <div className="flex items-center gap-2">
-      {/* Reactivate Button (Tenant/User) */}
-      {(canTenantReactivate || canUserReactivate) ? (
+      {/* Reactivate Button (User only) */}
+      {canUserReactivate ? (
         <Button
           type="button"
           variant="secondary"

@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Services\Concerns\ManagesWorkflows;
 use App\Support\Financials;
+use App\Support\OperationalHardening;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
@@ -65,7 +66,7 @@ class PaymentService
             throw ValidationException::withMessages(['billing_id' => ['Target (billing or contract) is required.']]);
         }
 
-        $payment = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'POST_PAYMENT',
             payload: [
@@ -120,13 +121,11 @@ class PaymentService
                     }
                 }
 
+                self::clearCache($contractId);
+
                 return $payment;
             }
         );
-
-        self::clearCache($contractId);
-
-        return $payment;
     }
 
     /**
@@ -138,7 +137,7 @@ class PaymentService
      */
     public static function void(User $actor, Payment $payment, ?string $reason = null): Payment
     {
-        $voided = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'VOID_PAYMENT',
             payload: [
@@ -162,18 +161,44 @@ class PaymentService
                     BillingService::syncBillingStatus($actor, $payment->billing);
                 }
 
+                self::clearCache($payment->contract_id);
+
                 return $payment->fresh();
             }
         );
-
-        self::clearCache($payment->contract_id);
-
-        return $voided;
     }
 
     public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
     {
-        return self::listHistoryQuery($filters)->paginate($perPage, ['*'], 'page', $page);
+        $query = self::listHistoryQuery($filters);
+        
+        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortDir = $filters['sort_dir'] ?? 'desc';
+        
+        if ($sortByRaw === 'id') {
+            $query->orderBy('payment_id', $sortDir);
+        } elseif ($sortByRaw === 'date') {
+            $query->orderBy('payment_date', $sortDir)->orderBy('payment_id', $sortDir);
+        } elseif ($sortByRaw === 'amount') {
+            $query->orderBy('amount_paid', $sortDir)->orderBy('payment_id', $sortDir);
+        } elseif ($sortByRaw === 'method') {
+            $query->orderBy('payment_method', $sortDir)->orderBy('payment_id', $sortDir);
+        } elseif ($sortByRaw === 'tenant') {
+            $query->leftJoin('billings', 'payments.billing_id', '=', 'billings.billing_id')
+                  ->leftJoin('contracts', function($join) {
+                      $join->on('payments.contract_id', '=', 'contracts.contract_id')
+                           ->orOn('billings.contract_id', '=', 'contracts.contract_id');
+                  })
+                  ->leftJoin('tenants', 'contracts.tenant_id', '=', 'tenants.tenant_id')
+                  ->orderBy('tenants.last_name', $sortDir)
+                  ->orderBy('tenants.first_name', $sortDir)
+                  ->orderBy('payments.payment_id', $sortDir)
+                  ->select('payments.*');
+        } else {
+            $query->orderByDesc('payment_date')->orderByDesc('payment_id');
+        }
+        
+        return $query->paginate($perPage, ['*'], 'page', $page);
     }
 
     /**
@@ -206,12 +231,13 @@ class PaymentService
                 'contract.room',
                 'contract.bedSpace',
                 'processor'
-            ])
-            ->orderByDesc('payment_date')
-            ->orderByDesc('payment_id');
+            ]);
 
         if (! empty($filters['contract_id'])) {
-            $query->where('contract_id', (int) $filters['contract_id']);
+            $query->where(function ($q) use ($filters): void {
+                $q->where('contract_id', (int) $filters['contract_id'])
+                  ->orWhereHas('billing', fn ($b) => $b->where('contract_id', (int) $filters['contract_id']));
+            });
         }
 
         if (! empty($filters['billing_id'])) {
@@ -219,7 +245,10 @@ class PaymentService
         }
 
         if (! empty($filters['tenant_id'])) {
-            $query->whereHas('contract', fn ($q) => $q->where('tenant_id', $filters['tenant_id']));
+            $query->where(function ($q) use ($filters): void {
+                $q->whereHas('contract', fn ($c) => $c->where('tenant_id', $filters['tenant_id']))
+                  ->orWhereHas('billing.contract', fn ($bc) => $bc->where('tenant_id', $filters['tenant_id']));
+            });
         }
 
         if (! empty($filters['payment_category'])) {
@@ -227,15 +256,42 @@ class PaymentService
         }
 
         if (! empty($filters['q'])) {
-            $needle = trim($filters['q']);
-            $query->where(function ($w) use ($needle): void {
-                $w->where('payment_id', 'like', "%{$needle}%")
-                    ->orWhere('reference_number', 'like', "%{$needle}%")
-                    ->orWhereHas('contract.tenant', function ($t) use ($needle): void {
-                        $t->where('first_name', 'like', "%{$needle}%")
-                            ->orWhere('last_name', 'like', "%{$needle}%");
-                    });
+            $needle = trim((string) $filters['q']);
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $query->where(function ($w) use ($needle, $forensicId): void {
+                if ($forensicId) {
+                    $w->where('payment_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $w->where('payment_id', 'like', "%{$stripped}%")
+                        ->orWhere('reference_number', 'like', "%{$stripped}%")
+                        ->orWhereHas('contract.tenant', function ($t) use ($stripped): void {
+                            $t->where('first_name', 'like', "%{$stripped}%")
+                                ->orWhere('last_name', 'like', "%{$stripped}%");
+                        })
+                        ->orWhereHas('billing.contract.tenant', function ($t) use ($stripped): void {
+                            $t->where('first_name', 'like', "%{$stripped}%")
+                                ->orWhere('last_name', 'like', "%{$stripped}%");
+                        });
+                }
             });
+        }
+
+        if (! empty($filters['from'])) {
+            $query->whereDate('payment_date', '>=', $filters['from']);
+        }
+
+        if (! empty($filters['to'])) {
+            $query->whereDate('payment_date', '<=', $filters['to']);
+        }
+
+        if (! empty($filters['posting_status']) && $filters['posting_status'] !== 'all') {
+            if ($filters['posting_status'] === 'voided') {
+                $query->whereNotNull('voided_at');
+            } elseif ($filters['posting_status'] === 'posted') {
+                $query->whereNull('voided_at');
+            }
         }
 
         /** @var Builder $query */

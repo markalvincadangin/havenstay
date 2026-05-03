@@ -13,26 +13,24 @@ import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import { exportReportCsv } from "@/lib/downloads";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import FilterChips from "@/components/ui/FilterChips";
+import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import { Field, Select } from "@/components/ui/Fields";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Table } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { FileText } from "lucide-react";
+import { FileText, Search, TrendingUp, Wallet } from "lucide-react";
 import TablePagination from "@/components/ui/TablePagination";
 import ResourceView from "@/components/ui/ResourceView";
 import { SkeletonListPage } from "@/components/ui/Skeleton";
 import StandardPage from "@/components/ui/StandardPage";
 import {
-  buildReportListQuery,
   normalizePaginatedList,
   normalizeReportRows,
-  readStoredPerPage,
 } from "@/lib/pagination";
+import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
-import ReportFilterCard from "@/components/ui/ReportFilterCard";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 
 export default function ActiveContractsReportPage() {
@@ -43,10 +41,24 @@ export default function ActiveContractsReportPage() {
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [filters, setFilters] = useState({ room_id: "" });
-  const [appliedFilters, setAppliedFilters] = useState({ room_id: "" });
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
+
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { room_id: "" },
+    buildExtraParams: ({ filters: current }) => {
+      const extra = {};
+      if (current.room_id) extra.room_id = current.room_id;
+      return extra;
+    },
+  });
 
   const { data: roomsData } = useSWR(
     !authLoading && currentUser && canViewReports(currentUser) ? "/api/rooms?per_page=100" : null,
@@ -60,19 +72,14 @@ export default function ActiveContractsReportPage() {
     }
   }, [roomsData]);
 
-  const reportQs = useMemo(() => {
-    const extra = {};
-    if (appliedFilters.room_id) extra.room_id = appliedFilters.room_id;
-    return buildReportListQuery(page, perPage, extra);
-  }, [appliedFilters, page, perPage]);
-
   const { data: reportData, error: reportError, mutate: loadReport, isValidating } = useSWR(
-    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/active-contracts${reportQs}` : null,
+    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/active-contracts${queryString}` : null,
     fetcher,
     { keepPreviousData: true, dedupingInterval: 600000 }
   );
 
   const loading = !reportData && !reportError && !authLoading && currentUser && canViewReports(currentUser);
+  const hasActiveFilters = Boolean(filters.room_id);
 
   useEffect(() => {
     if (reportError) {
@@ -89,20 +96,13 @@ export default function ActiveContractsReportPage() {
     }
   }, [reportData]);
 
-  const onApplyFilters = (event) => {
-    event.preventDefault();
-    setApiError("");
-    setAppliedFilters({ ...filters });
-    setPage(1);
-  };
-
   const onExport = async () => {
     setApiError("");
     setExporting(true);
     try {
       await exportReportCsv({
         endpoint: "/api/reports/active-contracts/export",
-        filters: appliedFilters,
+        filters: filters.room_id ? { room_id: filters.room_id } : {},
         filenamePrefix: "active-contracts",
       });
     } catch (error) {
@@ -116,8 +116,8 @@ export default function ActiveContractsReportPage() {
 
   const rows = normalizeReportRows(report, "rows").rows;
 
-  const selectedRoom = appliedFilters.room_id
-    ? rooms.find((r) => String(r.room_id) === String(appliedFilters.room_id))
+  const selectedRoom = filters.room_id
+    ? rooms.find((r) => String(r.room_id) === String(filters.room_id))
     : null;
 
   return (
@@ -156,15 +156,31 @@ export default function ActiveContractsReportPage() {
           isSyncing={isValidating}
           className="hs-glass-effect"
         />
+        <KpiCard
+          label="Monthly Revenue"
+          value={report.summary?.total_monthly_revenue ?? 0}
+          icon={TrendingUp}
+          isSyncing={isValidating}
+          currency={true}
+          className="hs-glass-effect"
+        />
+        <KpiCard
+          label="Deposits Held"
+          value={report.summary?.total_deposits_held ?? 0}
+          icon={Wallet}
+          isSyncing={isValidating}
+          currency={true}
+          className="hs-glass-effect"
+        />
       </div>
 
-      <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={isValidating}>
-        <form className="grid gap-6 sm:grid-cols-3" onSubmit={onApplyFilters}>
+      <FilterPanelCard icon={Search}>
+        <div className="grid gap-6 sm:grid-cols-3">
           <Field label="Room">
             <Select
               className="!h-11 border-stone-200"
               value={filters.room_id}
-              onChange={(e) => setFilters((prev) => ({ ...prev, room_id: e.target.value }))}
+              onChange={(e) => updateFilter("room_id", e.target.value)}
             >
               <option value="">All rooms</option>
               {rooms.map((r) => (
@@ -174,42 +190,29 @@ export default function ActiveContractsReportPage() {
               ))}
             </Select>
           </Field>
-          <div className="flex items-end">
-            <Button type="submit" variant="secondary" className="w-full !h-11 shadow-sm">
-              Apply filters
-            </Button>
-          </div>
-        </form>
+        </div>
         <FilterChips
           className="mt-6"
           items={[
             {
               key: "room",
               label: "Room",
-              value: appliedFilters.room_id
+              value: filters.room_id
                 ? selectedRoom
                   ? selectedRoom.room_code
-                  : `#${appliedFilters.room_id}`
+                  : `#${filters.room_id}`
                 : "",
-              onClear: () => {
-                setFilters((prev) => ({ ...prev, room_id: "" }));
-                setAppliedFilters((prev) => ({ ...prev, room_id: "" }));
-                setPage(1);
-              },
+              onClear: () => updateFilter("room_id", ""),
             },
           ]}
-          onClearAll={() => {
-            setFilters({ room_id: "" });
-            setAppliedFilters({ room_id: "" });
-            setPage(1);
-          }}
+          onClearAll={resetFilters}
         />
         {apiError ? (
           <Alert variant="error" className="mt-6" title="Error">
             {apiError}
           </Alert>
         ) : null}
-      </ReportFilterCard>
+      </FilterPanelCard>
 
       <ResourceView
         isLoading={loading}
@@ -220,10 +223,25 @@ export default function ActiveContractsReportPage() {
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
           title: "No active contracts",
-          message: "No rows match the filter, or there are no active leases in the system."
+          description: "No rows match the filter, or there are no active leases in the system.",
+          action: hasActiveFilters ? (
+            <Button
+              variant="secondary"
+              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              onClick={resetFilters}
+            >
+              Clear filters
+            </Button>
+          ) : null
         }}
       >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">ACTIVE CONTRACTS DIRECTORY</h2>
+            <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+              {tableMeta?.total ?? rows.length} RECORDS MATCHING
+            </div>
+          </div>
           <Table
             embedded={true}
             caption="Active contract rows"

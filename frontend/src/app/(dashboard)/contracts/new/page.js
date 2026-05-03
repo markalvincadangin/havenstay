@@ -40,6 +40,7 @@ export default function NewContractPage() {
       setError,
       formState: { errors, isDirty },
    } = useForm({
+      mode: "onChange",
       defaultValues: {
          tenant_id: "",
          room_id: "",

@@ -37,13 +37,13 @@ This document defines the technical interface contract between the HavenStay pre
 | **Staff** | Operational management (Tenants, Rooms, Contracts, Billing, Meters) |
 | **Viewer** | Read-only access to operational data and reports |
 
-### 2.4 Data Privacy (NFR-015)
-In accordance with **NFR-015**, PII (Personally Identifiable Information) masking is enforced on all API responses for the **Viewer** role. Sensitive fields such as contact numbers and addresses are redacted or masked in list and detail views to protect tenant privacy.
+### 2.4 Data Privacy (NFR-005)
+In accordance with **NFR-005 (RBAC/Access Control Enforcement)**, PII (Personally Identifiable Information) masking is enforced on all API responses for the **Viewer** role. Sensitive fields such as contact numbers and addresses are redacted or masked in list and detail views to protect tenant privacy.
 
 ### 2.5 Idempotency Protection
 - **Header:** `Idempotency-Key: <UUID>`
 - **Scope:** Required for all write operations (`POST`, `PUT`, `PATCH`) on Contracts, Billings, and Payments.
-- **Behavior:** Ensures that if a request is retried due to network lag, the system will not create duplicate financial or contractual records. Valid for 24 hours per key.
+- **Behavior:** Ensures that if a request is retried due to network lag, the system will not create duplicate financial or contractual records. Valid for 1 hour per key.
 
 ---
 

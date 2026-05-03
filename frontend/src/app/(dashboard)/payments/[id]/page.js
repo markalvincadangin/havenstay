@@ -190,8 +190,8 @@ export default function PaymentDetailPage() {
                 <div className="p-8 space-y-6">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Amount Paid</p>
-                    <CurrencyDisplay 
-                      amount={payment?.amount_paid} 
+                    <CurrencyDisplay
+                      amount={payment?.amount_paid}
                       className={`text-4xl font-black ${status === 'voided' ? 'text-stone-300 line-through' : 'text-emerald-700'}`}
                     />
                   </div>
@@ -245,7 +245,7 @@ export default function PaymentDetailPage() {
                   </div>
                   <div className="space-y-6">
                     <MetricItem label="Room / Bed Space">
-                      Room {roomCode}{bedLabel && bedLabel !== "—" ? ` / ${bedLabel}` : ""}
+                      {roomCode}{bedLabel && bedLabel !== "—" ? ` / ${bedLabel}` : ""}
                     </MetricItem>
                     <MetricItem label="Room Category">
                       {room?.room_type?.toUpperCase() || "N/A"}
@@ -304,10 +304,30 @@ export default function PaymentDetailPage() {
                     </div>
                   )}
                   <div className="flex justify-end pt-4">
-                    <Button type="button" variant="secondary" onClick={() => router.push(`/billing/${payment?.billing_id}`)} className="!h-10 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest group">
-                      View Billing
-                      <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
-                    </Button>
+                    {payment?.billing_id ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => router.push(`/billing/${payment?.billing_id}`)}
+                        className="!h-10 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest group"
+                      >
+                        View Billing
+                        <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          const cId = payment?.contract_id || payment?.billing?.contract_id;
+                          if (cId) router.push(`/contracts/${cId}`);
+                        }}
+                        className="!h-10 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest group"
+                      >
+                        View Contract
+                        <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>
