@@ -28,12 +28,13 @@ import OccupancyBar from "@/components/ui/OccupancyBar";
 import { ROOM_TYPE_LABELS } from "@/lib/constants";
 import { normalizeReportRows } from "@/lib/pagination";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import { BarChart3, Home, Users, CheckCircle, Search } from "lucide-react";
 
 export default function OccupancyReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const [report, setReport] = useState({ summary: null, rows: [] });
@@ -95,18 +96,12 @@ export default function OccupancyReportPage() {
   const onExport = async () => {
     if (apiUnavailable) return;
     setApiError("");
-    setExporting(true);
-    try {
-      await exportReportCsv({
-        endpoint: "/api/reports/occupancy/export",
-        filters: filters.room_type !== "all" ? { room_type: filters.room_type } : {},
-        filenamePrefix: "occupancy-report",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    await performExport({
+      endpoint: "/api/reports/occupancy/export",
+      filters: filters.room_type !== "all" ? { room_type: filters.room_type } : {},
+      filenamePrefix: "occupancy-report",
+      label: "Occupancy Report",
+    });
   };
 
   if (isUnauthorized) return null;

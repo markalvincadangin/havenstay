@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\AuditAction;
+use App\Enums\EventCategory;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AuditLog\ExportAuditLogRequest;
 use App\Http\Requests\AuditLog\IndexAuditLogRequest;
 use App\Http\Resources\AuditLogResource;
+use App\Models\AuditLog;
 use App\Services\Analytics\AuditReportingService;
 use App\Support\Pagination;
 use Illuminate\Http\JsonResponse;
@@ -47,6 +50,19 @@ class AuditLogController extends Controller
         $validated = $request->validated();
 
         $payload = AuditReportingService::auditLogsCsvPayload($validated);
+        
+        // Record the export action in the forensic ledger
+        AuditLog::create([
+            'action' => AuditAction::EXPORT,
+            'event_category' => EventCategory::SECURITY,
+            'target_table' => 'audit_logs',
+            'record_id' => 0,
+            'is_success' => true,
+            'metadata' => [
+                'filters' => $validated,
+                'row_count' => count($payload['rows']),
+            ],
+        ]);
 
         return response()->streamDownload(function () use ($payload): void {
             $output = fopen('php://output', 'w');

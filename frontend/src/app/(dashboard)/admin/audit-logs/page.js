@@ -50,10 +50,14 @@ import StandardPage from "@/components/ui/StandardPage";
 import { SkeletonListPage } from "@/components/ui/Skeleton";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useToasts } from "@/context/ToastContext";
+import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
 
+import { downloadCsvWithAuth } from "@/lib/downloads";
 import { AuditLogDiffModal } from "@/features/admin/components/AuditLogDiffModal";
 export default function AuditLogsPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
+  const { showToast } = useToasts();
   const canAccess = useMemo(() => canViewAuditLogs(currentUser), [currentUser]);
   const viewDenied = !authLoading && currentUser !== null && !canAccess;
   const [activeDiff, setActiveDiff] = useState(null);
@@ -105,10 +109,13 @@ export default function AuditLogsPage() {
   const handleExport = async () => {
     try {
       setExporting(true);
-      const url = `/api/audit-logs/export${queryString}`;
-      window.open(`${process.env.NEXT_PUBLIC_API_URL || ""}${url}`, "_blank");
+      showToast("Preparing audit log export...", "info");
+      const stamp = new Date().toISOString().slice(0, 10);
+      await downloadCsvWithAuth(`/api/audit-logs/export${queryString}`, `audit-logs-${stamp}.csv`);
+      showToast("Audit log exported successfully.", "success");
     } catch (err) {
       console.error("Export failed:", err);
+      showToast("Export failed. Please try again.", "error");
     } finally {
       setExporting(false);
     }
@@ -122,15 +129,13 @@ export default function AuditLogsPage() {
       loading={loading}
       skeleton={<SkeletonListPage rows={10} />}
       actions={canAccess && (
-        <Button
-          variant="secondary"
-          onClick={handleExport}
-          disabled={exporting || loading || logs?.length === 0}
-          className="!h-10 border-stone-200 shadow-sm"
-        >
-          <Download size={14} className="mr-2" />
-          Export Dataset
-        </Button>
+        <ReportHeaderActions
+          user={currentUser}
+          onExport={handleExport}
+          exporting={exporting}
+          exportDisabled={exporting || loading || logs?.length === 0}
+          exportLabel="Export Audit Logs"
+        />
       )}
     >
       <div className="space-y-6">
@@ -307,19 +312,19 @@ export default function AuditLogsPage() {
                           <span className="mt-1 font-mono text-[10px] font-bold tabular-nums uppercase tracking-widest text-stone-400">
                             {log.changed_at
                               ? (() => {
-                                  const normalized =
-                                    typeof log.changed_at === "string" &&
+                                const normalized =
+                                  typeof log.changed_at === "string" &&
                                     log.changed_at.includes(" ") &&
                                     !log.changed_at.includes("T") &&
                                     !log.changed_at.includes("Z")
-                                      ? log.changed_at.replace(" ", "T") + "Z"
-                                      : log.changed_at;
-                                  return new Date(normalized).toLocaleTimeString("en-PH", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    hour12: true,
-                                  });
-                                })()
+                                    ? log.changed_at.replace(" ", "T") + "Z"
+                                    : log.changed_at;
+                                return new Date(normalized).toLocaleTimeString("en-PH", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                });
+                              })()
                               : "—"}
                           </span>
                         </div>
@@ -354,11 +359,10 @@ export default function AuditLogsPage() {
                       </td>
                       <td className="py-6 text-center">
                         <div
-                          className={`mx-auto size-2 rounded-full ${
-                            log.is_success
+                          className={`mx-auto size-2 rounded-full ${log.is_success
                               ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
                               : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]"
-                          }`}
+                            }`}
                         />
                       </td>
                       <td className="py-6">

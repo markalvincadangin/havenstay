@@ -33,12 +33,13 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import StandardPage from "@/components/ui/StandardPage";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { AlertCircle, Users, Calendar, Clock, AlertTriangle } from "lucide-react";
 export default function OutstandingBalancesReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const [report, setReport] = useState({ summary: null, rows: [] });
@@ -106,18 +107,12 @@ export default function OutstandingBalancesReportPage() {
   const onExport = async () => {
     if (apiUnavailable) return;
     setApiError("");
-    setExporting(true);
-    try {
-      await exportReportCsv({
-        endpoint: "/api/reports/outstanding-balances/export",
-        filters,
-        filenamePrefix: "outstanding-balances-report",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    await performExport({
+      endpoint: "/api/reports/outstanding-balances/export",
+      filters,
+      filenamePrefix: "outstanding-balances-report",
+      label: "Outstanding Balances Report",
+    });
   };
   const rows = normalizeReportRows(report, "rows").rows;
   const pastDueAmount = Number(report.summary?.past_due_amount ?? 0);

@@ -128,6 +128,7 @@ class AuditReportingService
     public static function auditLogsCsvPayload(array $filters = []): array
     {
         $logs = self::auditLogsFilteredQuery($filters)->limit(self::MAX_EXPORT_LIMIT)->get();
+        self::attachUserContext($logs);
 
         $headers = ['ID', 'Timestamp', 'Actor', 'Action', 'Target', 'Record ID', 'IP Address', 'Correlation ID', 'Old Value', 'New Value'];
 
@@ -135,8 +136,8 @@ class AuditReportingService
             return [
                 (string) $log->id,
                 (string) $log->changed_at,
-                $log->user?->username ?? 'System',
-                $log->action,
+                $log->actor_name,
+                $log->action->value,
                 $log->target_table,
                 (string) $log->record_id,
                 $log->ip_address ?? 'N/A',

@@ -29,12 +29,13 @@ import TablePagination from "@/components/ui/TablePagination";
 import StandardPage from "@/components/ui/StandardPage";
 import { normalizeReportRows } from "@/lib/pagination";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
 
 export default function TenantHistoryReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ rows: [], summary: {} });
   const [tableMeta, setTableMeta] = useState(null);
@@ -87,20 +88,15 @@ export default function TenantHistoryReportPage() {
   }, [reportData]);
 
   const onExport = async () => {
-    try {
-      const exportFilters = Object.fromEntries(
-        Object.entries(filters).filter(([, value]) => value && value !== "all")
-      );
-      await exportReportCsv({
-        endpoint: "/api/reports/tenant-history/export",
-        filters: exportFilters,
-        filenamePrefix: "tenant-history-report",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    const exportFilters = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value && value !== "all")
+    );
+    await performExport({
+      endpoint: "/api/reports/tenant-history/export",
+      filters: exportFilters,
+      filenamePrefix: "tenant-history-report",
+      label: "Tenant History Report",
+    });
   };
 
   if (isUnauthorized) return null;

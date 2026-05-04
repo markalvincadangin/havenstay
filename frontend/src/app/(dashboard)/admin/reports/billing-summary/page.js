@@ -25,12 +25,13 @@ import TablePagination from "@/components/ui/TablePagination";
 import StandardPage from "@/components/ui/StandardPage";
 import { normalizeReportRows } from "@/lib/pagination";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 export default function BillingSummaryReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const [report, setReport] = useState({ summary: null, rows: [] });
@@ -85,18 +86,12 @@ export default function BillingSummaryReportPage() {
   const onExport = async () => {
     if (apiUnavailable) return;
     setApiError("");
-    setExporting(true);
-    try {
-      await exportReportCsv({
-        endpoint: "/api/reports/billing-summary/export",
-        filters,
-        filenamePrefix: "billing-summary-report",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    await performExport({
+      endpoint: "/api/reports/billing-summary/export",
+      filters,
+      filenamePrefix: "billing-summary-report",
+      label: "Billing Summary Report",
+    });
   };
   if (isUnauthorized) return null;
   const rows = normalizeReportRows(report, "rows").rows;

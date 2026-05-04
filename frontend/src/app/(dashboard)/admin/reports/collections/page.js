@@ -27,6 +27,7 @@ import TablePagination from "@/components/ui/TablePagination";
 import StandardPage from "@/components/ui/StandardPage";
 import { normalizeReportRows } from "@/lib/pagination";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import CurrencyCell from "@/components/ui/CurrencyCell";
@@ -34,7 +35,7 @@ import CurrencyCell from "@/components/ui/CurrencyCell";
 export default function CollectionsPerformanceReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
@@ -88,18 +89,12 @@ export default function CollectionsPerformanceReportPage() {
 
   const onExport = async () => {
     setApiError("");
-    setExporting(true);
-    try {
-      await exportReportCsv({
-        endpoint: "/api/reports/collections-performance/export",
-        filters,
-        filenamePrefix: "collections-performance-report",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    await performExport({
+      endpoint: "/api/reports/collections-performance/export",
+      filters,
+      filenamePrefix: "collections-performance-report",
+      label: "Collections Report",
+    });
   };
 
   if (isUnauthorized) return null;

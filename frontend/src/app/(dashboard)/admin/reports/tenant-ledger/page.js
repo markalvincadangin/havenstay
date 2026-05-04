@@ -24,6 +24,7 @@ import StandardPage from "@/components/ui/StandardPage";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
 import { normalizePaginatedList, normalizeReportRows } from "@/lib/pagination";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import ResourceView from "@/components/ui/ResourceView";
 import TablePagination from "@/components/ui/TablePagination";
@@ -32,7 +33,7 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 export default function TenantLedgerReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [tenants, setTenants] = useState([]);
   const [report, setReport] = useState({ tenant: null, summary: null, entries: [] });
@@ -106,19 +107,13 @@ export default function TenantLedgerReportPage() {
   const onExport = async () => {
     if (!selectedTenantId) return;
     setApiError("");
-    setExporting(true);
-    try {
-      const tenantName = report.tenant?.name ? report.tenant.name.toLowerCase().replace(/ /g, '_') : 'tenant';
-      await exportReportCsv({
-        endpoint: "/api/reports/tenant-ledger/export",
-        filters: { tenant_id: selectedTenantId },
-        filenamePrefix: `ledger-${tenantName}`,
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    const tenantName = report.tenant?.name ? report.tenant.name.toLowerCase().replace(/ /g, '_') : 'tenant';
+    await performExport({
+      endpoint: "/api/reports/tenant-ledger/export",
+      filters: { tenant_id: selectedTenantId },
+      filenamePrefix: `ledger-${tenantName}`,
+      label: "Tenant Ledger Report",
+    });
   };
 
   if (isUnauthorized) return null;

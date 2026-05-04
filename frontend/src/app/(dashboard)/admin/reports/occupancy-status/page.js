@@ -29,6 +29,7 @@ import { BedDouble, Home, Search, Wrench } from "lucide-react";
 import TablePagination from "@/components/ui/TablePagination";
 import ResourceView from "@/components/ui/ResourceView";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import {
   normalizePaginatedList,
   normalizeReportRows,
@@ -37,7 +38,7 @@ import {
 export default function OccupancyStatusReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
@@ -102,21 +103,15 @@ export default function OccupancyStatusReportPage() {
 
   const onExport = async () => {
     setApiError("");
-    setExporting(true);
-    try {
-      const exportFilters = Object.fromEntries(
-        Object.entries(filters).filter(([, value]) => value && value !== "all")
-      );
-      await exportReportCsv({
-        endpoint: "/api/reports/occupancy-status/export",
-        filters: exportFilters,
-        filenamePrefix: "occupancy-status",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    const exportFilters = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value && value !== "all")
+    );
+    await performExport({
+      endpoint: "/api/reports/occupancy-status/export",
+      filters: exportFilters,
+      filenamePrefix: "occupancy-status",
+      label: "Bed Occupancy Report",
+    });
   };
 
   if (isUnauthorized) return null;

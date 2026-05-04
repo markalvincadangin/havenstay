@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\AuditAction;
+use App\Enums\EventCategory;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Report\ExportReportsRequest;
 use App\Http\Requests\Report\ManageReportsRequest;
 use App\Http\Requests\Report\ViewReportsRequest;
+use App\Models\AuditLog;
 use App\Services\Analytics\PiiMaskingService;
 use App\Services\Analytics\ReportService;
 use App\Services\Core\AuthorizationService;
@@ -338,6 +341,20 @@ class ReportController extends Controller
     private function csvDownload(string $type, array $report, string $filename): StreamedResponse
     {
         $payload = ReportService::toCsvPayload($type, $report);
+
+        // Record the export action in the forensic ledger
+        AuditLog::create([
+            'action' => AuditAction::EXPORT,
+            'event_category' => EventCategory::SECURITY,
+            'target_table' => 'reports',
+            'record_id' => 0,
+            'is_success' => true,
+            'metadata' => [
+                'type' => $type,
+                'filename' => $filename,
+                'row_count' => count($payload['rows']),
+            ],
+        ]);
 
         return response()->streamDownload(function () use ($payload): void {
             $output = fopen('php://output', 'w');

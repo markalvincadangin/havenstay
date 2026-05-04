@@ -30,13 +30,14 @@ import {
   normalizeReportRows,
 } from "@/lib/pagination";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 
 export default function ActiveContractsReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
@@ -98,18 +99,12 @@ export default function ActiveContractsReportPage() {
 
   const onExport = async () => {
     setApiError("");
-    setExporting(true);
-    try {
-      await exportReportCsv({
-        endpoint: "/api/reports/active-contracts/export",
-        filters: filters.room_id ? { room_id: filters.room_id } : {},
-        filenamePrefix: "active-contracts",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    await performExport({
+      endpoint: "/api/reports/active-contracts/export",
+      filters: filters.room_id ? { room_id: filters.room_id } : {},
+      filenamePrefix: "active-contracts",
+      label: "Active Contracts Report",
+    });
   };
 
   if (isUnauthorized) return null;
