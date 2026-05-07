@@ -16,6 +16,7 @@ import {
   UserManagementIcon,
   UtilityIcon,
 } from "@/components/ui/Icons";
+import UserRoleBadge from "@/components/ui/UserRoleBadge";
 import { matchesPath } from "@/lib/formatters";
 import { ADMIN_NAV_ITEMS, OPERATIONS_NAV_ITEMS } from "@/lib/navItems";
 const OPERATIONS_ICONS_BY_HREF = {
@@ -57,13 +58,15 @@ export default function Sidebar({ pathname, user, onLogout, onToggleHelp }) {
         {isCollapsed ? <ChevronRight size={14} strokeWidth={3} /> : <ChevronLeft size={14} strokeWidth={3} />}
       </button>
 
-      <div className={`flex items-center gap-3 border-b border-white/5 py-6 bg-gradient-to-r from-[var(--color-primary)]/10 to-transparent ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
-        <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl bg-white shadow-md ring-1 ring-black/5">
+      <div className={`flex items-center gap-3 border-b border-white/5 py-6 transition-all ${isCollapsed ? 'justify-center px-0' : 'px-7'}`}>
+        <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl bg-white shadow-[0_8px_16px_-4px_rgba(0,0,0,0.2)] ring-1 ring-black/5">
           <Image src="/brand/logo-dark.svg" alt="HavenStay" width={24} height={24} className="w-6 h-6" />
         </div>
         {!isCollapsed && (
-          <div>
-            <p className="text-base font-black tracking-tight leading-none text-white">HavenStay</p>
+          <div className="flex flex-col">
+            <span className="text-[15px] font-black uppercase tracking-[0.3em] leading-none text-white drop-shadow-sm">
+              HavenStay
+            </span>
           </div>
         )}
       </div>
@@ -105,7 +108,13 @@ export default function Sidebar({ pathname, user, onLogout, onToggleHelp }) {
         )}
       </div>
       
-      <div className="shrink-0 border-t border-white/5 p-4 space-y-2">
+      <div className="shrink-0 border-t border-white/5 p-4 space-y-4">
+        {!isCollapsed && user && (
+          <UserRoleBadge 
+            user={user} 
+            isSidebar={true} 
+          />
+        )}
 
         {!isCollapsed && (
           <button

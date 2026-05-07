@@ -22,31 +22,46 @@ import { Table } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import StandardPage from "@/components/ui/StandardPage";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
-import ReportFilterCard from "@/components/ui/ReportFilterCard";
+import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { BED_STATUS_LABELS } from "@/lib/constants";
 import { BedDouble, Home, Search, Wrench } from "lucide-react";
 import TablePagination from "@/components/ui/TablePagination";
 import ResourceView from "@/components/ui/ResourceView";
+import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import {
-  buildReportListQuery,
   normalizePaginatedList,
   normalizeReportRows,
-  readStoredPerPage,
 } from "@/lib/pagination";
 
 export default function OccupancyStatusReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [filters, setFilters] = useState({ room_id: "", bed_status: "" });
-  const [appliedFilters, setAppliedFilters] = useState({ room_id: "", bed_status: "" });
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
+
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { room_id: "", bed_status: "" },
+    buildExtraParams: ({ filters: current }) => {
+      const extra = {};
+      if (current.room_id) extra.room_id = current.room_id;
+      if (current.bed_status) extra.bed_status = current.bed_status;
+      return extra;
+    },
+  });
 
   const { data: roomsData } = useSWR(
     !authLoading && currentUser && canViewReports(currentUser) ? "/api/rooms?per_page=100" : null,
@@ -60,20 +75,14 @@ export default function OccupancyStatusReportPage() {
     }
   }, [roomsData]);
 
-  const reportQs = useMemo(() => {
-    const extra = {};
-    if (appliedFilters.room_id) extra.room_id = appliedFilters.room_id;
-    if (appliedFilters.bed_status) extra.bed_status = appliedFilters.bed_status;
-    return buildReportListQuery(page, perPage, extra);
-  }, [appliedFilters, page, perPage]);
-
   const { data: reportData, error: reportError, mutate: loadReport, isValidating } = useSWR(
-    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/occupancy-status${reportQs}` : null,
+    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/occupancy-status${queryString}` : null,
     fetcher,
     { keepPreviousData: true }
   );
 
   const loading = !reportData && !reportError && !authLoading && currentUser && canViewReports(currentUser);
+  const hasActiveFilters = Boolean(filters.room_id) || Boolean(filters.bed_status);
 
   useEffect(() => {
     if (reportError) {
@@ -90,27 +99,19 @@ export default function OccupancyStatusReportPage() {
     }
   }, [reportData]);
 
-  const onApplyFilters = (event) => {
-    event.preventDefault();
-    setApiError("");
-    setAppliedFilters({ ...filters });
-    setPage(1);
-  };
+
 
   const onExport = async () => {
     setApiError("");
-    setExporting(true);
-    try {
-      await exportReportCsv({
-        endpoint: "/api/reports/occupancy-status/export",
-        filters: appliedFilters,
-        filenamePrefix: "occupancy-status",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    const exportFilters = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value && value !== "all")
+    );
+    await performExport({
+      endpoint: "/api/reports/occupancy-status/export",
+      filters: exportFilters,
+      filenamePrefix: "occupancy-status",
+      label: "Bed Occupancy Report",
+    });
   };
 
   if (isUnauthorized) return null;
@@ -118,8 +119,8 @@ export default function OccupancyStatusReportPage() {
   const rows = normalizeReportRows(report, "rows").rows;
   const s = report.summary || {};
 
-  const selectedRoom = appliedFilters.room_id
-    ? rooms.find((r) => String(r.room_id) === String(appliedFilters.room_id))
+  const selectedRoom = filters.room_id
+    ? rooms.find((r) => String(r.room_id) === String(filters.room_id))
     : null;
 
   return (
@@ -179,13 +180,13 @@ export default function OccupancyStatusReportPage() {
         />
       </div>
 
-      <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={isValidating} className="hs-glass-effect">
-        <form className="grid gap-6 sm:grid-cols-4" onSubmit={onApplyFilters}>
-          <Field label="Room">
+      <FilterPanelCard icon={Search}>
+        <div className="grid gap-6 sm:grid-cols-4">
+          <Field label="Room" icon={Home}>
             <Select
               className="!h-11 border-stone-200"
               value={filters.room_id}
-              onChange={(e) => setFilters((prev) => ({ ...prev, room_id: e.target.value }))}
+              onChange={(e) => updateFilter("room_id", e.target.value)}
             >
               <option value="">All rooms</option>
               {rooms.map((r) => (
@@ -195,11 +196,11 @@ export default function OccupancyStatusReportPage() {
               ))}
             </Select>
           </Field>
-          <Field label="Bed status">
+          <Field label="Bed status" icon={BedDouble}>
             <Select
               className="!h-11 border-stone-200"
               value={filters.bed_status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, bed_status: e.target.value }))}
+              onChange={(e) => updateFilter("bed_status", e.target.value)}
             >
               <option value="">All statuses</option>
               {Object.entries(BED_STATUS_LABELS).map(([key, label]) => (
@@ -209,55 +210,38 @@ export default function OccupancyStatusReportPage() {
               ))}
             </Select>
           </Field>
-          <div className="flex items-end sm:col-span-2">
-            <Button type="submit" variant="secondary" className="w-full !h-11 shadow-sm sm:max-w-xs">
-              Apply filters
-            </Button>
-          </div>
-        </form>
+        </div>
+
         <FilterChips
           className="mt-6"
           items={[
             {
               key: "room",
               label: "Room",
-              value: appliedFilters.room_id
+              value: filters.room_id
                 ? selectedRoom
                   ? selectedRoom.room_code
-                  : `#${appliedFilters.room_id}`
+                  : `#${filters.room_id}`
                 : "",
-              onClear: () => {
-                setFilters((prev) => ({ ...prev, room_id: "" }));
-                setAppliedFilters((prev) => ({ ...prev, room_id: "" }));
-                setPage(1);
-              },
+              onClear: () => updateFilter("room_id", ""),
             },
             {
               key: "bed_status",
               label: "Bed",
-              value: appliedFilters.bed_status
-                ? BED_STATUS_LABELS[appliedFilters.bed_status] || appliedFilters.bed_status
+              value: filters.bed_status
+                ? BED_STATUS_LABELS[filters.bed_status] || filters.bed_status
                 : "",
-              onClear: () => {
-                setFilters((prev) => ({ ...prev, bed_status: "" }));
-                setAppliedFilters((prev) => ({ ...prev, bed_status: "" }));
-                setPage(1);
-              },
+              onClear: () => updateFilter("bed_status", ""),
             },
           ]}
-          onClearAll={() => {
-            const cleared = { room_id: "", bed_status: "" };
-            setFilters(cleared);
-            setAppliedFilters(cleared);
-            setPage(1);
-          }}
+          onClearAll={resetFilters}
         />
         {apiError ? (
           <Alert variant="error" className="mt-6" title="Error">
             {apiError}
           </Alert>
         ) : null}
-      </ReportFilterCard>
+      </FilterPanelCard>
 
       <ResourceView
         isLoading={loading}
@@ -268,10 +252,25 @@ export default function OccupancyStatusReportPage() {
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
           title: "No bed records",
-          message: "Adjust filters or confirm rooms and bed spaces exist in inventory."
+          description: "Adjust filters or confirm rooms and bed spaces exist in inventory.",
+          action: hasActiveFilters ? (
+            <Button
+              variant="secondary"
+              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              onClick={resetFilters}
+            >
+              Clear filters
+            </Button>
+          ) : null
         }}
       >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">BED UTILIZATION DIRECTORY</h2>
+            <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+              {tableMeta?.total ?? rows.length} RECORDS MATCHING
+            </div>
+          </div>
           <Table
             embedded={true}
             caption="Per-bed occupancy"

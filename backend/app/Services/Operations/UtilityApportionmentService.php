@@ -35,7 +35,7 @@ class UtilityApportionmentService
         $activeContracts = Contract::whereHas('bedSpace', function ($q) use ($roomId) {
             $q->where('room_id', $roomId);
         })
-            ->where('status', ContractStatus::ACTIVE)
+            ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])
             ->orderBy('move_in_date', 'asc') // Oldest contract first for BR-MET-011
             ->get();
 

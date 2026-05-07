@@ -1,28 +1,18 @@
 "use client";
-
-import React from "react";
+import React, { useState } from "react";
 import { getTenantInitials } from "@/lib/formatters";
 
 /**
  * Avatar — variants per design-system/havenstay/MASTER.md.
  * Supports both tenant and user entity objects.
- * 
- * @param {object} [tenant] - Tenant entity.
- * @param {object} [user] - User entity.
- * @param {object} [entity] - Generic entity (backwards compatibility).
- * @param {"stone"|"teal"|"blue"} [variant="stone"]
- * @param {"sm"|"md"|"lg"|"xl"} [size="md"]
  */
-export default function Avatar({ 
-  tenant, 
-  user, 
-  entity, 
-  variant = "stone",
-  size = "md" 
-}) {
+function AvatarComponent({ tenant, user, entity, size = "md", variant = "stone" }) {
+  const [hasError, setHasError] = useState(false);
+
   // Resolve entity priority
   const target = tenant || user || entity;
   const initials = getTenantInitials(target);
+  const avatarUrl = target?.avatar_url || target?.profile_photo_url || target?.image;
   
   const variants = {
     stone: "bg-stone-100 text-stone-500 ring-stone-200",
@@ -37,13 +27,31 @@ export default function Avatar({
     xl: "h-16 w-16 text-xl",
   };
 
+  const containerClasses = [
+    "flex shrink-0 items-center justify-center rounded-xl font-black ring-1 uppercase tracking-tighter shadow-sm overflow-hidden relative",
+    variants[variant] || variants.stone,
+    sizes[size] || sizes.md
+  ].join(" ");
+
+  if (avatarUrl && !hasError) {
+    return (
+      <div className={containerClasses}>
+        <img 
+          src={avatarUrl} 
+          alt={initials || "User"} 
+          className="h-full w-full object-cover transition-opacity duration-300"
+          onError={() => setHasError(true)}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className={[
-      "flex shrink-0 items-center justify-center rounded-xl font-black ring-1 uppercase tracking-tighter shadow-sm",
-      variants[variant] || variants.stone,
-      sizes[size] || sizes.md
-    ].join(" ")}>
+    <div className={containerClasses}>
       {initials || "??"}
     </div>
   );
 }
+
+// Industry Pattern: Memoize repeating list components to prevent CPU jank during scrolls.
+export default React.memo(AvatarComponent);

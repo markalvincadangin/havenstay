@@ -30,7 +30,7 @@ class ExportAuditLogRequest extends FormRequest
     {
         return [
             'entity_type' => ['sometimes', 'nullable', 'string', 'max:64'],
-            'action' => ['sometimes', 'nullable', 'string', 'in:INSERT,UPDATE,DELETE,login,logout,access_denied,status_change,archive,restore'],
+            'action' => ['sometimes', 'nullable', 'string', 'in:CREATE,UPDATE,DELETE,SOFT_DELETE,RESTORE,LOGIN,LOGOUT,FAILED_LOGIN,VOID,SYSTEM,SECURITY,EXPORT,ACCESS_DENIED'],
             'from' => ['sometimes', 'nullable', 'string', 'max:32'],
             'to' => ['sometimes', 'nullable', 'string', 'max:32'],
             'user' => ['sometimes', 'nullable', 'string', 'max:200'],

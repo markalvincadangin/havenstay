@@ -1,9 +1,9 @@
 # HavenStay Frontend Coding Blueprint
 
-**Version:** 7.3.0
+**Version:** 7.4.0
 **Status:** Authoritative Standard
 **Scope:** `frontend/src` — Next.js Application
-**Aligned to:** SRS.md v4.8 · SDD.md v4.7 · MASTER.md v8.0.0 · DATABASE.md v4.8 · API_REFERENCE.md v4.8 · BUSINESS_RULES.md v1.9 · BACKEND_CODING_BLUEPRINT.md v4.3
+**Aligned to:** SRS.md v5.2 · SDD.md v5.3 · DATABASE.md v5.3 · API_REFERENCE.md v5.3 · BUSINESS_RULES.md v2.3 · BACKEND_CODING_BLUEPRINT.md v6.2
 
 ---
 
@@ -21,11 +21,11 @@ follow this document and flag the conflict before coding.
 
 When sources conflict, resolve in this order:
 
-1. `docs/SRS.md` (v4.5) — Functional requirements and business rules
-2. `docs/BUSINESS_RULES.md` (v1.8) — Operational constraints
-3. `design-system/havenstay/MASTER.md` (v7.0.0) — Visual and UX spec
-4. `docs/API_REFERENCE.md` (v4.8) — API contract (field names, shapes)
-5. `backend/database/sql/havenstay_schema.sql` (v4.8) — Authoritative column names and ENUMs
+1. `docs/SRS.md` (v5.2) — Functional requirements and business rules
+2. `docs/BUSINESS_RULES.md` (v2.3) — Operational constraints
+3. `design-system/havenstay/MASTER.md` — Visual and UX spec
+4. `docs/API_REFERENCE.md` (v5.3) — API contract (field names, shapes)
+5. `backend/database/sql/havenstay_schema.sql` (v5.0) — Authoritative column names and ENUMs
 6. This blueprint — Implementation patterns and quality gates
 
 Do not invent field names, status values, or UI labels that
@@ -41,11 +41,11 @@ a defect.
 | Framework | Next.js 16 (App Router) | Locked |
 | Architecture | Modular Feature-Based App Router | Authoritative |
 | Language | JavaScript | No TypeScript |
-| Styling | Tailwind CSS v4 | No inline `style={}` except framer-motion |
+| Styling | Tailwind CSS v4 + HS-Utilities | No inline `style={}` — use `hs-*` CSS classes from `globals.css` |
 | Data fetching | SWR | No raw `useEffect` for remote data |
 | Animation | framer-motion | Respect `useReducedMotion` always |
 | Icons | lucide-react | No other icon libraries |
-| Forms | Controlled React state | No external form library |
+| Forms | React Hook Form | Use `react-hook-form` for all transactional inputs |
 
 frontend/
 ├── public/                          # Static assets (brand SVG, icons, favicons)
@@ -180,12 +180,13 @@ The following boundaries are non-negotiable for system stability and forensic co
 
 Every operational surface (filter panel, list, detail section) 
 uses the registry card shell. Do not invent local surfaces.
-Shell:   rounded-2xl border border-stone-200 bg-white shadow-sm
-Header:  bg-stone-50/50 border-b border-stone-100 px-8 py-5
-Title:   .hs-strip-title (uppercase, font-black, tracking-widest)
-Body:    p-8 for forms and prose | p-0 when a Table fills the card
 
-Icon wells in strip headers: `h-7 w-7 rounded-lg` tinted
+Shell:   Use `<Card>` component — applies `.hs-glass-effect` + border and shadow from `globals.css`
+Header:  Add `.hs-strip-header` class (bg-stone-50/50, border-b, px-8 py-5)
+Title:   Use `.hs-strip-title` — uppercase, font-black, tracking-widest (defined in globals.css)
+Body:    `hs-card-body` (padding p-8) for forms and prose | `!p-0` override when a Table fills the card
+
+Icon wells in strip headers: `h-7 w-7 rounded-lg` with a tinted
 background. Form section cards use `h-8 w-8` wells.
 
 ### 5.2 Resource ID Display
@@ -326,7 +327,7 @@ billing wizard follow these additional rules:
   type as secondary identifiers. Link each reading to its
   source meter detail page.
 - **Recording Readings:** The reading entry form (`/utilities/meters/[id]/readings/new` or the SideSheet) **must** include an explicit "Dial Rollover / Reset" toggle (`is_rollover`). This is a mandatory payload parameter for the backend to bypass monotonicity rejections (BR-MET-005).
-- **Utility charge preview (`GET /api/billing/{id}/forecast`):**
+- **Utility charge preview (`POST /api/billing/forecast`):**
   Present the calculated charge as a reference amount in a
   read-only `<CurrencyCell />`. Allow override with a text
   input. If the staff member overrides, a `reason` field
@@ -338,7 +339,7 @@ billing wizard follow these additional rules:
   `badge-success` labeled "Active" on that row.
 - **Meter assignment history:** Show as a timeline list
   (room code + effective-from date), newest first.
-- **Shared Room Apportionment (BR-MET-011):** The utility billing preview **must** explicitly show the "Roommate Split" calculation. For shared rooms, display the unbilled reading total alongside the number of active roommates and the resulting per-tenant charge before finalizing the bill.
+- **Shared Room Apportionment (BR-MET-010):** The utility billing preview **must** explicitly show the "Roommate Split" calculation. For shared rooms, display the unbilled reading total alongside the number of active roommates and the resulting per-tenant charge before finalizing the bill.
 - **Deposit Clearance Indicator:** Contract profiles and Side-Sheets must display `is_cleared` as an emerald `<StatusBadge>cleared</StatusBadge>` when settled. Completed contracts without clearance show an amber warning (BR-PAY-010).
 
 
@@ -576,19 +577,19 @@ the response must follow this structure:
 ## 12. Revision History
 
 | Version | Date | Summary |
-|---|---|---|
+|---|---|—|
 | v1.0 | 2026-03 | Initial frontend blueprint |
 | v1.1 | 2026-04 | Synced with operational design system |
 | v2.0 | 2026-04 | Full structural rewrite. Aligned to SDD format. |
 | **v3.0** | **2026-04-19** | **3NF Normalization Sync.** Hardened for 16-table backend. Aligned to SRS v3.4 and BR v1.6. |
-| **v3.1** | **2026-04-19** | **Architectural Lockdown.** Mandated directory structure (§3.1), enforced API Choke Point (§4.5), and codified Server/Client component boundaries. |
-| **v3.2** | **2026-04-19** | **Structure Correction.** Aligned Directory Structure (§3.1) with actual Next.js App Router 15/16 patterns (private folders, context layers) to match established codebase. |
-| v3.3 | 2026-04-19 | Forensic Route Mapping. Grounded Directory Structure (§3.1) in SRS/BR requirements. |
-| v4.0 | 2026-04-20 | Transaction Log Retirement. Removed all application-level TX log references. Consolidated forensics under Audit Logs (CCR-007). |
-| **v7.1.0** | **2026-04-21** | **Forensic Form Hardening.** Codified field immutability matrix (§5.12.1). Mandated `applyServerFieldErrors` for all edit forms. Added Deposit Clearance and Void workflow rules. |
-| **v7.2.0** | **2026-04-23** | **Strategic HCI Integration.** Institutionalized Hick's Law (Rule of 3), Persona-driven dashboards (§5.14), Optimistic UI guidance (§5.15), and Context Preservation mandates (§4.6). Aligned to MASTER.md v8.0.0. |
-| **v7.3.0** | **2026-04-23** | **Label Sovereignty Pass.** Enforced the Canonical Labeling Dictionary (§8 of MASTER.md) across all routes. Purged technical jargon and standardized action-oriented verbs. |
-| **v7.0.0** | **2026-04-21** | **Command Center Paradigm Institutionalization.** Decommissioned legacy `/new` and `/edit` folders for administrative assets. Mandated `SideSheetOverlay` and `WizardFrame` as the authoritative interaction model for v7.0.0 next-gen UI. |
-
-| **v4.6** | **2026-04-20** | **Forensic Normalization Pass.** Synced StatusBadge logic and Resource ID prefixes with MASTER.md v6.6.0 and Database Schema v4.8. Fixed stale file paths and removed deprecated Add-on Registry route tree. |
+| **v3.1** | **2026-04-19** | **Architectural Lockdown.** Mandated directory structure, enforced API Choke Point (§4.5), codified Server/Client component boundaries. |
+| **v3.2** | **2026-04-19** | **Structure Correction.** Aligned directory structure with actual Next.js App Router patterns. |
+| v3.3 | 2026-04-19 | Forensic Route Mapping. Grounded Directory Structure in SRS/BR requirements. |
+| v4.0 | 2026-04-20 | Transaction Log Retirement. Removed TX log references. Consolidated forensics under Audit Logs (CCR-007). |
 | **v4.5** | **2026-04-20** | **Forensic Hardening Pass.** Codified Correlation ID tracing (§5.11), shared-room apportionment UI (§5.10), and contiguous renewal logic (§5.12). Synced with v4.8 Database Engine. |
+| **v4.6** | **2026-04-20** | **Forensic Normalization Pass.** Synced StatusBadge logic and Resource ID prefixes. Fixed stale file paths and removed deprecated Add-on Registry route tree. |
+| **v7.0.0** | **2026-04-21** | **Command Center Paradigm.** Decommissioned legacy `/new` and `/edit` folders. Mandated `SideSheetOverlay` and `WizardFrame` as the authoritative interaction model. |
+| **v7.1.0** | **2026-04-21** | **Forensic Form Hardening.** Codified field immutability matrix (§5.12.1). Mandated `applyServerFieldErrors`. Added Deposit Clearance and Void workflow rules. |
+| **v7.2.0** | **2026-04-23** | **Strategic HCI Integration.** Institutionalized Hick's Law (Rule of 3), Persona-driven dashboards (§5.14), Optimistic UI guidance (§5.15), Context Preservation mandates (§4.6). |
+| **v7.3.0** | **2026-04-23** | **Label Sovereignty Pass.** Enforced the Canonical Labeling Dictionary across all routes. Purged technical jargon and standardized action-oriented verbs. |
+| **v7.4.0** | **2026-05-02** | **Docs Remediation Pass.** Confirmed styling framework as Tailwind CSS v4. Updated source-of-truth hierarchy versions (SRS v5.2, BR v2.3). Fixed BR-MET-011 → BR-MET-010 reference in §5.10. Confirmed Next.js 16.x version. Sorted revision history chronologically. |

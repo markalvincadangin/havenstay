@@ -60,14 +60,12 @@ class UtilityService
                     'effective_from' => $data['effective_from'],
                 ]);
 
+                self::clearCache();
+
                 return $utility->fresh(['rates']);
             },
             resultDetails: fn (Utility $u) => ['utility_id' => $u->utility_id]
         );
-
-        self::clearCache();
-
-        return $utility;
     }
 
     /**
@@ -85,13 +83,11 @@ class UtilityService
                     'unit_of_measurement' => $data['unit_of_measurement'],
                 ]);
 
+                self::clearCache();
+
                 return $utility;
             }
         );
-
-        self::clearCache();
-
-        return $utility;
     }
 
     /**

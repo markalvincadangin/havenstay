@@ -1,9 +1,9 @@
 # HavenStay — Backend Architecture & Coding Standards Blueprint
 
-**Version:** 6.1  
-**Last Updated:** April 29, 2026  
+**Version:** 6.2  
+**Last Updated:** May 02, 2026  
 **Status:** Authoritative Standard  
-**Scope:** `backend/app` — Laravel 14 / PHP 8.3+  
+**Scope:** `backend/app` — Laravel 13 / PHP 8.3+  
 
 ---
 
@@ -101,7 +101,7 @@ Every **public and protected method** must have a PHPDoc block detailing the `WH
   - Call `AuthorizationService::ensure*()` for RBAC before any action.
   - Use `RespondsWithJson` trait (`$this->success()`).
   - **API Resources:** Endpoints must return data formatted via classes in `app/Http/Resources/` (do not return raw `toArray()`).
-  - **Idempotency Protection:** All write endpoints (`POST`, `PUT`, `PATCH`) for financial or contractual entities MUST enforce idempotency. Use the `Idempotency-Key` header and verify uniqueness via `AuditService::checkIdempotency()` or a shared `AtomicLock` within the service workflow to prevent duplicate record creation during network retries.
+  - **Idempotency Protection:** All write endpoints (`POST`, `PUT`, `PATCH`) for financial or contractual entities MUST enforce idempotency. Use the `Idempotency-Key` header and verify uniqueness via a shared `AtomicLock` within the service workflow to prevent duplicate record creation during network retries.
 - **Forbidden:** Inline `$request->validate(...)` (use `FormRequest`), business logic, DB queries.
 
 ### Tier 3: Services (`app/Services`)
@@ -186,3 +186,4 @@ Code containing these anti-patterns will be automatically rejected:
 | v5.0 | Apr 22, 2026 | Major Architecture Update. Formalized 5-Tier Extended MVC (added Support tier). Mandated strict PHPDoc and native typing. Mandated API Resources for all output. Fixed `transaction_logs` references. Corrected `Requests/Meter/` singular naming convention. |
 | v6.0 | Apr 29, 2026 | Major Stabilization: Mandated Idempotency-Key protection for financial writes. Standardized Dual-Path Forensic Resolution for XOR relationships (Payments). Codified Resilient Batch Workflow patterns (Non-blocking loops). |
 | **v6.1** | **Apr 29, 2026** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |
+| **v6.2** | **May 02, 2026** | **Docs Remediation: Confirmed Laravel 13.x version references in scope header and directory structure section.** |

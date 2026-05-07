@@ -18,6 +18,7 @@ import {
   UserManagementIcon,
   UtilityIcon,
 } from "@/components/ui/Icons";
+import UserRoleBadge from "@/components/ui/UserRoleBadge";
 
 const OPERATIONS_ICONS_BY_HREF = {
   "/dashboard": DashboardIcon,
@@ -49,7 +50,7 @@ export default function MobileNav({ user, onLogout, pathname }) {
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-md ring-1 ring-black/5">
               <Image src="/brand/logo-dark.svg" alt="HavenStay" width={18} height={18} className="w-4.5 h-4.5" />
             </div>
-            <span className="text-base font-black tracking-tight text-stone-900">HavenStay</span>
+            <span className="text-[13px] font-black uppercase tracking-[0.3em] text-stone-900">HavenStay</span>
           </Link>
           <button
             type="button"
@@ -84,7 +85,7 @@ export default function MobileNav({ user, onLogout, pathname }) {
                   <div className="h-8 w-8 shrink-0 flex items-center justify-center rounded-xl bg-white shadow-md ring-1 ring-black/5">
                     <Image src="/brand/logo-dark.svg" alt="HavenStay" width={20} height={20} className="w-5 h-5" />
                   </div>
-                  <span className="text-base font-black tracking-tight leading-none text-white">HavenStay</span>
+                  <span className="text-sm font-black uppercase tracking-[0.3em] leading-none text-white">HavenStay</span>
                 </div>
                 <button 
                   onClick={() => setOpen(false)} 
@@ -164,7 +165,13 @@ export default function MobileNav({ user, onLogout, pathname }) {
                 )}
               </div>
 
-              <div className="shrink-0 p-4 border-t border-white/5">
+              <div className="shrink-0 p-4 border-t border-white/5 space-y-4">
+                {user && (
+                  <UserRoleBadge 
+                    user={user} 
+                    isSidebar={true} 
+                  />
+                )}
                 <button
                   type="button"
                   className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/5 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-white/60 transition-all hover:bg-white/10 hover:text-rose-400 hover:border-rose-400/30"

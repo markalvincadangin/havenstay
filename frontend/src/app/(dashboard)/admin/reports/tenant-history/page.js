@@ -9,8 +9,10 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Card } from "@/components/ui/Card";
-import { SkeletonListPage } from "@/components/ui/Skeleton";
 import Button from "@/components/ui/Button";
+import { KpiCard } from "@/components/ui/KpiCard";
+import { SkeletonListPage } from "@/components/ui/Skeleton";
+import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import FilterChips from "@/components/ui/FilterChips";
 import { Field, Input, Select } from "@/components/ui/Fields";
 import { Table } from "@/components/ui/Table";
@@ -20,60 +22,55 @@ import { flattenApiErrors } from "@/lib/errors";
 import { formatDateString } from "@/lib/formatters";
 import { exportReportCsv } from "@/lib/downloads";
 import { useToasts } from "@/context/ToastContext";
-import { Calendar, Activity, ChevronRight } from "lucide-react";
+import { Calendar, Activity, ChevronRight, Search, Users, BookOpen } from "lucide-react";
 import ResourceView from "@/components/ui/ResourceView";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import TablePagination from "@/components/ui/TablePagination";
 import StandardPage from "@/components/ui/StandardPage";
-import {
-  buildReportListQuery,
-  normalizeReportRows,
-  readStoredPerPage,
-} from "@/lib/pagination";
+import { normalizeReportRows } from "@/lib/pagination";
+import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
-import ReportFilterCard from "@/components/ui/ReportFilterCard";
 
 export default function TenantHistoryReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ rows: [], summary: {} });
   const [tableMeta, setTableMeta] = useState(null);
 
-  const [filters, setFilters] = useState({
-    from: "",
-    to: "",
-    status: "all",
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { from: "", to: "", status: "all" },
+    buildExtraParams: ({ filters: current }) => {
+      const extra = {};
+      if (current.from) extra.from = current.from;
+      if (current.to) extra.to = current.to;
+      if (current.status && current.status !== "all") extra.status = current.status;
+      return extra;
+    },
   });
-  const [appliedFilters, setAppliedFilters] = useState({
-    from: "",
-    to: "",
-    status: "all",
-  });
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
-
-  const reportQs = useMemo(() => {
-    const extra = {};
-    if (appliedFilters.from) extra.from = appliedFilters.from;
-    if (appliedFilters.to) extra.to = appliedFilters.to;
-    if (appliedFilters.status && appliedFilters.status !== "all") {
-      extra.status = appliedFilters.status;
-    }
-    return buildReportListQuery(page, perPage, extra);
-  }, [appliedFilters, page, perPage]);
 
   const canAccess = useMemo(() => canViewReports(currentUser), [currentUser]);
 
   const { data: reportData, error: reportError, mutate: loadReport, isValidating } = useSWR(
-    !authLoading && currentUser && canAccess ? `/api/reports/tenant-history${reportQs}` : null,
+    !authLoading && currentUser && canAccess ? `/api/reports/tenant-history${queryString}` : null,
     fetcher,
     { keepPreviousData: true }
   );
 
   const loading = authLoading || (!reportData && !reportError && canAccess);
   const tableRefreshing = isValidating;
+  const hasActiveFilters = Boolean(filters.from) || Boolean(filters.to) || filters.status !== "all";
 
   useEffect(() => {
     if (reportError) {
@@ -90,31 +87,16 @@ export default function TenantHistoryReportPage() {
     }
   }, [reportData]);
 
-  const onApplyFilters = (event) => {
-    event.preventDefault();
-    setApiError("");
-    setAppliedFilters({ ...filters });
-    setPage(1);
-  };
-
   const onExport = async () => {
-    setApiError("");
-    setExporting(true);
-
-    try {
-      const exportFilters = Object.fromEntries(
-        Object.entries(appliedFilters).filter(([, value]) => value && value !== "all")
-      );
-      await exportReportCsv({
-        endpoint: "/api/reports/tenant-history/export",
-        filters: exportFilters,
-        filenamePrefix: "tenant-history-report",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    const exportFilters = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value && value !== "all")
+    );
+    await performExport({
+      endpoint: "/api/reports/tenant-history/export",
+      filters: exportFilters,
+      filenamePrefix: "tenant-history-report",
+      label: "Tenant History Report",
+    });
   };
 
   if (isUnauthorized) return null;
@@ -153,17 +135,33 @@ export default function TenantHistoryReportPage() {
         />
       }
     >
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          label="Total History"
+          value={report.summary?.total_history_count ?? "—"}
+          icon={BookOpen}
+          isSyncing={isValidating}
+          className="hs-glass-effect"
+        />
+        <KpiCard
+          label="Unique Tenants"
+          value={report.summary?.unique_tenants_count ?? "—"}
+          icon={Users}
+          isSyncing={isValidating}
+          className="hs-glass-effect"
+        />
+      </div>
 
-      <ReportFilterCard onRefresh={() => loadReport()} refreshDisabled={tableRefreshing} className="hs-glass-effect">
-        <form className="grid gap-6 sm:grid-cols-4" onSubmit={onApplyFilters}>
+      <FilterPanelCard icon={Search}>
+        <div className="grid gap-6 sm:grid-cols-4">
           <Field label="Start Date" icon={Calendar}>
-            <Input type="date" value={filters.from} onChange={(e) => setFilters((prev) => ({ ...prev, from: e.target.value }))} className="!h-11" />
+            <Input type="date" value={filters.from} onChange={(e) => updateFilter("from", e.target.value)} className="!h-11" />
           </Field>
           <Field label="End Date" icon={Calendar}>
-            <Input type="date" value={filters.to} onChange={(e) => setFilters((prev) => ({ ...prev, to: e.target.value }))} className="!h-11" />
+            <Input type="date" value={filters.to} onChange={(e) => updateFilter("to", e.target.value)} className="!h-11" />
           </Field>
           <Field label="Contract filter" icon={Activity}>
-            <Select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="!h-11" aria-describedby="tenant-history-status-hint">
+            <Select value={filters.status} onChange={(e) => updateFilter("status", e.target.value)} className="!h-11" aria-describedby="tenant-history-status-hint">
               {Object.entries(TENANT_HISTORY_STATUS_FILTER_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -171,12 +169,7 @@ export default function TenantHistoryReportPage() {
               ))}
             </Select>
           </Field>
-          <div className="flex items-end">
-            <Button type="submit" variant="secondary" className="w-full !h-11 shadow-sm">
-              Apply filters
-            </Button>
-          </div>
-        </form>
+        </div>
 
         <div className="mt-6">
           <FilterChips
@@ -184,48 +177,31 @@ export default function TenantHistoryReportPage() {
               {
                 key: "from",
                 label: "From",
-                value: appliedFilters.from,
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, from: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, from: "" }));
-                  setPage(1);
-                },
+                value: filters.from,
+                onClear: () => updateFilter("from", ""),
               },
               {
                 key: "to",
                 label: "To",
-                value: appliedFilters.to,
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, to: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, to: "" }));
-                  setPage(1);
-                },
+                value: filters.to,
+                onClear: () => updateFilter("to", ""),
               },
               {
                 key: "status",
                 label: "Status",
                 value:
-                  appliedFilters.status !== "all"
-                    ? TENANT_HISTORY_STATUS_FILTER_LABELS[appliedFilters.status] || appliedFilters.status
+                  filters.status !== "all"
+                    ? TENANT_HISTORY_STATUS_FILTER_LABELS[filters.status] || filters.status
                     : "",
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, status: "all" }));
-                  setAppliedFilters((prev) => ({ ...prev, status: "all" }));
-                  setPage(1);
-                },
+                onClear: () => updateFilter("status", "all"),
               },
             ]}
-            onClearAll={() => {
-              const cleared = { from: "", to: "", status: "all" };
-              setFilters(cleared);
-              setAppliedFilters(cleared);
-              setPage(1);
-            }}
+            onClearAll={resetFilters}
           />
         </div>
 
         {apiError ? <Alert variant="error" className="mt-6" title="Sync Issue">{apiError}</Alert> : null}
-      </ReportFilterCard>
+      </FilterPanelCard>
 
       <ResourceView
         isLoading={loading}
@@ -236,10 +212,25 @@ export default function TenantHistoryReportPage() {
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
           title: "No history records found",
-          message: "Adjust filters or check for archive entries to view historical lease data."
+          description: "Adjust filters or check for archive entries to view historical lease data.",
+          action: hasActiveFilters ? (
+            <Button
+              variant="secondary"
+              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              onClick={resetFilters}
+            >
+              Clear filters
+            </Button>
+          ) : null
         }}
       >
         <Card className="relative mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
+          <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">HISTORICAL LEASE DIRECTORY</h2>
+            <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+              {tableMeta?.total ?? reportRows.length} RECORDS MATCHING
+            </div>
+          </div>
           <Table
             embedded={true}
             caption="Historical lease records"

@@ -18,6 +18,20 @@ import { ROOM_STATUS_LABELS } from "@/lib/constants";
 export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
   const { showToast } = useToasts();
   const readOnly = !canManageRooms(currentUser);
+
+  if (room.status === 'decommissioned') {
+    return (
+      <div className="p-8 space-y-6">
+        <RecordStateAlert show variant="warning" title="Room Decommissioned">
+          This room has been decommissioned from active inventory and is locked for editing. 
+          Restore the room via the Profile page if you need to modify its properties.
+        </RecordStateAlert>
+        <Button variant="secondary" onClick={onCancel} className="w-full">
+          Close
+        </Button>
+      </div>
+    );
+  }
   const {
     register,
     handleSubmit,

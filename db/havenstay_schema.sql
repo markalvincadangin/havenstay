@@ -1,11 +1,9 @@
--- HavenStay Boarding House Management System (BHMS)
--- Canonical Master Schema v4.7
--- 15 Core Entities | 45 Forensic Triggers | 6 Reporting Views
+-- HavenStay Boarding House Management System
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- ── DROP ALL OBJECTS ──
+-- DROP ALL OBJECTS
 
 DROP TRIGGER IF EXISTS trg_roles_ai; DROP TRIGGER IF EXISTS trg_roles_au; DROP TRIGGER IF EXISTS trg_roles_ad;
 DROP TRIGGER IF EXISTS trg_users_ai; DROP TRIGGER IF EXISTS trg_users_au; DROP TRIGGER IF EXISTS trg_users_ad;
@@ -47,7 +45,7 @@ DROP VIEW IF EXISTS vw_occupancy_status;
 DROP VIEW IF EXISTS vw_collections_summary;
 DROP VIEW IF EXISTS vw_tenant_contract_history;
 
--- ── SECTION 1: CORE OPERATIONAL ENTITIES (14 TABLES) ──
+-- CORE OPERATIONAL ENTITIES (14 TABLES)
 
 CREATE TABLE roles (
     role_id     INT AUTO_INCREMENT PRIMARY KEY,
@@ -68,10 +66,13 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     is_active     TINYINT(1)   DEFAULT 1,
     last_login_at DATETIME     NULL,
+    google_id     VARCHAR(255) NULL,
+    avatar_url    VARCHAR(255) NULL,
+    oauth_provider VARCHAR(50) NULL,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at    DATETIME NULL,
-    -- Forensic Uniqueness (allows re-registration after soft-delete)
+    -- Uniqueness (allows re-registration after soft-delete)
     active_username VARCHAR(100) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN username ELSE NULL END) VIRTUAL,
     active_email    VARCHAR(150) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN email    ELSE NULL END) VIRTUAL,
     UNIQUE KEY uq_active_username (active_username),
@@ -88,15 +89,14 @@ CREATE TABLE tenants (
     emergency_contact_name   VARCHAR(200) NOT NULL,
     emergency_contact_number VARCHAR(20)  NOT NULL,
     address                  TEXT         NOT NULL,
-    status                   ENUM('active','moved_out','archived') DEFAULT 'active',
+    status                   ENUM('onboarded','active','moved_out','archived') DEFAULT 'onboarded',
     created_at               DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at               DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at               DATETIME NULL,
-    -- Forensic Uniqueness (allows re-registration after soft-delete)
+    -- Uniqueness (allows re-registration after soft-delete)
     active_email VARCHAR(150) GENERATED ALWAYS AS (CASE WHEN deleted_at IS NULL THEN email ELSE NULL END) VIRTUAL,
     UNIQUE KEY uq_active_tenant_email (active_email),
-    INDEX idx_tenant_lookup (last_name, first_name),
-    INDEX idx_tenant_status (status)
+    INDEX idx_tenant_lookup (last_name, first_name)
 ) ENGINE=InnoDB;
 
 CREATE TABLE rooms (
@@ -105,7 +105,7 @@ CREATE TABLE rooms (
     room_type    ENUM('private','shared') DEFAULT 'private',
     capacity     INT           DEFAULT 1,
     monthly_rate DECIMAL(10,2) NOT NULL,
-    status       ENUM('available','unavailable','maintenance') DEFAULT 'available',
+    status       ENUM('available','unavailable','maintenance','decommissioned') DEFAULT 'available',
     amenities    TEXT          NULL,
     description  TEXT          NULL,
     is_metered   TINYINT(1)    DEFAULT 1,
@@ -149,8 +149,6 @@ CREATE TABLE contracts (
     updated_at             DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted_at             DATETIME NULL,
     UNIQUE KEY uq_contracts_idempotency (idempotency_key),
-    INDEX idx_contract_status (status),
-    INDEX idx_contract_dates  (move_in_date, expected_move_out_date),
     CONSTRAINT fk_contract_tenant FOREIGN KEY (tenant_id)    REFERENCES tenants    (tenant_id),
     CONSTRAINT fk_contract_bed    FOREIGN KEY (bed_space_id) REFERENCES bed_spaces (bed_space_id),
     CONSTRAINT fk_contract_owner  FOREIGN KEY (created_by)   REFERENCES users      (user_id),
@@ -226,8 +224,6 @@ CREATE TABLE billing (
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_billing_cycle (contract_id, billing_period_from, billing_period_to),
     UNIQUE KEY uq_billing_idempotency (idempotency_key),
-    INDEX idx_billing_status (status),
-    INDEX idx_billing_due    (due_date),
     CONSTRAINT fk_billing_contract FOREIGN KEY (contract_id) REFERENCES contracts (contract_id)
 ) ENGINE=InnoDB;
 
@@ -246,7 +242,6 @@ CREATE TABLE billing_line_items (
     CONSTRAINT fk_bli_reading FOREIGN KEY (reading_id) REFERENCES meter_readings (reading_id),
     CONSTRAINT chk_bli_amount   CHECK (amount <> 0),
     CONSTRAINT chk_bli_polarity CHECK ( (item_type = 'adjustment') OR (amount > 0) ),
-    -- Forensic Utility Linkage: Mandates references for 'utility' types (Level 5 Hardening)
     CONSTRAINT chk_bli_utility_link CHECK ( (item_type <> 'utility') OR (utility_id IS NOT NULL AND reading_id IS NOT NULL) )
 ) ENGINE=InnoDB;
 
@@ -266,8 +261,6 @@ CREATE TABLE payments (
     idempotency_key  VARCHAR(36)   NULL,
     created_at       DATETIME      DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_payments_idempotency (idempotency_key),
-    INDEX idx_payment_date (payment_date),
-    INDEX idx_payment_cat  (payment_category),
     CONSTRAINT fk_pay_billing  FOREIGN KEY (billing_id)   REFERENCES billing (billing_id),
     CONSTRAINT fk_pay_contract FOREIGN KEY (contract_id)  REFERENCES contracts (contract_id),
     CONSTRAINT fk_pay_actor    FOREIGN KEY (processed_by) REFERENCES users   (user_id),
@@ -277,32 +270,44 @@ CREATE TABLE payments (
         (billing_id IS NOT NULL AND contract_id IS NULL) OR
         (billing_id IS NULL AND contract_id IS NOT NULL)
     ),
-    -- BR-PAY-002: Reference number is mandatory for traceable payment methods
     CONSTRAINT chk_pay_ref_required CHECK (
         payment_method NOT IN ('gcash', 'bank_transfer') OR reference_number IS NOT NULL
     )
 ) ENGINE=InnoDB;
 
--- ── SECTION 2: FORENSIC TABLES (1 TABLE) ──
+-- AUDIT LOGS TABLE
 
 CREATE TABLE audit_logs (
     id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    action         VARCHAR(32)     NOT NULL,
+    action         ENUM('CREATE','UPDATE','DELETE','SOFT_DELETE','RESTORE','LOGIN','LOGOUT','FAILED_LOGIN','VOID','SYSTEM','SECURITY','EXPORT','ACCESS_DENIED') NOT NULL,
+    event_category ENUM('AUTH','DATA','FINANCIAL','SYSTEM','SECURITY') NOT NULL DEFAULT 'DATA',
     target_table   VARCHAR(64)     NOT NULL,
     record_id      BIGINT UNSIGNED NOT NULL,
     old_value      JSON            NULL,
     new_value      JSON            NULL,
+    changed_fields JSON            NULL,
+    is_success     BOOLEAN         DEFAULT TRUE,
+    error_message  TEXT            NULL,
     changed_by     INT             NULL,
+    actor_snapshot JSON            NULL,
     correlation_id VARCHAR(64)     NULL,
-    changed_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
-    -- Performance Hardening
+    request_id     VARCHAR(64)     NULL,
+    ip_address     VARCHAR(45)     NULL,
+    user_agent     TEXT            NULL,
+    endpoint       TEXT            NULL,
+    http_method    VARCHAR(10)     NULL,
+    execution_time_ms INT          NULL,
+    metadata          JSON         NULL,
+    changed_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_audit_timestamp (changed_at),
     INDEX idx_audit_resource  (target_table, record_id),
     INDEX idx_audit_action    (action),
-    INDEX idx_audit_correlation (correlation_id)
+    INDEX idx_audit_category  (event_category),
+    INDEX idx_audit_correlation (correlation_id),
+    INDEX idx_audit_request     (request_id)
 ) ENGINE=InnoDB;
 
--- ── SECTION 3: REFERENCE DATA ──
+-- REFERENCE DATA
 
 INSERT INTO roles (role_id, role_name, description) VALUES
 (1, 'admin',  'System Administrator'),
@@ -316,108 +321,138 @@ INSERT INTO utilities (utility_id, name, unit_of_measurement) VALUES
 (1, 'Electricity', 'kWh'),
 (2, 'Water', 'm3');
 
--- ── SECTION 4: FORENSIC AUDIT ENGINE (42 TRIGGERS) ──
+-- AUDIT TRIGGERS
 
 DELIMITER //
 
 -- Roles
-CREATE TRIGGER trg_roles_ai AFTER INSERT ON roles FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'roles', NEW.role_id, JSON_OBJECT('name', NEW.role_name), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_roles_ai AFTER INSERT ON roles FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'DATA', 'roles', NEW.role_id, JSON_OBJECT('name', NEW.role_name), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_roles_au AFTER UPDATE ON roles FOR EACH ROW 
 BEGIN
     IF NOT (OLD.role_name <=> NEW.role_name) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'roles', NEW.role_id, JSON_OBJECT('name', OLD.role_name), JSON_OBJECT('name', NEW.role_name), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'roles', NEW.role_id, JSON_OBJECT('name', OLD.role_name), JSON_OBJECT('name', NEW.role_name), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_roles_ad AFTER DELETE ON roles FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'roles', OLD.role_id, JSON_OBJECT('name', OLD.role_name), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_roles_ad AFTER DELETE ON roles FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'DATA', 'roles', OLD.role_id, JSON_OBJECT('name', OLD.role_name), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Users
-CREATE TRIGGER trg_users_ai AFTER INSERT ON users FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'users', NEW.user_id, JSON_OBJECT('user', NEW.username, 'role', NEW.role_id, 'active', NEW.is_active), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_users_ai AFTER INSERT ON users FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'AUTH', 'users', NEW.user_id, JSON_OBJECT('user', NEW.username, 'role', NEW.role_id, 'active', NEW.is_active), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_users_au AFTER UPDATE ON users FOR EACH ROW 
 BEGIN
-    IF NOT (OLD.username <=> NEW.username) OR NOT (OLD.role_id <=> NEW.role_id) OR NOT (OLD.is_active <=> NEW.is_active) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'users', NEW.user_id, JSON_OBJECT('user', OLD.username, 'role', OLD.role_id, 'active', OLD.is_active), JSON_OBJECT('user', NEW.username, 'role', NEW.role_id, 'active', NEW.is_active), @current_user_id, @current_correlation_id);
+    IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('SOFT_DELETE', 'AUTH', 'users', NEW.user_id, JSON_OBJECT('user', OLD.username), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
+    ELSEIF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('RESTORE', 'AUTH', 'users', NEW.user_id, JSON_OBJECT('user', NEW.username), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
+    ELSEIF NOT (OLD.username <=> NEW.username) OR NOT (OLD.role_id <=> NEW.role_id) OR NOT (OLD.is_active <=> NEW.is_active) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'AUTH', 'users', NEW.user_id, JSON_OBJECT('user', OLD.username, 'role', OLD.role_id, 'active', OLD.is_active), JSON_OBJECT('user', NEW.username, 'role', NEW.role_id, 'active', NEW.is_active), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_users_ad AFTER DELETE ON users FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'users', OLD.user_id, JSON_OBJECT('user', OLD.username), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_users_ad AFTER DELETE ON users FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'AUTH', 'users', OLD.user_id, JSON_OBJECT('user', OLD.username), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Tenants
-CREATE TRIGGER trg_tenants_ai AFTER INSERT ON tenants FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'tenants', NEW.tenant_id, JSON_OBJECT('first', NEW.first_name, 'last', NEW.last_name, 'email', NEW.email), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_tenants_ai AFTER INSERT ON tenants FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) VALUES ('CREATE', 'DATA', 'tenants', NEW.tenant_id, JSON_OBJECT('first', NEW.first_name, 'last', NEW.last_name, 'email', NEW.email), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_tenants_au AFTER UPDATE ON tenants FOR EACH ROW 
 BEGIN
-    IF NOT (OLD.first_name <=> NEW.first_name) OR NOT (OLD.last_name <=> NEW.last_name) OR NOT (OLD.email <=> NEW.email) OR NOT (OLD.status <=> NEW.status) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'tenants', NEW.tenant_id, JSON_OBJECT('first', OLD.first_name, 'last', OLD.last_name, 'email', OLD.email, 'status', OLD.status), JSON_OBJECT('first', NEW.first_name, 'last', NEW.last_name, 'email', NEW.email, 'status', NEW.status), @current_user_id, @current_correlation_id);
+    IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) 
+        VALUES ('SOFT_DELETE', 'DATA', 'tenants', NEW.tenant_id, JSON_OBJECT('tenant', OLD.last_name), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method);
+    ELSEIF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) 
+        VALUES ('RESTORE', 'DATA', 'tenants', NEW.tenant_id, JSON_OBJECT('tenant', NEW.last_name), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method);
+    ELSEIF NOT (OLD.first_name <=> NEW.first_name) OR NOT (OLD.last_name <=> NEW.last_name) OR NOT (OLD.email <=> NEW.email) OR NOT (OLD.status <=> NEW.status) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'tenants', NEW.tenant_id, JSON_OBJECT('first', OLD.first_name, 'last', OLD.last_name, 'email', OLD.email, 'status', OLD.status), JSON_OBJECT('first', NEW.first_name, 'last', NEW.last_name, 'email', NEW.email, 'status', NEW.status), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_tenants_ad AFTER DELETE ON tenants FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'tenants', OLD.tenant_id, JSON_OBJECT('first', OLD.first_name, 'last', OLD.last_name), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_tenants_ad AFTER DELETE ON tenants FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) VALUES ('DELETE', 'DATA', 'tenants', OLD.tenant_id, JSON_OBJECT('first', OLD.first_name, 'last', OLD.last_name), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method)//
 
 -- Rooms
-CREATE TRIGGER trg_rooms_ai AFTER INSERT ON rooms FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'rooms', NEW.room_id, JSON_OBJECT('code', NEW.room_code, 'type', NEW.room_type, 'cap', NEW.capacity), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_rooms_ai AFTER INSERT ON rooms FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'DATA', 'rooms', NEW.room_id, JSON_OBJECT('code', NEW.room_code, 'type', NEW.room_type, 'cap', NEW.capacity), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_rooms_au AFTER UPDATE ON rooms FOR EACH ROW 
 BEGIN
-    IF NOT (OLD.room_code <=> NEW.room_code) OR NOT (OLD.room_type <=> NEW.room_type) OR NOT (OLD.status <=> NEW.status) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'rooms', NEW.room_id, JSON_OBJECT('code', OLD.room_code, 'type', OLD.room_type, 'status', OLD.status), JSON_OBJECT('code', NEW.room_code, 'type', NEW.room_type, 'status', NEW.status), @current_user_id, @current_correlation_id);
+    IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('SOFT_DELETE', 'SYSTEM', 'rooms', NEW.room_id, JSON_OBJECT('room', OLD.room_code), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
+    ELSEIF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('RESTORE', 'SYSTEM', 'rooms', NEW.room_id, JSON_OBJECT('room', NEW.room_code), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
+    ELSEIF NOT (OLD.room_code <=> NEW.room_code) OR NOT (OLD.room_type <=> NEW.room_type) OR NOT (OLD.status <=> NEW.status) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'SYSTEM', 'rooms', NEW.room_id, JSON_OBJECT('code', OLD.room_code, 'type', OLD.room_type, 'status', OLD.status), JSON_OBJECT('code', NEW.room_code, 'type', NEW.room_type, 'status', NEW.status), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_rooms_ad AFTER DELETE ON rooms FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'rooms', OLD.room_id, JSON_OBJECT('code', OLD.room_code), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_rooms_ad AFTER DELETE ON rooms FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'DATA', 'rooms', OLD.room_id, JSON_OBJECT('code', OLD.room_code), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Bed Spaces
-CREATE TRIGGER trg_bed_spaces_ai AFTER INSERT ON bed_spaces FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'bed_spaces', NEW.bed_space_id, JSON_OBJECT('label', NEW.bed_label), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_bed_spaces_ai AFTER INSERT ON bed_spaces FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'DATA', 'bed_spaces', NEW.bed_space_id, JSON_OBJECT('label', NEW.bed_label), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_bed_spaces_au AFTER UPDATE ON bed_spaces FOR EACH ROW 
 BEGIN
-    IF NOT (OLD.status <=> NEW.status) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'bed_spaces', NEW.bed_space_id, JSON_OBJECT('status', OLD.status), JSON_OBJECT('status', NEW.status), @current_user_id, @current_correlation_id);
+    IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('SOFT_DELETE', 'DATA', 'bed_spaces', NEW.bed_space_id, JSON_OBJECT('bed', OLD.bed_label), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
+    ELSEIF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('RESTORE', 'DATA', 'bed_spaces', NEW.bed_space_id, JSON_OBJECT('bed', NEW.bed_label), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
+    ELSEIF NOT (OLD.status <=> NEW.status) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'bed_spaces', NEW.bed_space_id, JSON_OBJECT('status', OLD.status), JSON_OBJECT('status', NEW.status), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_bed_spaces_ad AFTER DELETE ON bed_spaces FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'bed_spaces', OLD.bed_space_id, JSON_OBJECT('label', OLD.bed_label), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_bed_spaces_ad AFTER DELETE ON bed_spaces FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'DATA', 'bed_spaces', OLD.bed_space_id, JSON_OBJECT('label', OLD.bed_label), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Contracts
-CREATE TRIGGER trg_contracts_ai AFTER INSERT ON contracts FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'contracts', NEW.contract_id, JSON_OBJECT('tenant', NEW.tenant_id, 'bed', NEW.bed_space_id, 'rate', NEW.monthly_rate), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_contracts_ai AFTER INSERT ON contracts FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) VALUES ('CREATE', 'DATA', 'contracts', NEW.contract_id, JSON_OBJECT('tenant', NEW.tenant_id, 'bed', NEW.bed_space_id, 'rate', NEW.monthly_rate), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_contracts_au AFTER UPDATE ON contracts FOR EACH ROW 
 BEGIN
-    IF NOT (OLD.status <=> NEW.status) OR NOT (OLD.monthly_rate <=> NEW.monthly_rate) OR NOT (OLD.monthly_rate_override <=> NEW.monthly_rate_override) OR NOT (OLD.is_cleared <=> NEW.is_cleared) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'contracts', NEW.contract_id, JSON_OBJECT('status', OLD.status, 'rate', OLD.monthly_rate, 'override', OLD.monthly_rate_override, 'cleared', OLD.is_cleared), JSON_OBJECT('status', NEW.status, 'rate', NEW.monthly_rate, 'override', NEW.monthly_rate_override, 'cleared', NEW.is_cleared), @current_user_id, @current_correlation_id);
+    IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) 
+        VALUES ('SOFT_DELETE', 'DATA', 'contracts', NEW.contract_id, JSON_OBJECT('contract', OLD.contract_id), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method);
+    ELSEIF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) 
+        VALUES ('RESTORE', 'DATA', 'contracts', NEW.contract_id, JSON_OBJECT('contract', NEW.contract_id), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method);
+    ELSEIF NOT (OLD.status <=> NEW.status) OR NOT (OLD.monthly_rate <=> NEW.monthly_rate) OR NOT (OLD.monthly_rate_override <=> NEW.monthly_rate_override) OR NOT (OLD.is_cleared <=> NEW.is_cleared) THEN
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'contracts', NEW.contract_id, JSON_OBJECT('status', OLD.status, 'rate', OLD.monthly_rate, 'override', OLD.monthly_rate_override, 'cleared', OLD.is_cleared), JSON_OBJECT('status', NEW.status, 'rate', NEW.monthly_rate, 'override', NEW.monthly_rate_override, 'cleared', NEW.is_cleared), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_contracts_ad AFTER DELETE ON contracts FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'contracts', OLD.contract_id, JSON_OBJECT('tenant', OLD.tenant_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_contracts_ad AFTER DELETE ON contracts FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) VALUES ('DELETE', 'DATA', 'contracts', OLD.contract_id, JSON_OBJECT('tenant', OLD.tenant_id), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method)//
 
 -- Utilities
-CREATE TRIGGER trg_utilities_ai AFTER INSERT ON utilities FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'utilities', NEW.utility_id, JSON_OBJECT('name', NEW.name), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_utilities_ai AFTER INSERT ON utilities FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'DATA', 'utilities', NEW.utility_id, JSON_OBJECT('name', NEW.name), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_utilities_au AFTER UPDATE ON utilities FOR EACH ROW 
 BEGIN
     IF NOT (OLD.name <=> NEW.name) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'utilities', NEW.utility_id, JSON_OBJECT('name', OLD.name), JSON_OBJECT('name', NEW.name), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'utilities', NEW.utility_id, JSON_OBJECT('name', OLD.name), JSON_OBJECT('name', NEW.name), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_utilities_ad AFTER DELETE ON utilities FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'utilities', OLD.utility_id, JSON_OBJECT('name', OLD.name), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_utilities_ad AFTER DELETE ON utilities FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'DATA', 'utilities', OLD.utility_id, JSON_OBJECT('name', OLD.name), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Meters
-CREATE TRIGGER trg_meters_ai AFTER INSERT ON meters FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'meters', NEW.meter_id, JSON_OBJECT('sn', NEW.serial_number, 'utility', NEW.utility_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_meters_ai AFTER INSERT ON meters FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'DATA', 'meters', NEW.meter_id, JSON_OBJECT('sn', NEW.serial_number, 'utility', NEW.utility_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_meters_au AFTER UPDATE ON meters FOR EACH ROW 
 BEGIN
     IF NOT (OLD.serial_number <=> NEW.serial_number) OR NOT (OLD.status <=> NEW.status) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'meters', NEW.meter_id, JSON_OBJECT('sn', OLD.serial_number, 'status', OLD.status), JSON_OBJECT('sn', NEW.serial_number, 'status', NEW.status), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'meters', NEW.meter_id, JSON_OBJECT('sn', OLD.serial_number, 'status', OLD.status), JSON_OBJECT('sn', NEW.serial_number, 'status', NEW.status), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_meters_ad AFTER DELETE ON meters FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'meters', OLD.meter_id, JSON_OBJECT('sn', OLD.serial_number), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_meters_ad AFTER DELETE ON meters FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'DATA', 'meters', OLD.meter_id, JSON_OBJECT('sn', OLD.serial_number), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Meter Assignments
-CREATE TRIGGER trg_meter_assignments_ai AFTER INSERT ON meter_assignments FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'meter_assignments', NEW.assignment_id, JSON_OBJECT('room', NEW.room_id, 'mtr', NEW.meter_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_meter_assignments_ai AFTER INSERT ON meter_assignments FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'DATA', 'meter_assignments', NEW.assignment_id, JSON_OBJECT('room', NEW.room_id, 'mtr', NEW.meter_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_meter_assignments_au AFTER UPDATE ON meter_assignments FOR EACH ROW 
 BEGIN
     IF NOT (OLD.room_id <=> NEW.room_id) OR NOT (OLD.meter_id <=> NEW.meter_id) OR NOT (OLD.valid_to <=> NEW.valid_to) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'meter_assignments', NEW.assignment_id, JSON_OBJECT('room', OLD.room_id, 'mtr', OLD.meter_id, 'to', OLD.valid_to), JSON_OBJECT('room', NEW.room_id, 'mtr', NEW.meter_id, 'to', NEW.valid_to), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'meter_assignments', NEW.assignment_id, JSON_OBJECT('room', OLD.room_id, 'mtr', OLD.meter_id, 'to', OLD.valid_to), JSON_OBJECT('room', NEW.room_id, 'mtr', NEW.meter_id, 'to', NEW.valid_to), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_meter_assignments_ad AFTER DELETE ON meter_assignments FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'meter_assignments', OLD.assignment_id, JSON_OBJECT('room', OLD.room_id, 'mtr', OLD.meter_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_meter_assignments_ad AFTER DELETE ON meter_assignments FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'DATA', 'meter_assignments', OLD.assignment_id, JSON_OBJECT('room', OLD.room_id, 'mtr', OLD.meter_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 -- BR-MET-003: One active assignment per meter (valid_to IS NULL guard)
 CREATE TRIGGER trg_meter_assignments_bi BEFORE INSERT ON meter_assignments FOR EACH ROW
 BEGIN
@@ -431,59 +466,59 @@ BEGIN
 END//
 
 -- Meter Readings
-CREATE TRIGGER trg_meter_readings_ai AFTER INSERT ON meter_readings FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'meter_readings', NEW.reading_id, JSON_OBJECT('val', NEW.reading_value, 'date', NEW.reading_date, 'mtr', NEW.meter_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_meter_readings_ai AFTER INSERT ON meter_readings FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'DATA', 'meter_readings', NEW.reading_id, JSON_OBJECT('val', NEW.reading_value, 'date', NEW.reading_date, 'mtr', NEW.meter_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_meter_readings_au AFTER UPDATE ON meter_readings FOR EACH ROW 
 BEGIN
     IF NOT (OLD.reading_value <=> NEW.reading_value) OR NOT (OLD.reading_date <=> NEW.reading_date) OR NOT (OLD.is_rollover <=> NEW.is_rollover) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'meter_readings', NEW.reading_id, JSON_OBJECT('val', OLD.reading_value, 'date', OLD.reading_date, 'rollover', OLD.is_rollover), JSON_OBJECT('val', NEW.reading_value, 'date', NEW.reading_date, 'rollover', NEW.is_rollover), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'DATA', 'meter_readings', NEW.reading_id, JSON_OBJECT('val', OLD.reading_value, 'date', OLD.reading_date, 'rollover', OLD.is_rollover), JSON_OBJECT('val', NEW.reading_value, 'date', NEW.reading_date, 'rollover', NEW.is_rollover), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_meter_readings_ad AFTER DELETE ON meter_readings FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'meter_readings', OLD.reading_id, JSON_OBJECT('date', OLD.reading_date, 'mtr', OLD.meter_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_meter_readings_ad AFTER DELETE ON meter_readings FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'DATA', 'meter_readings', OLD.reading_id, JSON_OBJECT('date', OLD.reading_date, 'mtr', OLD.meter_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Utility Rates
-CREATE TRIGGER trg_utility_rates_ai AFTER INSERT ON utility_rates FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'utility_rates', NEW.rate_id, JSON_OBJECT('rate', NEW.base_rate, 'util', NEW.utility_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_utility_rates_ai AFTER INSERT ON utility_rates FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'FINANCIAL', 'utility_rates', NEW.rate_id, JSON_OBJECT('rate', NEW.base_rate, 'util', NEW.utility_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_utility_rates_au AFTER UPDATE ON utility_rates FOR EACH ROW 
 BEGIN
     IF NOT (OLD.base_rate <=> NEW.base_rate) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'utility_rates', NEW.rate_id, JSON_OBJECT('rate', OLD.base_rate), JSON_OBJECT('rate', NEW.base_rate), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'FINANCIAL', 'utility_rates', NEW.rate_id, JSON_OBJECT('rate', OLD.base_rate), JSON_OBJECT('rate', NEW.base_rate), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_utility_rates_ad AFTER DELETE ON utility_rates FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'utility_rates', OLD.rate_id, JSON_OBJECT('utility', OLD.utility_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_utility_rates_ad AFTER DELETE ON utility_rates FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'FINANCIAL', 'utility_rates', OLD.rate_id, JSON_OBJECT('utility', OLD.utility_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Billing
-CREATE TRIGGER trg_billing_ai AFTER INSERT ON billing FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'billing', NEW.billing_id, JSON_OBJECT('contract', NEW.contract_id, 'from', NEW.billing_period_from, 'to', NEW.billing_period_to, 'due', NEW.due_date), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_billing_ai AFTER INSERT ON billing FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'FINANCIAL', 'billing', NEW.billing_id, JSON_OBJECT('contract', NEW.contract_id, 'from', NEW.billing_period_from, 'to', NEW.billing_period_to, 'due', NEW.due_date), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_billing_au AFTER UPDATE ON billing FOR EACH ROW 
 BEGIN
     IF NOT (OLD.status <=> NEW.status) OR NOT (OLD.due_date <=> NEW.due_date) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'billing', NEW.billing_id, JSON_OBJECT('status', OLD.status, 'due', OLD.due_date), JSON_OBJECT('status', NEW.status, 'due', NEW.due_date), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'FINANCIAL', 'billing', NEW.billing_id, JSON_OBJECT('status', OLD.status, 'due', OLD.due_date), JSON_OBJECT('status', NEW.status, 'due', NEW.due_date), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_billing_ad AFTER DELETE ON billing FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'billing', OLD.billing_id, JSON_OBJECT('contract', OLD.contract_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_billing_ad AFTER DELETE ON billing FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'FINANCIAL', 'billing', OLD.billing_id, JSON_OBJECT('contract', OLD.contract_id), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Payments
-CREATE TRIGGER trg_payments_ai AFTER INSERT ON payments FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'payments', NEW.payment_id, JSON_OBJECT('amt', NEW.amount_paid, 'meth', NEW.payment_method, 'ref', NEW.reference_number, 'bill', NEW.billing_id), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_payments_ai AFTER INSERT ON payments FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) VALUES ('CREATE', 'FINANCIAL', 'payments', NEW.payment_id, JSON_OBJECT('amt', NEW.amount_paid, 'meth', NEW.payment_method, 'ref', NEW.reference_number, 'bill', NEW.billing_id), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_payments_au AFTER UPDATE ON payments FOR EACH ROW 
 BEGIN
     IF NOT (OLD.voided_at <=> NEW.voided_at) OR NOT (OLD.amount_paid <=> NEW.amount_paid) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'payments', NEW.payment_id, JSON_OBJECT('voided', OLD.voided_at, 'amt', OLD.amount_paid), JSON_OBJECT('voided', NEW.voided_at, 'amt', NEW.amount_paid), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) 
+        VALUES ('UPDATE', 'FINANCIAL', 'payments', NEW.payment_id, JSON_OBJECT('voided', OLD.voided_at, 'amt', OLD.amount_paid), JSON_OBJECT('voided', NEW.voided_at, 'amt', NEW.amount_paid), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_payments_ad AFTER DELETE ON payments FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'payments', OLD.payment_id, JSON_OBJECT('amt', OLD.amount_paid, 'ref', OLD.reference_number), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_payments_ad AFTER DELETE ON payments FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, ip_address, request_id, endpoint, http_method) VALUES ('DELETE', 'FINANCIAL', 'payments', OLD.payment_id, JSON_OBJECT('amt', OLD.amount_paid, 'ref', OLD.reference_number), @current_user_id, @current_correlation_id, @current_ip_address, @current_request_id, @current_endpoint, @current_http_method)//
 
 -- Billing Line Items
-CREATE TRIGGER trg_billing_line_items_ai AFTER INSERT ON billing_line_items FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, new_value, changed_by, correlation_id) VALUES ('INSERT', 'billing_line_items', NEW.line_item_id, JSON_OBJECT('bill', NEW.billing_id, 'type', NEW.item_type, 'amt', NEW.amount), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_billing_line_items_ai AFTER INSERT ON billing_line_items FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('CREATE', 'FINANCIAL', 'billing_line_items', NEW.line_item_id, JSON_OBJECT('bill', NEW.billing_id, 'type', NEW.item_type, 'amt', NEW.amount), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 CREATE TRIGGER trg_billing_line_items_au AFTER UPDATE ON billing_line_items FOR EACH ROW 
 BEGIN
     IF NOT (OLD.item_type <=> NEW.item_type) OR NOT (OLD.amount <=> NEW.amount) THEN
-        INSERT INTO audit_logs(action, target_table, record_id, old_value, new_value, changed_by, correlation_id) 
-        VALUES ('UPDATE', 'billing_line_items', NEW.line_item_id, JSON_OBJECT('type', OLD.item_type, 'amt', OLD.amount), JSON_OBJECT('type', NEW.item_type, 'amt', NEW.amount), @current_user_id, @current_correlation_id);
+        INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, new_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) 
+        VALUES ('UPDATE', 'FINANCIAL', 'billing_line_items', NEW.line_item_id, JSON_OBJECT('type', OLD.item_type, 'amt', OLD.amount), JSON_OBJECT('type', NEW.item_type, 'amt', NEW.amount), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method);
     END IF;
 END//
-CREATE TRIGGER trg_billing_line_items_ad AFTER DELETE ON billing_line_items FOR EACH ROW INSERT INTO audit_logs(action, target_table, record_id, old_value, changed_by, correlation_id) VALUES ('DELETE', 'billing_line_items', OLD.line_item_id, JSON_OBJECT('type', OLD.item_type, 'amt', OLD.amount), @current_user_id, @current_correlation_id)//
+CREATE TRIGGER trg_billing_line_items_ad AFTER DELETE ON billing_line_items FOR EACH ROW INSERT INTO audit_logs(action, event_category, target_table, record_id, old_value, changed_by, correlation_id, request_id, ip_address, endpoint, http_method) VALUES ('DELETE', 'FINANCIAL', 'billing_line_items', OLD.line_item_id, JSON_OBJECT('type', OLD.item_type, 'amt', OLD.amount), @current_user_id, @current_correlation_id, @current_request_id, @current_ip_address, @current_endpoint, @current_http_method)//
 
 -- Audit Log Immutability (BR-AUD-003)
 CREATE TRIGGER trg_audit_logs_protect_bu BEFORE UPDATE ON audit_logs FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Audit logs are immutable and cannot be modified.'//
@@ -491,7 +526,7 @@ CREATE TRIGGER trg_audit_logs_protect_bd BEFORE DELETE ON audit_logs FOR EACH RO
 
 DELIMITER ;
 
--- ── SECTION 5: ANALYTICAL ENGINE (6 VIEWS) ──
+-- ANALYTICAL ENGINE
 
 CREATE VIEW vw_billing_summary AS
 SELECT
@@ -546,10 +581,11 @@ SELECT
     r.status AS room_status,
     COUNT(bs.bed_space_id) AS total_beds,
     SUM(CASE WHEN bs.status = 'occupied' THEN 1 ELSE 0 END) AS occupied_beds,
-    SUM(CASE WHEN bs.status = 'vacant' THEN 1 ELSE 0 END) AS vacant_beds
+    SUM(CASE WHEN bs.status = 'vacant' THEN 1 ELSE 0 END) AS vacant_beds,
+    SUM(CASE WHEN bs.status = 'maintenance' THEN 1 ELSE 0 END) AS maintenance_beds
 FROM rooms r
 LEFT JOIN bed_spaces bs ON r.room_id = bs.room_id
-WHERE r.deleted_at IS NULL
+WHERE r.deleted_at IS NULL AND r.status != 'decommissioned'
 GROUP BY r.room_id, r.room_code, r.capacity, r.room_type, r.status;
 
 CREATE VIEW vw_occupancy_status AS
@@ -567,7 +603,7 @@ FROM bed_spaces bs
 JOIN rooms r ON bs.room_id = r.room_id
 LEFT JOIN contracts c ON bs.bed_space_id = c.bed_space_id AND c.status IN ('active', 'pending_payment')
 LEFT JOIN tenants t ON c.tenant_id = t.tenant_id
-WHERE r.deleted_at IS NULL;
+WHERE r.deleted_at IS NULL AND r.status != 'decommissioned';
 
 CREATE VIEW vw_collections_summary AS
 SELECT

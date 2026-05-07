@@ -19,7 +19,7 @@ import { KpiCard } from "@/components/ui/KpiCard";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { QuickEditRowAction } from "@/components/ui/QuickEditRowAction";
 import { RoomQuickEditForm } from '@/features/rooms/components/RoomQuickEditForm';
-import { ROOM_STATUS_LABELS, ROOM_TYPE_LABELS, } from "@/lib/constants";
+import { ROOM_STATUS_LABELS, ROOM_TYPE_LABELS, SEARCH_LABELS, SEARCH_PLACEHOLDERS, FILTER_ALL_OPTION, UTILITY_TYPE_FILTER_LABELS, FILTER_ALL_TYPES } from "@/lib/constants";
 import {
   normalizePaginatedList,
 } from "@/lib/pagination";
@@ -29,19 +29,21 @@ import StandardPage from "@/components/ui/StandardPage";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
 import OccupancyBar from "@/components/ui/OccupancyBar";
+import { ArrowUpDown } from "lucide-react";
 export default function RoomsPage() {
   const { user: currentUser } = useAuth();
   const [editingRoom, setEditingRoom] = useState(null);
-  const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
+  const { filters, updateFilter, resetFilters, sort, onSortChange, page, setPage, perPage, setPerPage, queryString } =
     usePaginatedFilters({
       initialFilters: { status: "all", type: "all", query: "" },
+      initialSort: { by: "room_code", dir: "asc" },
       debounceKeys: ["query"],
       buildExtraParams: ({ filters: current, debounced }) => {
         const extra = {};
         const q = String(debounced.query ?? "").trim();
         if (q) extra.q = q;
         if (current.status !== "all") extra.status = current.status;
-        if (current.type !== "all") extra.type = current.type;
+        if (current.type !== "all") extra.room_type = current.type;
         return extra;
       },
     });
@@ -61,6 +63,7 @@ export default function RoomsPage() {
       bookableVacantBeds: statsData?.bookable_vacant_beds ?? 0,
       maintenanceBeds: statsData?.maintenance_beds ?? 0,
       offlineUnits: statsData?.offline_units ?? 0,
+      decommissionedRooms: statsData?.decommissioned_rooms ?? 0,
       occupancyPct: statsData?.occupancy_pct ?? 0,
     };
   }, [statsData]);
@@ -93,7 +96,7 @@ export default function RoomsPage() {
       }
     >
       <div className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <KpiCard
             label="Total Capacity"
             icon={DoorOpen}
@@ -128,9 +131,16 @@ export default function RoomsPage() {
             value={stats.offlineUnits}
             sub={`${stats.maintenanceBeds} BEDS IN MAINTENANCE`}
             isWarning={stats.offlineUnits > 0}
-            isActiveDecision={stats.offlineUnits > 0}
             isSyncing={statsValidating || isSyncing}
             className="hs-glass-effect"
+          />
+          <KpiCard
+            label="Decommissioned"
+            icon={ShieldAlert}
+            value={stats.decommissionedRooms}
+            sub="REMOVED FROM INVENTORY"
+            isSyncing={statsValidating || isSyncing}
+            className="hs-glass-effect opacity-80"
           />
         </div>
         <FilterPanelCard icon={DoorOpen}>
@@ -143,11 +153,11 @@ export default function RoomsPage() {
           )}
           <div className="grid items-end gap-6 md:grid-cols-12">
             <div className="md:col-span-6 lg:col-span-6">
-              <Field label="Search Directory">
+              <Field label={SEARCH_LABELS.rooms}>
                 <Input
                   icon={Search}
-                  placeholder="Search by code, tenant, or amenities…"
-                  className="!h-12 border-stone-200 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
+                  placeholder={SEARCH_PLACEHOLDERS.rooms}
+                  className="!h-12 border-stone-200 font-bold focus:border-teal-500/50 focus:ring-4 focus:ring-teal-500/5 transition-[border-color,box-shadow]"
                   value={query}
                   onChange={(e) => {
                     updateFilter("query", e.target.value);
@@ -164,7 +174,7 @@ export default function RoomsPage() {
                   }}
                   className="!h-12 border-stone-200 focus:border-teal-500/50 font-bold"
                 >
-                  <option value="all">All Statuses</option>
+                  <option value="all">{FILTER_ALL_OPTION}</option>
                   {Object.entries(ROOM_STATUS_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
                   ))}
@@ -180,11 +190,34 @@ export default function RoomsPage() {
                   }}
                   className="!h-12 border-stone-200 focus:border-teal-500/50 font-bold"
                 >
-                  <option value="all">All Types</option>
+                  <option value="all">{FILTER_ALL_TYPES}</option>
                   {Object.entries(ROOM_TYPE_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>{label}</option>
                   ))}
                 </Select>
+              </Field>
+            </div>
+            <div className="md:col-span-3 lg:col-span-3">
+              <Field label="Sort By">
+                <div className="relative">
+                  <Select
+                    value={`${sort.by || 'room_code'}-${sort.dir || 'asc'}`}
+                    onChange={(e) => {
+                      const [by, dir] = e.target.value.split("-");
+                      onSortChange(by, dir);
+                    }}
+                    className="!h-12 border-stone-200 focus:border-teal-500/50 font-bold pl-10"
+                  >
+                    <option value="room_code-asc">Room Code (A-Z)</option>
+                    <option value="room_code-desc">Room Code (Z-A)</option>
+                    <option value="monthly_rate-asc">Rate (Lowest)</option>
+                    <option value="monthly_rate-desc">Rate (Highest)</option>
+                    <option value="capacity-desc">Capacity (High)</option>
+                    <option value="capacity-asc">Capacity (Low)</option>
+                    <option value="status-asc">Status</option>
+                  </Select>
+                  <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+                </div>
               </Field>
             </div>
           </div>
@@ -193,19 +226,19 @@ export default function RoomsPage() {
             items={[
               {
                 key: "query",
-                label: "Search",
+                label: "Rooms",
                 value: query,
                 onClear: () => updateFilter("query", ""),
               },
               {
                 key: "status",
-                label: "Status",
+                label: "Unit Status",
                 value: statusFilter !== "all" ? ROOM_STATUS_LABELS[statusFilter] || statusFilter : "",
                 onClear: () => updateFilter("status", "all"),
               },
               {
                 key: "type",
-                label: "Room Type",
+                label: "Accommodation Type",
                 value: typeFilter !== "all" ? ROOM_TYPE_LABELS[typeFilter] || typeFilter : "",
                 onClear: () => updateFilter("type", "all"),
               },
@@ -224,16 +257,27 @@ export default function RoomsPage() {
           }}
           skeleton={<SkeletonGridPage cards={6} />}
         >
-          <div className="mt-2 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mb-6 overflow-hidden rounded-2xl border border-stone-200 bg-white hs-glass-effect">
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
+              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">ROOM DIRECTORY</h2>
+              <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
+                {rooms.length} UNITS MATCHING
+              </div>
+            </div>
+            <div className="p-8">
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+
             {rooms.map((room) => {
               const capacity = Number(room.capacity || 0);
               return (
                 <Link
                   key={room.room_id}
                   href={`/rooms/${room.room_id}`}
-                  className="group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+                  className={`group block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${room.status === 'decommissioned' ? 'opacity-60 grayscale-[0.5]' : ''
+                    }`}
                 >
-                  <Card className="h-full !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm transition-[box-shadow,border-color] duration-200 group-hover:border-teal-200 group-hover:shadow-lg hs-glass-effect">
+                  <Card className={`h-full !p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm transition-[box-shadow,border-color] duration-200 group-hover:border-teal-200 group-hover:shadow-lg hs-glass-effect ${room.status === 'decommissioned' ? 'bg-stone-50/50' : ''
+                    }`}>
                     <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-teal-600 shadow-sm transition-[background-color,border-color] group-hover:border-teal-100 group-hover:bg-teal-50">
@@ -249,11 +293,10 @@ export default function RoomsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-md border ${
-                          room.is_metered 
-                            ? "bg-amber-50 text-amber-600 border-amber-100" 
+                        <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-md border ${room.is_metered
+                            ? "bg-amber-50 text-amber-600 border-amber-100"
                             : "bg-blue-50 text-blue-600 border-blue-100"
-                        }`}>
+                          }`}>
                           {room.is_metered ? "METERED" : "ALL-INCLUSIVE"}
                         </span>
                         <StatusBadge size="xs">{room.status}</StatusBadge>
@@ -286,12 +329,12 @@ export default function RoomsPage() {
                       </span>
                       <div className="flex items-center gap-2.5">
                         <QuickEditRowAction
-                          disabled={!canManageRooms(currentUser)}
+                          disabled={!canManageRooms(currentUser) || room.status === 'decommissioned'}
                           onClick={(e) => {
                             e.preventDefault();
                             setEditingRoom(room);
                           }}
-                          title="Update Asset Config"
+                          title={room.status === 'decommissioned' ? "Decommissioned — restore to edit" : "Update Asset Config"}
                         />
                         <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-100 bg-white text-stone-300 transition-[border-color,background-color,color] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600">
                           <ArrowUpRight size={14} aria-hidden />
@@ -302,6 +345,8 @@ export default function RoomsPage() {
                 </Link>
               );
             })}
+              </div>
+            </div>
           </div>
         </ResourceView>
         {listMeta && listMeta.total > 0 ? (

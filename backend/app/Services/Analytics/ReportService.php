@@ -2,6 +2,7 @@
 
 namespace App\Services\Analytics;
 
+use App\Enums\AuditAction;
 use App\Models\Contract;
 use App\Services\Concerns\HasReportingFilters;
 use App\Support\Financials;
@@ -36,6 +37,7 @@ class ReportService
             DB::raw('SUM(CASE WHEN total_beds = 0 THEN capacity ELSE total_beds END) as total_beds'),
             DB::raw('SUM(occupied_beds) as occupied_beds'),
             DB::raw('SUM(vacant_beds) as vacant_beds'),
+            DB::raw('SUM(maintenance_beds) as maintenance_beds'),
         ])->first();
 
         // 3. Paginated Rows
@@ -53,6 +55,7 @@ class ReportService
             $totalBeds = (int) $row->total_beds === 0 ? (int) $row->capacity : (int) $row->total_beds;
             $occupiedBeds = (int) $row->occupied_beds;
             $vacantBeds = (int) $row->vacant_beds;
+            $maintenanceBeds = (int) ($row->maintenance_beds ?? 0);
 
             return [
                 'room_id' => (int) $row->room_id,
@@ -61,6 +64,7 @@ class ReportService
                 'total_beds' => $totalBeds,
                 'occupied_beds' => $occupiedBeds,
                 'vacant_beds' => $vacantBeds,
+                'maintenance_beds' => $maintenanceBeds,
                 'occupancy_rate' => $totalBeds > 0 ? round(($occupiedBeds / $totalBeds) * 100, 2) : 0.0,
             ];
         });
@@ -71,6 +75,7 @@ class ReportService
                 'total_beds' => (int) ($summaryData->total_beds ?? 0),
                 'occupied_beds' => (int) ($summaryData->occupied_beds ?? 0),
                 'vacant_beds' => (int) ($summaryData->vacant_beds ?? 0),
+                'maintenance_beds' => (int) ($summaryData->maintenance_beds ?? 0),
             ],
             'rows' => $mappedRows,
             'meta' => $paginator ? [
@@ -164,6 +169,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -176,26 +183,28 @@ class ReportService
      */
     public static function tenantSummary(): array
     {
-        $now = now();
-        $startOfMonth = $now->copy()->startOfMonth()->toDateTimeString();
+        return \Cache::remember('reports:tenant_summary', 300, function () {
+            $now = now();
+            $startOfMonth = $now->copy()->startOfMonth()->toDateTimeString();
 
-        return [
-            'total_records' => DB::table('tenants')->count(),
-            'active_tenants' => DB::table('tenants')->where('status', 'active')->count(),
-            'new_onboarded_mtd' => DB::table('tenants')
-                ->where('created_at', '>=', $startOfMonth)
-                ->count(),
-            'pending_move_outs' => DB::table('contracts')
-                ->where('status', 'active')
-                ->whereNull('deleted_at')
-                ->whereNotNull('expected_move_out_date')
-                ->whereBetween('expected_move_out_date', [
-                    $now->toDateTimeString(),
-                    $now->copy()->addDays(30)->toDateTimeString(),
-                ])
-                ->count(),
-            'archived_count' => DB::table('tenants')->whereNotNull('deleted_at')->count(),
-        ];
+            return [
+                'total_records' => DB::table('tenants')->count(),
+                'active_tenants' => DB::table('tenants')->where('status', 'active')->count(),
+                'new_onboarded_mtd' => DB::table('tenants')
+                    ->where('created_at', '>=', $startOfMonth)
+                    ->count(),
+                'pending_move_outs' => DB::table('contracts')
+                    ->where('status', 'active')
+                    ->whereNull('deleted_at')
+                    ->whereNotNull('expected_move_out_date')
+                    ->whereBetween('expected_move_out_date', [
+                        $now->toDateTimeString(),
+                        $now->copy()->addDays(30)->toDateTimeString(),
+                    ])
+                    ->count(),
+                'archived_count' => DB::table('tenants')->whereNotNull('deleted_at')->count(),
+            ];
+        });
     }
 
     /**
@@ -265,6 +274,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -356,6 +367,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -406,6 +419,8 @@ class ReportService
                 'tenant_name' => $row->tenant_name,
                 'room_code' => $row->room_code,
                 'due_date' => $row->due_date,
+                'amount_due' => (float) ($row->total_amount ?? 0),
+                'amount_paid' => (float) ($row->total_paid ?? 0),
                 'outstanding_balance' => $totalAmount - $totalPaid,
                 'status' => $row->billing_status,
             ];
@@ -429,6 +444,8 @@ class ReportService
                 'last_page' => $paginator->lastPage(),
                 'per_page' => $paginator->perPage(),
                 'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
             ] : null,
         ];
     }
@@ -583,22 +600,42 @@ class ReportService
      */
     public static function securityPulse(): array
     {
-        $last24h = now()->subDay()->toDateTimeString();
+        return \Cache::remember('reports:security_pulse', 300, function () {
+            $last24h = now()->subDay()->toDateTimeString();
 
-        return [
-            'total_events_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->count(),
-            'sensitive_mutations_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->whereIn('target_table', ['payments', 'users', 'billing_line_items'])
-                ->count(),
-            'access_denied_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->where('action', 'access_denied')
-                ->count(),
-            'audit_integrity' => 'Verified',
-        ];
+            $sensitiveMutations = [
+                AuditAction::CREATE->value,
+                AuditAction::UPDATE->value,
+                AuditAction::DELETE->value,
+                AuditAction::SOFT_DELETE->value,
+                AuditAction::RESTORE->value,
+                AuditAction::VOID->value,
+            ];
+
+            $accessDenialActions = [
+                AuditAction::FAILED_LOGIN->value,
+                AuditAction::ACCESS_DENIED->value,
+            ];
+
+            return [
+                'total_events_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->count(),
+
+                'sensitive_mutations_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->whereIn('target_table', ['payments', 'users', 'billing_line_items'])
+                    ->whereIn('action', $sensitiveMutations)
+                    ->count(),
+
+                'access_denied_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->whereIn('action', $accessDenialActions)
+                    ->count(),
+
+                'audit_integrity' => 'Verified',
+            ];
+        });
     }
 
     /**
@@ -606,23 +643,24 @@ class ReportService
      */
     public static function meterSummary(): array
     {
-        $totalMeters = DB::table('meters')->count();
+        return \Cache::remember('reports:meter_summary', 300, function () {
+            $totalMeters = DB::table('meters')->count();
 
-        // Coverage = Meters with readings in the current billing cycle (this month)
-        $monthStart = now()->startOfMonth()->toDateTimeString();
-        $coveredMeters = DB::table('meter_readings')
-            ->where('reading_date', '>=', $monthStart)
-            ->distinct('meter_id')
-            ->count();
+            $monthStart = now()->startOfMonth()->toDateTimeString();
+            $coveredMeters = DB::table('meter_readings')
+                ->where('reading_date', '>=', $monthStart)
+                ->distinct('meter_id')
+                ->count();
 
-        return [
-            'total_meters' => $totalMeters,
-            'coverage_pct' => $totalMeters > 0 ? round(($coveredMeters / $totalMeters) * 100, 1) : 0,
-            'anomalous_spikes' => 0, // Anomaly detection pending baseline
-            'total_pending' => DB::table('meters')
-                ->where('status', 'active')
-                ->count() - $coveredMeters,
-        ];
+            return [
+                'total_meters' => $totalMeters,
+                'coverage_pct' => $totalMeters > 0 ? round(($coveredMeters / $totalMeters) * 100, 1) : 0,
+                'anomalous_spikes' => 0,
+                'total_pending' => DB::table('meters')
+                    ->where('status', 'active')
+                    ->count() - $coveredMeters,
+            ];
+        });
     }
 
     /**
@@ -630,21 +668,23 @@ class ReportService
      */
     public static function userSummary(): array
     {
-        $last24h = now()->subDay()->toDateTimeString();
+        return \Cache::remember('reports:user_summary', 300, function () {
+            $last24h = now()->subDay()->toDateTimeString();
 
-        return [
-            'staff_count' => DB::table('users')->whereNull('deleted_at')->count(),
-            'active_last_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->distinct('changed_by')
-                ->count(),
-            'admin_count' => DB::table('users')
-                ->join('roles', 'users.role_id', '=', 'roles.role_id')
-                ->where('roles.role_name', 'admin')
-                ->whereNull('users.deleted_at')
-                ->count(),
-            'hygiene_count' => DB::table('users')->whereNotNull('deleted_at')->count(),
-        ];
+            return [
+                'staff_count' => DB::table('users')->whereNull('deleted_at')->count(),
+                'active_last_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->distinct('changed_by')
+                    ->count(),
+                'admin_count' => DB::table('users')
+                    ->join('roles', 'users.role_id', '=', 'roles.role_id')
+                    ->where('roles.role_name', 'admin')
+                    ->whereNull('users.deleted_at')
+                    ->count(),
+                'hygiene_count' => DB::table('users')->whereNotNull('deleted_at')->count(),
+            ];
+        });
     }
 
     /**
@@ -968,8 +1008,13 @@ class ReportService
      */
     public static function checkInEfficiency(): array
     {
+        $avgDays = DB::table('contracts')
+            ->whereNotNull('move_in_date')
+            ->select(DB::raw('AVG(DATEDIFF(move_in_date, created_at)) as avg_days'))
+            ->value('avg_days');
+
         return [
-            'avg_onboarding_time_days' => 2.5, // TODO: Implement calculation based on created_at vs move_in_date
+            'avg_onboarding_time_days' => round((float) ($avgDays ?? 0), 1),
             'total_new_checkins_this_month' => DB::table('contracts')
                 ->whereBetween('move_in_date', [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()])
                 ->count(),

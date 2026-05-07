@@ -38,6 +38,7 @@ import MetricItem from "@/components/ui/MetricItem";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { RoomQuickEditForm } from '@/features/rooms/components/RoomQuickEditForm';
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import DetailHeader from "@/components/ui/DetailHeader";
 export default function RoomDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -49,7 +50,8 @@ export default function RoomDetailsPage() {
     fetcher
   );
   const loading = !room && !roomError;
-  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showDecommissionModal, setShowDecommissionModal] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [editingRoom, setEditingRoom] = useState(null);
   const title = room ? `Room ${room.room_code}` : "Room";
@@ -58,26 +60,41 @@ export default function RoomDetailsPage() {
   const hasOccupiedBeds = room?.has_occupied_beds ?? bedSpaces.some((bed) => bed?.status === "occupied");
   const hasActiveContracts = room?.has_active_contracts ?? false;
   const archiveBlockReason = hasActiveContracts
-    ? "Room cannot be archived while active contracts are linked to its bed spaces."
+    ? "Room cannot be decommissioned while active contracts are linked to its bed spaces."
     : hasOccupiedBeds
-      ? "Room cannot be archived while one or more bed spaces are occupied."
+      ? "Room cannot be decommissioned while one or more bed spaces are occupied."
       : "";
-  const canArchiveRoom = canManageRooms(currentUser) && !archiveBlockReason && room?.status !== 'archived';
+  const canArchiveRoom = canManageRooms(currentUser) && !archiveBlockReason && room?.status !== 'decommissioned';
   const unitOfflineBedHint =
     room && roomStatusLower === "maintenance"
       ? ROOM_UNIT_OFFLINE_BED_HINT[roomStatusLower]
       : null;
-  const handleArchiveRoom = async () => {
+  const handleDecommissionRoom = async () => {
     if (!roomId) return;
-    setBusyAction("archive");
+    setBusyAction("decommission");
     try {
       await apiRequest(`/api/rooms/${roomId}/archive`, { method: "POST" });
-      showToast(`Room ${room?.room_code} archived.`, "success");
-      setShowArchiveModal(false);
+      showToast(`Room ${room?.room_code} decommissioned successfully.`, "success");
+      setShowDecommissionModal(false);
       router.push("/rooms");
     } catch (err) {
-      showToast(err?.message || "Failed to archive room.", "error");
-      setShowArchiveModal(false);
+      showToast(err?.message || "Failed to decommission room.", "error");
+      setShowDecommissionModal(false);
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const handleRestoreRoom = async () => {
+    if (!roomId) return;
+    setBusyAction("restore");
+    try {
+      await apiRequest(`/api/rooms/${roomId}/restore`, { method: "POST" });
+      showToast(`Room ${room?.room_code} restored to active inventory.`, "success");
+      setShowRestoreModal(false);
+      await mutateRoom();
+    } catch (err) {
+      showToast(err?.message || "Failed to restore room.", "error");
+      setShowRestoreModal(false);
     } finally {
       setBusyAction("");
     }
@@ -94,38 +111,24 @@ export default function RoomDetailsPage() {
       setBusyAction("");
     }
   };
+  const header = DetailHeader({
+    type: "room",
+    id: roomId,
+    title: room ? `Room ${room.room_code}` : "Room",
+    subtitle: "Room details — beds, status, and meters.",
+    status: room?.status,
+    loading: loading,
+    listHref: "/rooms",
+    listLabel: "Room Inventory",
+    detailLabel: "Room Profile"
+  });
+
   return (
     <StandardPage
-      title={
-        loading ? (
-          "Loading Room..."
-        ) : room ? (
-          <div className="flex items-center gap-4">
-            <span>Room {room.room_code}</span>
-            <ResourceIdCell id={room.room_id} type="room" />
-          </div>
-        ) : (
-          "Room Profile"
-        )
-      }
-      subtitle={
-        loading ? (
-          "Synchronizing unit details..."
-        ) : room ? (
-          "Room details — beds, status, and meters."
-        ) : null
-      }
+      {...header}
       loading={loading}
       skeleton={<SkeletonDetailPage />}
       error={roomError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Room Inventory", href: "/rooms" },
-            { label: "Room Profile" },
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/rooms"
@@ -147,8 +150,9 @@ export default function RoomDetailsPage() {
                 status={room?.status}
                 hasActiveContract={hasActiveContracts || hasOccupiedBeds}
                 busyAction={busyAction}
-                onArchive={() => setShowArchiveModal(true)}
-                onRestore={() => runLifecycleAction("restore", `/api/rooms/${roomId}/restore`)}
+                mode="room"
+                onArchive={() => setShowDecommissionModal(true)}
+                onRestore={() => setShowRestoreModal(true)}
               />
             </div>
           )}
@@ -156,19 +160,28 @@ export default function RoomDetailsPage() {
       }
     >
       <ConfirmationDialog
-        open={showArchiveModal}
-        title="Archive Room"
-        description={`Are you sure you want to archive Room ${room?.room_code}? This will remove the room from active inventory and prevent new bookings. All historical forensic data, including previous tenant contracts and payment records, will be preserved for auditing.`}
-        confirmLabel="Archive Room"
+        open={showDecommissionModal}
+        title="Decommission Room"
+        description={`Are you sure you want to decommission Room ${room?.room_code}? This will remove the room from active inventory and prevent new bookings. All historical forensic data, including previous tenant contracts and payment records, will be preserved for auditing.`}
+        confirmLabel="Decommission Room"
         isDanger
-        isLoading={busyAction === "archive"}
-        onConfirm={handleArchiveRoom}
-        onCancel={() => busyAction !== "archive" && setShowArchiveModal(false)}
+        isLoading={busyAction === "decommission"}
+        onConfirm={handleDecommissionRoom}
+        onCancel={() => busyAction !== "decommission" && setShowDecommissionModal(false)}
+      />
+      <ConfirmationDialog
+        open={showRestoreModal}
+        title="Restore Room"
+        description={`You are about to restore Room ${room?.room_code} to active inventory. This will allow the room and its bed spaces to be assigned to new tenant contracts.`}
+        confirmLabel="Restore Room"
+        isLoading={busyAction === "restore"}
+        onConfirm={handleRestoreRoom}
+        onCancel={() => busyAction !== "restore" && setShowRestoreModal(false)}
       />
       {room ? (
         <div className="space-y-6">
           {!canArchiveRoom && canManageRooms(currentUser) ? (
-            <Alert variant="info" title="Archive disabled">
+            <Alert variant="info" title="Decommission restricted">
               {archiveBlockReason}
             </Alert>
           ) : null}
@@ -177,8 +190,8 @@ export default function RoomDetailsPage() {
               {unitOfflineBedHint}
             </Alert>
           ) : null}
-          <RecordStateAlert show={room?.status === 'archived'} variant="warning" title="Forensic History">
-            This room is currently archived and decommissioned from active inventory. It will not appear in occupancy reports or booking availability until restored.
+          <RecordStateAlert show={room?.status === 'decommissioned'} variant="warning" title="Room Decommissioned">
+            This room is currently decommissioned from active inventory. It will not appear in occupancy reports or booking availability until restored.
           </RecordStateAlert>
           <div className="grid gap-8 lg:grid-cols-12">
             <aside className="space-y-6 lg:col-span-4">

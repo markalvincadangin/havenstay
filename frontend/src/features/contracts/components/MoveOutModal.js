@@ -115,7 +115,7 @@ export default function MoveOutModal({ open, contract, onClose, onConfirm, isSub
             </div>
 
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Unit / Bed</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Room / Bed</span>
               <span className="text-sm font-mono font-bold text-stone-900">
                 {room ? room.room_code : "—"}{contract?.bed_space?.bed_label ? ` · ${contract.bed_space.bed_label}` : ""}
               </span>

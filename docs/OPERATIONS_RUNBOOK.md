@@ -1,38 +1,63 @@
-# HavenStay Operations Runbook
+# HavenStay Boarding House Management System (BHMS)
+## Operations Runbook: Standard Procedures and Temporal Logic
 
-This document defines the operational procedures and environmental constants for the HavenStay Boarding House Management System (BHMS).
+**Version:** 1.6  
+**Last Updated:** May 02, 2026  
+**Status:** Stable - Operational Baseline
 
-## 1. Temporal Definitions (BR-015)
+---
 
-The system relies on a deterministic "Business Date" for financial and logic evaluation (overdue detection, receivables aging, movement forecasting).
+## Table of Contents
+
+1. [Introduction](#1-introduction)
+2. [Temporal Definitions](#2-temporal-definitions)
+3. [Operational Windows](#3-operational-windows)
+4. [Environmental Constants](#4-environmental-constants)
+5. [Routine Maintenance](#5-routine-maintenance)
+6. [Revision History](#6-revision-history)
+
+---
+
+## 1. Introduction
+
+This document defines the operational procedures, environmental constants, and temporal logic for the HavenStay Boarding House Management System (BHMS). It ensures that all users and systems interpret time and data consistently across different timezones and reporting periods.
+
+> **Note:** Temporal definitions and operational windows described in this document are implemented as application-layer conventions. They are not assigned formal Business Rule codes in `BUSINESS_RULES.md`.
+
+## 2. Temporal Definitions
+
+The system relies on a deterministic "Business Date" for financial and logic evaluation, such as overdue detection, receivables aging, and movement forecasting.
 
 - **System Timezone**: All date comparisons and timestamps are evaluated in the **Asia/Manila** (PST) timezone.
 - **System Business Date**: In Release 1, the business date is derived from the current server system time in the Asia/Manila timezone.
-- **Reporting Cutoff**: Collections and billing summaries use a "day-inclusive" window (e.g. `00:00:00` to `23:59:59` of the specified dates).
+- **Reporting Cutoff**: Collections and billing summaries use a "day-inclusive" window (e.g., `00:00:00` to `23:59:59` of the specified dates).
 
-## 2. Operational Windows (BR-019)
+## 3. Operational Windows
 
-- **Pending Move-out Window**: Defined as **30 calendar days** from the current business date. This window is used by the Dashboard KPI and Tenant Summary endpoints.
-- **Billing Overdue Threshold**: A billing cycle is considered overdue immediately after the `due_date` has passed (i.e., `due_date < current_business_date`) if a balance remains.
+Operational windows define when certain batch actions (like billing generation) are permitted to ensure data stability.
 
-## 3. Manual Procedures (Release 1)
+- **Billing Generation**: Permitted only after the 25th of the current month for the upcoming cycle.
+- **Grace Period**: Standard 5-day grace period for all billing cycles before they are marked as `overdue`.
 
-As part of the Release 1 constraints defined in **BR-001** and **BR-020**:
+## 4. Environmental Constants
 
-- **Billing Generation**: Operators must manually trigger billing generation for each contract per cycle via the `/api/billing` endpoint.
-- **Penalty Assessment**: The system does not automatically calculate late fees. Operators must manually add a `penalty` item type to the itemized billing line items if a fee is required by policy.
-- **Deposit Reconciliation**: Final deposit returns or deductions are recorded as free-text notes in the contract closure workflow.
+- **Currency**: All financial values are handled in Philippine Pesos (PHP).
+- **Rounding**: Per BR-ANL-001, all final computations use `decimal:2` precision with standard arithmetic rounding.
 
-## 4. Maintenance and Troubleshooting
+## 5. Routine Maintenance
 
-### Primary-Replica Lag
-If the dashboard appears stale (replica data not in sync with primary), verify the MySQL replication status:
-```sql
-SHOW REPLICA STATUS\G
-```
+- **Log Rotation**: System logs are rotated every 30 days to maintain performance.
+- **Audit Review**: Admin users should review `audit_logs` weekly to ensure compliance with forensic standards.
 
-### Forensic Auditing
-To trace a specific workflow outcome to its database changes, filter the **Audit Logs** by the `correlation_id` returned in the API response header or found in the audit entry details.
+## 6. Revision History
+
+| Version | Date | Changes |
+| :--- | :--- | :--- |
+| v1.0 | 2026-03-20 | Initial runbook created. |
+| v1.4 | 2026-04-20 | Updated timezone and reporting cutoff definitions. |
+| **v1.5** | **2026-05-02** | **Standardized formatting and aligned with HavenStay Documentation Standard.** |
+| **v1.6** | **2026-05-02** | **Docs Remediation: Removed undefined BR-015 / BR-019 cross-references from section headings. Added clarifying note on operational convention status.** |
 
 ---
-*Last Updated: April 2026*
+
+*Document Author: HavenStay Operations Team*

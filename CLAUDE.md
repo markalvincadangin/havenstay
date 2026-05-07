@@ -14,9 +14,9 @@ constraints — neither overrides the other.
 **Repository layout**
 
     havenstay/
-    ├── backend/        Laravel 14 API
+    ├── backend/        Laravel 13 API
     ├── frontend/       Next.js 16 App Router SPA
-    ├── db/             Canonical schema SQL
+    ├── db/             Canonical schema SQL (v5.0 — Forensic Hardened)
     ├── design-system/  UI/UX specification
     └── docs/           SRS, SDD, project docs
 
@@ -26,10 +26,10 @@ constraints — neither overrides the other.
 
 | Layer        | Technology          | Version   |
 |--------------|---------------------|-----------|
-| Backend      | Laravel (PHP)       | 14 / 8.3+ |
-| Auth         | Laravel Sanctum     | 4.3       |
+| Backend      | Laravel (PHP)       | 13 / 8.3+ |
+| Auth         | Laravel Sanctum     | 4.x       |
 | Frontend     | Next.js, React      | 16 / 19   |
-| Styling      | Tailwind CSS        | v4        |
+| Styling      | Tailwind CSS v4 + HS-Utilities | — |
 | Database     | MySQL InnoDB        | 8.4+      |
 | Infrastructure | Docker Compose    | 3.8+      |
 
@@ -44,14 +44,29 @@ architectural constraints. They must not be removed or worked around.
 
 | ID      | Requirement                        | Where implemented                          |
 |---------|------------------------------------|--------------------------------------------|
-| CCR-001 | ≥ 6 relational entities            | 16 tables in `db/havenstay_schema.sql`     |
+| CCR-001 | ≥ 6 relational entities            | 15 tables in `db/havenstay_schema.sql`     |
 | CCR-002 | Distributed DB (primary-replica)   | `docker-compose.yml`                       |
 | CCR-003 | Full CRUD operations               | All service classes                        |
 | CCR-004 | SQL operators: AND, OR, BETWEEN, LIKE | Filter methods in service classes       |
 | CCR-005 | Multi-table JOINs                  | 6 reporting views (`vw_*`)                 |
 | CCR-006 | Explicit transactions              | `DB::transaction()` in write services      |
-| CCR-007 | Application-level transaction logs | `transaction_logs` table + `TransactionService` |
-| CCR-008 | DB triggers for change logging     | 42 triggers in schema, fires into `audit_logs` |
+| CCR-007 | DB triggers for change logging     | 45 triggers in schema, fire into `audit_logs` |
+
+### 3.1 Forensic Trigger Architecture (CCR-007)
+
+The system enforces 100% forensic attribution via **45 database triggers** on the MySQL primary. The math is non-standard due to specific integrity guards:
+
+| Component | Math | Total |
+| :--- | :--- | :--- |
+| **Standard Tables (13)** | 13 tables × 3 AFTER triggers (I/U/D) | 39 |
+| **Meter Assignments (1)** | 3 AFTER triggers (I/U/D) + 1 BEFORE INSERT guard | 4 |
+| **Audit Logs (1)** | 2 BEFORE triggers (U/D) for immutability | 2 |
+| **Total Forensic Engine** | **(13 × 3) + (1 × 4) + 2 = 45** | **45** |
+
+> **Hardening Note:** `meter_assignments` is the only operational table with 4 triggers (the 4th is `trg_meter_assignments_bi` which prevents double-assigning active meters).
+
+> **Decommissioned:** `transaction_logs` table and `TransactionService` have been retired. Forensic integrity is handled exclusively by the 45 unified trigger-based `audit_logs` and `AuditService`. Do not reference or reintroduce `TransactionService` or `transaction_logs`.
+
 
 ---
 
@@ -86,33 +101,24 @@ public static function create(array $data): Contract
 
 ### Transaction and audit wiring
 
-Every write operation that touches a transactional table follows this pattern:
+Every write operation uses the `ManagesWorkflows` trait's `runWriteWorkflow()` helper,
+which handles correlation ID injection and DB transaction safety automatically:
 
 ```php
-// 1. Log the business intent (survives rollback)
-$tx = TransactionService::logStarted('operation_name', $actor->user_id, $details);
+// In a Service class that uses ManagesWorkflows:
+return self::runWriteWorkflow($actor, 'operation_name', function () use ($actor, $data) {
+    // AuditService context is already set by the trait.
+    // Execute business logic here.
+    $contract = Contract::create([...]);
+    return $contract;
+});
+```
 
-// 2. Set database session variables for forensic triggers
-AuditService::setAuditUserContext($actor->user_id);
-AuditService::setCorrelationContext($tx['correlation_id']);
+For system/CLI contexts (Artisan commands, seeders), set context manually before writes:
 
-try {
-    $result = DB::transaction(function () use (...) {
-        // executes business logic
-    });
-
-    // 3. Mark the log as committed
-    TransactionService::logCommitted($tx['correlation_id'], [...details]);
-
-    return $result;
-} catch (\Throwable $e) {
-    // 4. Mark as rolled back on error
-    TransactionService::logRolledBack($tx['correlation_id'], $e->getMessage());
-    throw $e;
-} finally {
-    // 5. Clean up correlation context
-    AuditService::clearCorrelationContext();
-}
+```php
+AuditService::setSystemContext();
+// then proceed with DB::transaction() as normal
 ```
 
 ### Comment style
@@ -133,25 +139,25 @@ Do not catch and silently swallow exceptions.
 - Controllers must not do direct Eloquent writes or complex domain query logic.
 - Service write methods must receive `User $actor` as first parameter.
 - Never use `Auth::id()` or `Auth::user()` inside service methods.
-- Critical writes must follow the standard transaction/audit flow (logStarted -> set contexts -> transaction -> commit/rollback).
+- All write operations use `self::runWriteWorkflow()` (from `ManagesWorkflows` trait).
 - Controller handles request validation; Service handles domain invariants and business rules.
 
 ---
 
 ## 5. Database Schema Rules
 
-The canonical schema is `db/havenstay_schema.sql`. 
+The canonical schema is `db/havenstay_schema.sql`. A byte-for-byte mirror must be
+maintained at `backend/database/sql/havenstay_schema.sql`. Any schema change must be
+applied to **both** files simultaneously.
 
 ### Column naming — authoritative reference
 
 | Concept           | Column name in schema  | Notes                              |
-|-------------------|------------------------|------------------------------------|
+|-------------------|------------------------|-------------------------------------|
 | Audit actor       | `changed_by`           | FK to `users.user_id`, nullable    |
 | Audit entity      | `target_table`         | Name of the affected table         |
 | Audit record      | `record_id`            | Affected row PK (unsigned bigint)  |
 | Audit timestamp   | `changed_at`           | DATETIME default now()             |
-| TX log action     | `action`               | Technical operation name string    |
-| TX log actor      | `initiated_by`         | FK to `users.user_id`, nullable    |
 | Correlation link  | `correlation_id`       | UUID shared across TX + audit rows |
 | Contract Status   | `status`               | ENUM including `pending_payment`   |
 | Payment Category  | `payment_category`     | billing, deposit, refund, rollover |
@@ -171,24 +177,26 @@ Authentication token is stored in `localStorage` under `havenstay_token`.
 
 - All monetary values use `formatPHP()` from `lib/formatters.js`.
 - All timestamps use locale formatting with `en-PH` locale.
-- Table row IDs use the mono prefix format: `#TX-{id}`, `#AUDIT-{id}`,
-  `#TENANT-{id}`, etc. Never display bare integers in ID columns.
+- Table row IDs use the mono prefix format: `#AUDIT-{id}`,
+  `#TENANT-{id}`, `#CONTRACT-{id}`, `#PAY-{id}`, etc. Never display bare integers in ID columns.
+- Status values must use `<StatusBadge />`. Never hardcode badge colors inline.
+- All styling uses Tailwind CSS v4 with the HS-Utility layer. Ensure utility classes follow semantic patterns defined in globals.css.
 
 ### Tunnel / Port-Forwarding (Dev)
 
 When testing with remote browsers (Vercel previews, TestSprite):
-1. Expose backend (8000) via ngrok: `ngrok http 8000`.
-2. Update `backend/.env`: `SANCTUM_STATEFUL_DOMAINS=your-tunnel.ngrok-free.app`.
-3. Update `frontend/.env.local`: `BACKEND_INTERNAL_URL=https://your-tunnel.ngrok-free.app`.
-4. If exposing frontend (3000): Add tunnel host to `ALLOWED_DEV_ORIGINS` in `.env.local`.
-5. Restart both services. Full guide in `docs/DEV_SETUP.md`.
+1. Open ONE tunnel to the frontend (port 3000): `cloudflared tunnel --url http://localhost:3000`
+2. Share the `https://<random>.trycloudflare.com` link — Next.js proxies `/api/*` internally.
+3. No `.env` changes needed — the backend accepts `*.trycloudflare.com` and `*.ngrok-free.app` via wildcard CORS.
+4. Full guide in `docs/DEV_SETUP.md`.
 
 ---
 
 ## 7. Key Operational Units
 
-- **Auditor**: Handles `audit_logs` (low-level row changes).
-- **Ledger**: Handles `transaction_logs` (high-level business events).
+- **Auditor**: Handles `audit_logs` (trigger-written row-level change snapshots).
 - **Core**: Users, Tenants, Rooms, Contracts.
 - **Finances**: Billing, Payments.
 - **Metering**: Utilities, Meters, Assignments, Readings.
+
+> **Removed:** `transaction_logs` (Ledger) — decommissioned in v4.6. All forensic integrity is now handled exclusively by `audit_logs` + `AuditService`.

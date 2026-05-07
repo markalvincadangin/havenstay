@@ -21,7 +21,7 @@ export default function StandardPage({
   skeleton = <SkeletonListPage rows={10} />,
   children,
 }) {
-  const { authLoading, isUnauthorized } = useAuthGuard();
+  const { authLoading, isUnauthorized, user } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
 
   if (authLoading || (loading && !children)) {
@@ -31,6 +31,9 @@ export default function StandardPage({
   if (isUnauthorized) {
     return null;
   }
+
+  // Custom actions area for the page header
+  const headerActions = actions;
 
   const pageVariants = {
     initial: { opacity: 0, y: 8 },
@@ -57,7 +60,7 @@ export default function StandardPage({
           title={title}
           subtitle={subtitle}
           breadcrumbs={breadcrumbs}
-          actions={actions}
+          actions={headerActions}
         />
 
         {normalizedError && (

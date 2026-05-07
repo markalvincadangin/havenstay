@@ -25,7 +25,7 @@ class IndexTenantRequest extends FormRequest
     {
         return array_merge([
             'q' => ['nullable', 'string', 'max:200'],
-            'status' => ['nullable', 'string', 'in:active,moved_out,archived'],
+            'status' => ['nullable', 'string', 'in:onboarded,active,moved_out,archived'],
         ], Pagination::queryRules());
     }
 }

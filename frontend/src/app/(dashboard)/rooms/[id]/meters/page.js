@@ -88,7 +88,7 @@ export default function RoomMetersPage() {
     <StandardPage
       title={
         <div className="flex items-center gap-4">
-          <span>Room {room?.room_code || ''} Meters</span>
+          <span>{room?.room_code || ''} Meters</span>
           <ResourceIdCell id={roomId} type="room" />
         </div>
       }

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { Zap, Ruler, } from "lucide-react";
+import { Zap, Ruler } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { canManageUsers } from "@/lib/auth";
 import { applyServerFieldErrors } from "@/lib/forms";
@@ -12,17 +12,20 @@ import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Fields";
 import Link from "next/link";
-import { primaryLinkCtaClass, secondaryOutlineLinkClass } from "@/components/ui/LinkTokens";
 import StandardPage from "@/components/ui/StandardPage";
 import { FormSection } from "@/components/ui/FormSection";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import { useToasts } from "@/context/ToastContext";
 import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
+
 export default function RegisterUtilityPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const { showToast } = useToasts();
+  
+  const [scannedDuplicate, setScannedDuplicate] = useState(null);
+
   const {
     register,
     handleSubmit,
@@ -36,7 +39,25 @@ export default function RegisterUtilityPage() {
       effective_from: new Date().toISOString().split("T")[0],
     },
   });
+
   useUnsavedChangesWarning(isDirty && !isSubmitting);
+
+  const checkUniqueness = async (value) => {
+    if (!value || value.trim().length < 3) {
+      setScannedDuplicate(null);
+      return;
+    }
+    try {
+      const results = await apiRequest(`/api/utilities?q=${encodeURIComponent(value.trim())}`);
+      // Since it's usually a small list, we check local match
+      const list = Array.isArray(results) ? results : results?.data || [];
+      const match = list.find(u => u.name?.toLowerCase().trim() === value.trim().toLowerCase());
+      setScannedDuplicate(match ? match.utility_id : null);
+    } catch (e) {
+      // Ignore
+    }
+  };
+
   const onSubmit = async (values) => {
     if (!canManageUsers(currentUser)) return;
     try {
@@ -60,7 +81,9 @@ export default function RegisterUtilityPage() {
       applyServerFieldErrors(error, setError, { showToast });
     }
   };
+
   const readOnly = !canManageUsers(currentUser);
+
   return (
     <StandardPage
       title="Register Utility"
@@ -78,7 +101,7 @@ export default function RegisterUtilityPage() {
     >
       <form onSubmit={handleSubmit(onSubmit)} className="mx-auto w-full max-w-4xl space-y-6" noValidate>
         {readOnly && (
-          <Alert variant="warning" title="Access restricted" data-testid="access-denied-register-utility">
+          <Alert variant="warning" title="Access restricted">
             Modifying the central utility catalog is restricted to Administrators to maintain financial integrity.
           </Alert>
         )}
@@ -93,14 +116,17 @@ export default function RegisterUtilityPage() {
                 label="Utility Name"
                 required
                 error={errors.name?.message}
+                warning={scannedDuplicate ? "A utility with this name already exists in the catalog." : null}
                 helpText="Common identifier (e.g., Internet, Power, Cleaning)."
               >
                 <Input
                   autoFocus
                   placeholder="e.g. Internet"
-                  className="!h-11 border-stone-200 focus:border-teal-500/50"
+                  className="!h-11 border-stone-200 focus:border-teal-500/50 font-bold"
                   disabled={readOnly}
                   {...register("name", { required: "Utility name is required." })}
+                  onBlur={(e) => checkUniqueness(e.target.value)}
+                  hasError={Boolean(errors.name || scannedDuplicate)}
                 />
               </Field>
               <Field
@@ -154,7 +180,7 @@ export default function RegisterUtilityPage() {
         <div className="flex flex-col-reverse gap-3 pt-8 sm:flex-row sm:justify-end">
           <Link
             href="/utilities"
-            className={secondaryOutlineLinkClass + " px-10"}
+            className="flex h-12 items-center justify-center rounded-xl border border-stone-200 px-10 text-xs font-black uppercase tracking-widest text-stone-500 transition-all hover:bg-stone-50 active:scale-95"
           >
             Cancel
           </Link>
@@ -162,8 +188,8 @@ export default function RegisterUtilityPage() {
             type="submit"
             variant="primary"
             loading={isSubmitting}
-            disabled={readOnly || isSubmitting}
-            className={primaryLinkCtaClass + " px-12 border-0 bg-teal-600 hover:bg-teal-700"}
+            disabled={readOnly || isSubmitting || scannedDuplicate}
+            className="h-12 rounded-xl px-12 text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 active:scale-95 transition-all bg-teal-600 hover:bg-teal-700"
           >
             Register Utility
           </Button>

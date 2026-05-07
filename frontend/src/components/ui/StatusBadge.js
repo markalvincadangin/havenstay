@@ -1,3 +1,4 @@
+import React from "react";
 import {
   TENANT_STATUS_LABELS,
   ROOM_STATUS_LABELS,
@@ -23,7 +24,9 @@ import {
   FileText,
   DoorOpen,
   X,
-  CreditCard
+  CreditCard,
+  ShieldAlert,
+  Lock
 } from "lucide-react";
 
 /**
@@ -51,7 +54,7 @@ import {
  * - voided → badge-neutral (stone)
  */
 
-export function StatusBadge({ children }) {
+function StatusBadgeComponent({ children }) {
   const rawValue = String(children || "").toLowerCase().trim();
 
   // Normalize value (handle spaces and underscores)
@@ -67,9 +70,12 @@ export function StatusBadge({ children }) {
     "past_due": "badge-danger",
     posted: "badge-success",
     voided: "badge-neutral",
+    void: "badge-neutral",
 
     // Tenant statuses
+    onboarded: "badge-neutral",
     active: "badge-success",
+    inactive: "badge-neutral",
     moved_out: "badge-neutral",
     archived: "badge-neutral",
 
@@ -100,8 +106,12 @@ export function StatusBadge({ children }) {
     status_change: "badge-warning",
     delete: "badge-danger",
     access_denied: "badge-danger",
+    failed_login: "badge-danger",
     login: "badge-success",
     logout: "badge-neutral",
+    restore: "badge-success",
+    soft_delete: "badge-neutral",
+    archive: "badge-neutral",
     started: "badge-info",
     superseded: "badge-neutral",
   };
@@ -133,8 +143,15 @@ export function StatusBadge({ children }) {
     delete: X,
     login: Activity,
     logout: X,
+    failed_login: ShieldAlert,
+    access_denied: Lock,
     posted: FileText,
     billing: CreditCard,
+    void: XCircle,
+    onboarded: Clock,
+    restore: History,
+    soft_delete: Archive,
+    archive: Archive,
   };
 
   const variant = variantMap[normalizedValue] || "badge-neutral";
@@ -182,6 +199,7 @@ export function StatusBadge({ children }) {
     ...PAYMENT_STATUS_LABELS,
     ...ROOM_TYPE_LABELS,
     ...AUDIT_ACTION_LABELS,
+    inactive: "Inactive",
     voided: "Voided",
     voided_contract: "Voided",
     settled: "Paid",
@@ -239,5 +257,8 @@ export function StatusBadge({ children }) {
     </span>
   );
 }
+
+// Industry Pattern: Memoize repeating list components to prevent CPU jank during dashboard updates.
+export const StatusBadge = React.memo(StatusBadgeComponent);
 
 export default StatusBadge;

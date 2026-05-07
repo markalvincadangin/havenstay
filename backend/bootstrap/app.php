@@ -34,7 +34,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->appendToGroup('api', [
-            SetAuditContext::class,
             HandleIdempotency::class,
         ]);
     })

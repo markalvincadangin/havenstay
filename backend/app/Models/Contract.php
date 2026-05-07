@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ContractStatus;
 use App\Enums\ContractType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -73,7 +74,7 @@ class Contract extends Model
 
     public function tenant(): BelongsTo
     {
-        return $this->belongsTo(Tenant::class, 'tenant_id', 'tenant_id');
+        return $this->belongsTo(Tenant::class, 'tenant_id', 'tenant_id')->withTrashed();
     }
 
     public function bedSpace(): BelongsTo
@@ -115,5 +116,34 @@ class Contract extends Model
     {
         return $this->hasOne(Billing::class, 'contract_id', 'contract_id')
             ->latest('billing_period_to');
+    }
+
+    /**
+     * Scope: Enrich query with Tenant full name for sorting.
+     */
+    public function scopeWithTenantName(Builder $query): Builder
+    {
+        return $query->addSelect([
+            'tenant_name' => Tenant::select(\Illuminate\Support\Facades\DB::raw('CONCAT(last_name, ", ", first_name)'))
+                ->whereColumn('tenants.tenant_id', 'contracts.tenant_id')
+                ->limit(1)
+        ]);
+    }
+
+    /**
+     * Scope: Enrich query with room context.
+     */
+    public function scopeWithRoomContext(Builder $query): Builder
+    {
+        return $query->addSelect([
+            'room_code' => 'room_context.room_code',
+            'bed_label' => 'room_context.bed_label',
+        ])->leftJoinLateral(
+            Room::select('rooms.room_code', 'bed_spaces.bed_label')
+                ->join('bed_spaces', 'rooms.room_id', '=', 'bed_spaces.room_id')
+                ->whereColumn('bed_spaces.bed_space_id', 'contracts.bed_space_id')
+                ->limit(1),
+            'room_context'
+        );
     }
 }

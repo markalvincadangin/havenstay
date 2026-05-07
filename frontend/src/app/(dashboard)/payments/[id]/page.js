@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { apiRequest, fetcher } from "@/lib/api";
+import { flattenApiErrors } from "@/lib/errors";
 import { useSWRConfig } from "swr";
 import { canManageBilling, canViewBilling } from "@/lib/auth";
 import { formatDateRange, formatDateString } from "@/lib/formatters";
@@ -32,6 +33,7 @@ import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import { useToasts } from "@/context/ToastContext";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import DetailHeader from "@/components/ui/DetailHeader";
 
 function paymentStatus(p) {
   return p?.voided_at ? "voided" : "posted";
@@ -78,8 +80,8 @@ export default function PaymentDetailPage() {
     }
     setVoidLoading(true);
     try {
-      await apiRequest(`/api/payments/${paymentId}`, {
-        method: "DELETE",
+      await apiRequest(`/api/payments/${paymentId}/void`, {
+        method: "POST",
         body: JSON.stringify({ void_reason: voidReason }),
       });
       await loadPayment();
@@ -87,7 +89,7 @@ export default function PaymentDetailPage() {
       showToast("Payment voided successfully.", "success");
       setIsVoiding(false);
     } catch (error) {
-      showToast(error?.message || "Failed to void payment.", "error");
+      showToast(flattenApiErrors(error) || "Failed to void payment.", "error");
     } finally {
       setVoidLoading(false);
     }
@@ -103,38 +105,23 @@ export default function PaymentDetailPage() {
   const methodKey = String(payment?.payment_method || "").toLowerCase();
   const methodLabel = METHOD_LABELS[methodKey] || payment?.payment_method || "—";
 
+  const header = DetailHeader({
+    type: "payment",
+    id: paymentId,
+    title: payment ? `#PAY-${String(paymentId).padStart(6, "0")}` : "Payment Detail",
+    subtitle: "Payment details, billing link, and record history.",
+    status: status,
+    loading: loading,
+    listHref: "/payments",
+    listLabel: "Payments",
+    detailLabel: `#PAY-${String(paymentId).padStart(6, "0")}`
+  });
+
   return (
     <StandardPage
-      title={
-        loading ? (
-          "Loading Payment..."
-        ) : (
-          title
-        )
-      }
-      subtitle={
-        loading ? (
-          "Fetching payment audit log..."
-        ) : payment ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-stone-500">
-              Payment details, billing link, and record history.
-            </span>
-            <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
-            <ResourceIdCell id={payment.payment_id} type="payment" />
-          </div>
-        ) : null
-      }
+      {...header}
       loading={loading}
       error={paymentError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Payments", href: "/payments" },
-            { label: `#PAY-${String(paymentId).padStart(6, "0")}` }
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/payments"
@@ -203,8 +190,8 @@ export default function PaymentDetailPage() {
                 <div className="p-8 space-y-6">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Amount Paid</p>
-                    <CurrencyDisplay 
-                      amount={payment?.amount_paid} 
+                    <CurrencyDisplay
+                      amount={payment?.amount_paid}
                       className={`text-4xl font-black ${status === 'voided' ? 'text-stone-300 line-through' : 'text-emerald-700'}`}
                     />
                   </div>
@@ -258,7 +245,7 @@ export default function PaymentDetailPage() {
                   </div>
                   <div className="space-y-6">
                     <MetricItem label="Room / Bed Space">
-                      Room {roomCode}{bedLabel && bedLabel !== "—" ? ` / ${bedLabel}` : ""}
+                      {roomCode}{bedLabel && bedLabel !== "—" ? ` / ${bedLabel}` : ""}
                     </MetricItem>
                     <MetricItem label="Room Category">
                       {room?.room_type?.toUpperCase() || "N/A"}
@@ -317,10 +304,30 @@ export default function PaymentDetailPage() {
                     </div>
                   )}
                   <div className="flex justify-end pt-4">
-                    <Button type="button" variant="secondary" onClick={() => router.push(`/billing/${payment?.billing_id}`)} className="!h-10 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest group">
-                      View Billing
-                      <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
-                    </Button>
+                    {payment?.billing_id ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => router.push(`/billing/${payment?.billing_id}`)}
+                        className="!h-10 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest group"
+                      >
+                        View Billing
+                        <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          const cId = payment?.contract_id || payment?.billing?.contract_id;
+                          if (cId) router.push(`/contracts/${cId}`);
+                        }}
+                        className="!h-10 px-8 rounded-xl text-[10px] font-bold uppercase tracking-widest group"
+                      >
+                        View Contract
+                        <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>

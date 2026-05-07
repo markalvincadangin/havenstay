@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Services\Concerns\ManagesWorkflows;
 use App\Support\Financials;
+use App\Support\OperationalHardening;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
@@ -26,7 +27,15 @@ class PaymentService
      */
     public static function getById(int $paymentId): ?Payment
     {
-        return Payment::with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'contract.room', 'contract.bedSpace', 'processor'])->find($paymentId);
+        return Payment::with([
+            'billing.contract.tenant' => fn ($q) => $q->withTrashed(),
+            'billing.contract.room',
+            'billing.contract.bedSpace',
+            'contract.tenant' => fn ($q) => $q->withTrashed(),
+            'contract.room',
+            'contract.bedSpace',
+            'processor'
+        ])->find($paymentId);
     }
 
     /**
@@ -112,13 +121,57 @@ class PaymentService
                     }
                 }
 
+                self::clearCache($contractId);
+
                 return $payment;
             }
         );
+    }
 
-        self::clearCache($contractId);
+    /**
+     * FR-024c: Record a composite onboarding payment (Rent + Deposit).
+     * Creates two distinct payment records in a single atomic transaction.
+     */
+    public static function recordCompositeInitial(User $actor, array $data): array
+    {
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'POST_COMPOSITE_PAYMENT',
+            payload: [
+                'billing_id' => $data['billing_id'],
+                'contract_id' => $data['contract_id'],
+                'rent_amount' => $data['rent_amount'],
+                'deposit_amount' => $data['deposit_amount'],
+            ],
+            operation: function () use ($actor, $data): array {
+                $rentPayment = self::record($actor, [
+                    'payment_category' => 'billing',
+                    'billing_id' => $data['billing_id'],
+                    'amount_paid' => $data['rent_amount'],
+                    'payment_date' => $data['payment_date'],
+                    'payment_method' => $data['payment_method'],
+                    'reference_number' => $data['reference_number'] ?? null,
+                    'remarks' => ($data['remarks'] ?? '') . ' (Part of composite initial settlement)',
+                    'idempotency_key' => ($data['idempotency_key'] ?? '') ? $data['idempotency_key'] . '-rent' : null,
+                ]);
 
-        return $payment;
+                $depositPayment = self::record($actor, [
+                    'payment_category' => 'deposit',
+                    'contract_id' => $data['contract_id'],
+                    'amount_paid' => $data['deposit_amount'],
+                    'payment_date' => $data['payment_date'],
+                    'payment_method' => $data['payment_method'],
+                    'reference_number' => $data['reference_number'] ?? null,
+                    'remarks' => ($data['remarks'] ?? '') . ' (Part of composite initial settlement)',
+                    'idempotency_key' => ($data['idempotency_key'] ?? '') ? $data['idempotency_key'] . '-deposit' : null,
+                ]);
+
+                return [
+                    'rent' => $rentPayment,
+                    'deposit' => $depositPayment
+                ];
+            }
+        );
     }
 
     /**
@@ -154,18 +207,39 @@ class PaymentService
                     BillingService::syncBillingStatus($actor, $payment->billing);
                 }
 
+                self::clearCache($payment->contract_id);
+
                 return $payment->fresh();
             }
         );
-
-        self::clearCache($payment->contract_id);
-
-        return $payment;
     }
 
     public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
     {
-        return self::listHistoryQuery($filters)->paginate($perPage, ['*'], 'page', $page);
+        $query = self::listHistoryQuery($filters);
+        
+        $sortBy = $filters['sort_by'] ?? 'date';
+        $sortDir = $filters['sort_dir'] ?? 'desc';
+        
+        $sortMap = [
+            'id'     => 'payment_id',
+            'date'   => 'payment_date',
+            'amount' => 'amount_paid',
+            'method' => 'payment_method',
+        ];
+
+        if (isset($sortMap[$sortBy])) {
+            $query->orderBy($sortMap[$sortBy], $sortDir);
+        } elseif ($sortBy === 'tenant') {
+            $query->withTenantContext()->orderBy('tenant_name', $sortDir);
+        } else {
+            $query->orderByDesc('payment_date');
+        }
+        
+        // Secondary tie-breaker
+        $query->orderByDesc('payment_id');
+        
+        return $query->paginate($perPage, ['*'], 'page', $page);
     }
 
     /**
@@ -190,12 +264,21 @@ class PaymentService
     public static function listHistoryQuery(array $filters = []): Builder
     {
         $query = Payment::query()
-            ->with(['billing.contract.tenant', 'billing.contract.room', 'billing.contract.bedSpace', 'contract.tenant', 'contract.room', 'contract.bedSpace', 'processor'])
-            ->orderByDesc('payment_date')
-            ->orderByDesc('payment_id');
+            ->with([
+                'billing.contract.tenant' => fn ($q) => $q->withTrashed(),
+                'billing.contract.room',
+                'billing.contract.bedSpace',
+                'contract.tenant' => fn ($q) => $q->withTrashed(),
+                'contract.room',
+                'contract.bedSpace',
+                'processor'
+            ]);
 
         if (! empty($filters['contract_id'])) {
-            $query->where('contract_id', (int) $filters['contract_id']);
+            $query->where(function ($q) use ($filters): void {
+                $q->where('contract_id', (int) $filters['contract_id'])
+                  ->orWhereHas('billing', fn ($b) => $b->where('contract_id', (int) $filters['contract_id']));
+            });
         }
 
         if (! empty($filters['billing_id'])) {
@@ -203,7 +286,10 @@ class PaymentService
         }
 
         if (! empty($filters['tenant_id'])) {
-            $query->whereHas('contract', fn ($q) => $q->where('tenant_id', $filters['tenant_id']));
+            $query->where(function ($q) use ($filters): void {
+                $q->whereHas('contract', fn ($c) => $c->where('tenant_id', $filters['tenant_id']))
+                  ->orWhereHas('billing.contract', fn ($bc) => $bc->where('tenant_id', $filters['tenant_id']));
+            });
         }
 
         if (! empty($filters['payment_category'])) {
@@ -211,15 +297,42 @@ class PaymentService
         }
 
         if (! empty($filters['q'])) {
-            $needle = trim($filters['q']);
-            $query->where(function ($w) use ($needle): void {
-                $w->where('payment_id', 'like', "%{$needle}%")
-                    ->orWhere('reference_number', 'like', "%{$needle}%")
-                    ->orWhereHas('contract.tenant', function ($t) use ($needle): void {
-                        $t->where('first_name', 'like', "%{$needle}%")
-                            ->orWhere('last_name', 'like', "%{$needle}%");
-                    });
+            $needle = trim((string) $filters['q']);
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $query->where(function ($w) use ($needle, $forensicId): void {
+                if ($forensicId) {
+                    $w->where('payment_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $w->where('payment_id', 'like', "%{$stripped}%")
+                        ->orWhere('reference_number', 'like', "%{$stripped}%")
+                        ->orWhereHas('contract.tenant', function ($t) use ($stripped): void {
+                            $t->where('first_name', 'like', "%{$stripped}%")
+                                ->orWhere('last_name', 'like', "%{$stripped}%");
+                        })
+                        ->orWhereHas('billing.contract.tenant', function ($t) use ($stripped): void {
+                            $t->where('first_name', 'like', "%{$stripped}%")
+                                ->orWhere('last_name', 'like', "%{$stripped}%");
+                        });
+                }
             });
+        }
+
+        if (! empty($filters['from'])) {
+            $query->whereDate('payment_date', '>=', $filters['from']);
+        }
+
+        if (! empty($filters['to'])) {
+            $query->whereDate('payment_date', '<=', $filters['to']);
+        }
+
+        if (! empty($filters['posting_status']) && $filters['posting_status'] !== 'all') {
+            if ($filters['posting_status'] === 'voided') {
+                $query->whereNotNull('voided_at');
+            } elseif ($filters['posting_status'] === 'posted') {
+                $query->whereNull('voided_at');
+            }
         }
 
         /** @var Builder $query */

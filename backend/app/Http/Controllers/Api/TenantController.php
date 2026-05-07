@@ -7,6 +7,7 @@ use App\Http\Requests\Tenant\IndexTenantRequest;
 use App\Http\Requests\Tenant\ManageTenantRequest;
 use App\Http\Requests\Tenant\StoreTenantRequest;
 use App\Http\Requests\Tenant\UpdateTenantRequest;
+use App\Http\Requests\Tenant\ViewTenantRequest;
 use App\Http\Resources\TenantResource;
 use App\Models\Tenant;
 use App\Services\Operations\TenantService;
@@ -59,9 +60,20 @@ class TenantController extends Controller
     }
 
     /**
+     * Forensic Duplicate Detection Endpoint.
+     * Lightweight check for existing profiles before registration.
+     */
+    public function existenceCheck(Request $request): JsonResponse
+    {
+        $result = TenantService::checkExistence($request->all());
+
+        return $this->success('Existence check completed.', $result);
+    }
+
+    /**
      * FR-011a: Retrieve detailed tenant forensic record.
      */
-    public function show(ManageTenantRequest $request, Tenant $tenant): JsonResponse
+    public function show(ViewTenantRequest $request, Tenant $tenant): JsonResponse
     {
         $loaded = TenantService::getById((int) $tenant->tenant_id);
         if (! $loaded) {
@@ -99,16 +111,6 @@ class TenantController extends Controller
         $archived = TenantService::archive($request->user(), $tenant);
 
         return $this->success('Tenant archived successfully.', new TenantResource($archived));
-    }
-
-    /**
-     * Reactivate a moved-out or inactive tenant.
-     */
-    public function reactivate(ManageTenantRequest $request, Tenant $tenant): JsonResponse
-    {
-        $reactivated = TenantService::reactivate($request->user(), $tenant);
-
-        return $this->success('Tenant reactivated successfully.', new TenantResource($reactivated));
     }
 
     /**

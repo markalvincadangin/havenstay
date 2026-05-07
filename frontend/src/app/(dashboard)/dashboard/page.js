@@ -14,7 +14,8 @@ import {
   formatDateString,
   formatTenantDirectoryName,
   formatTimestamp,
-  getTodayDate
+  getTodayDate,
+  startOfDay
 } from "@/lib/formatters";
 import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
 import Alert from "@/components/ui/Alert";
@@ -53,7 +54,7 @@ export default function PlatformDashboardPage() {
     { dedupingInterval: 10000 }
   );
   const { data: billingReport, error: billError, isLoading: billLoading, mutate: mutateBill, isValidating: billValidating } = useSWR(
-    currentUser ? "/api/reports/outstanding-balances?per_page=100" : null,
+    currentUser ? "/api/billing?per_page=5" : null,
     fetcher,
     { dedupingInterval: 30000 }
   );
@@ -91,23 +92,23 @@ export default function PlatformDashboardPage() {
   const totalBeds = Number(occSummary.total_beds || 0);
   const occupiedBeds = Number(occSummary.occupied_beds || 0);
   const vacantBeds = Number(occSummary.vacant_beds || 0);
-  const _maintenanceBeds = Math.max(0, totalBeds - occupiedBeds - vacantBeds);
+  const maintenanceBeds = Number(occSummary.maintenance_beds || 0);
   const occupancyPct = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
   const { rows: payments = [] } = useMemo(() => normalizePaginatedList(recentPayments), [recentPayments]);
   const { rows: dueTodayRaw = [] } = useMemo(() => normalizePaginatedList(dueTodayData), [dueTodayData]);
   const { meta: activeTenantsMeta, rows: activeTenantRows = [] } = useMemo(() => normalizePaginatedList(activeTenantsData), [activeTenantsData]);
   const activeTenantCount = Number(activeTenantsMeta?.total ?? activeTenantRows.length ?? 0);
   const dueTodayList = useMemo(() => dueTodayRaw.filter(b => b.status === "unpaid" || b.status === "partial"), [dueTodayRaw]);
-  const { rows: recentBillings = [] } = useMemo(() => normalizeReportRows(billingReport), [billingReport]);
+  const { rows: recentBillings = [] } = useMemo(() => normalizePaginatedList(billingReport), [billingReport]);
   const globalBillSummary = billingReport?.summary || {};
   const strictlyOverdueCount = Number(globalBillSummary.overdue_count || 0);
   const strictlyOverdueTotal = Number(globalBillSummary.overdue_total || 0);
   const { rows: contractRows = [] } = useMemo(() => normalizePaginatedList(contractsData), [contractsData]);
   // Derived Analytics: Turnover Schedule
   const turnoverSchedule = useMemo(() => {
-    const today = new Date();
+    const today = startOfDay(new Date());
     const range = 30; // BR-019
-    const thresholdDate = new Date();
+    const thresholdDate = new Date(today);
     thresholdDate.setDate(today.getDate() + range);
     return contractRows.map(c => {
       const moveOut = c.expected_move_out_date ? new Date(c.expected_move_out_date) : null;
@@ -130,11 +131,19 @@ export default function PlatformDashboardPage() {
       skeleton={<DashboardSkeleton />}
       actions={
         <PageHeaderActions
-          ctaHref={canManageBilling(currentUser) ? "/billing/new" : null}
-          ctaLabel="Generate Bills"
-          ctaIcon={PlusCircle}
+          ctaHref={canSeeFinancials ? "/payments/new" : null}
+          ctaLabel="Record Payment"
+          ctaIcon={HandCoins}
           user={currentUser}
-        />
+        >
+          <Link
+            href="/tenants/new"
+            className="hidden sm:flex items-center gap-2 px-6 h-11 rounded-xl bg-white border border-stone-200 text-[10px] font-black uppercase tracking-widest text-stone-600 hover:bg-stone-50 transition-all shadow-sm"
+          >
+            <Users size={16} className="text-stone-400" />
+            Add Tenant
+          </Link>
+        </PageHeaderActions>
       }
     >
       <div className="space-y-8">
@@ -151,7 +160,7 @@ export default function PlatformDashboardPage() {
             label="Occupancy Rate"
             icon={DoorOpen}
             value={`${occupancyPct}%`}
-            sub={`${occupiedBeds}/${totalBeds} BEDS OCCUPIED`}
+            sub={`${occupiedBeds}/${totalBeds} BEDS · ${maintenanceBeds} UNUSABLE`}
             progress={occupancyPct}
             href="/rooms"
             isLoading={occLoading}
@@ -253,7 +262,7 @@ export default function PlatformDashboardPage() {
                           {formatTenantDirectoryName(item.contract.tenant)}
                         </div>
                         <div className="text-[10px] font-mono font-bold uppercase text-stone-400 mt-1">
-                          Room {item.contract.bed_space?.room?.room_code || "—"}
+                          {item.contract.room?.room_code || "—"}
                         </div>
                       </td>
                       <td className="px-8 py-4 text-right">
@@ -317,7 +326,9 @@ export default function PlatformDashboardPage() {
                       </td>
                       <td className="py-4">
                         <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors leading-none">
-                          {p.billing?.contract?.tenant ? formatTenantDirectoryName(p.billing.contract.tenant) : "—"}
+                          {p.billing?.contract?.tenant 
+                            ? formatTenantDirectoryName(p.billing.contract.tenant) 
+                            : (p.contract?.tenant ? formatTenantDirectoryName(p.contract.tenant) : "—")}
                         </div>
                         <div className="text-[10px] font-mono tabular-nums tracking-tighter text-stone-400 mt-1.5 uppercase font-bold">
                           {formatTimestamp(p.created_at)}
@@ -396,9 +407,9 @@ export default function PlatformDashboardPage() {
                       <td className="px-8 py-4 text-right">
                         <Link
                           href={`/payments/new?billing_id=${b.billing_id}`}
-                          className="text-[10px] font-black uppercase tracking-widest text-teal-600 hover:text-teal-700 transition-all border border-teal-100 bg-teal-50 px-3 py-1.5 rounded-lg whitespace-nowrap inline-block"
+                          className="text-[10px] font-black uppercase tracking-widest text-teal-700 hover:text-teal-900 transition-all border border-teal-200 bg-teal-50 px-4 py-2 rounded-xl shadow-sm shadow-teal-900/5 whitespace-nowrap inline-block"
                         >
-                          Record Payment
+                          Pay
                         </Link>
                       </td>
                     </tr>
@@ -416,9 +427,16 @@ export default function PlatformDashboardPage() {
                 </div>
                 <h2 className="hs-strip-title text-stone-400">Recent Bills</h2>
               </div>
-              <Link href="/billing" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 transition-colors">
-                View All →
-              </Link>
+              <div className="flex items-center gap-4">
+                {canSeeFinancials && (
+                  <Link href="/billing/new" className="text-[10px] font-black uppercase tracking-widest text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-100 hover:bg-teal-100 transition-colors">
+                    Generate Bills
+                  </Link>
+                )}
+                <Link href="/billing" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 hover:text-teal-600 transition-colors">
+                  View All →
+                </Link>
+              </div>
             </div>
             <div className="p-0 flex-1">
               <ResourceView
@@ -438,7 +456,7 @@ export default function PlatformDashboardPage() {
                     { key: "record", label: "TENANT", className: "px-8" },
                     { key: "amount", label: "BILLED AMOUNT", className: "px-8 text-right" }
                   ]}
-                  rows={recentBillings.slice(0, 5).map((b) => (
+                  rows={recentBillings.map((b) => (
                     <tr
                       key={b.billing_id}
                       className="hover:bg-stone-50/80 transition-colors cursor-pointer group"
@@ -446,17 +464,17 @@ export default function PlatformDashboardPage() {
                     >
                       <td className="px-8 py-4">
                         <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
-                          {b.tenant_name}
+                          {b.contract?.tenant ? formatTenantDirectoryName(b.contract.tenant) : "—"}
                         </div>
                         <div className="mt-1.5 flex items-center gap-2">
                           <ResourceIdCell id={b.billing_id} type="billing" />
                           <span className="opacity-50 text-[10px] font-black tracking-widest text-stone-300">·</span>
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">ROOM-{(b.room_code || "—").replace('UNIT-', '')}</span>
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-stone-400">{b.contract?.room?.room_code || "—"}</span>
                         </div>
                       </td>
                       <td className="px-8 py-4 text-right">
                         <div className="text-sm font-bold text-stone-900">
-                          <CurrencyDisplay amount={b.amount_due} />
+                          <CurrencyDisplay amount={b.total_amount} />
                         </div>
                         <div className="mt-1.5">
                           <StatusBadge size="xs">{b.status}</StatusBadge>

@@ -234,7 +234,7 @@ composer test:mysql                # All tests against MySQL
 
 ```bash
 cd frontend
-npm run dev        # Dev server on :3000 (Turbopack)
+npm run dev        # Dev server on :3000 (Webpack)
 npm run build      # Production build
 npm run lint       # ESLint check
 npm run test       # Vitest unit tests
@@ -257,6 +257,7 @@ npm run test:e2e   # Playwright E2E (requires running app)
 - [ ] All loading states use `Skeleton` components (no spinners)
 
 **Documentation**
-- [ ] `CLAUDE.md` updated if architecture or conventions changed
+- [ ] `CLAUDE.md` (AI context file at project root — not a formal docs artifact) updated if architecture or conventions changed
+- [ ] Relevant coding blueprint (`docs/BACKEND_CODING_BLUEPRINT.md` or `docs/FRONTEND_CODING_BLUEPRINT.md`) version-bumped if patterns changed
 - [ ] `docs/SDD.md` version bumped if design changed
 - [ ] `docs/SRS.md` traceability matrix updated if new features added

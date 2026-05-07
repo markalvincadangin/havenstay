@@ -5,17 +5,22 @@ namespace App\Enums;
 /**
  * AuditAction Enum
  *
- * Defines the classification of system and database events captured in the forensic ledger.
+ * Defines the strict classification of system and database events captured in the forensic ledger.
+ * Matches production standards for event type standardization.
  */
 enum AuditAction: string
 {
-    case INSERT = 'INSERT';
+    case CREATE = 'CREATE';
     case UPDATE = 'UPDATE';
     case DELETE = 'DELETE';
-    case LOGIN = 'login';
-    case LOGOUT = 'logout';
-    case ACCESS_DENIED = 'access_denied';
-    case STATUS_CHANGE = 'status_change';
-    case ARCHIVE = 'archive';
-    case RESTORE = 'restore';
+    case SOFT_DELETE = 'SOFT_DELETE';
+    case RESTORE = 'RESTORE';
+    case LOGIN = 'LOGIN';
+    case LOGOUT = 'LOGOUT';
+    case FAILED_LOGIN = 'FAILED_LOGIN';
+    case VOID = 'VOID';
+    case SYSTEM = 'SYSTEM';
+    case SECURITY = 'SECURITY';
+    case EXPORT = 'EXPORT';
+    case ACCESS_DENIED = 'ACCESS_DENIED';
 }

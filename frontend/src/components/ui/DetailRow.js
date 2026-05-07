@@ -14,7 +14,7 @@ export default function DetailRow({ label, value, icon: Icon, mono = false, clas
         <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">{label}</span>
       </div>
       <span className={`text-sm font-semibold text-stone-900 text-right max-w-[200px] leading-snug ${mono ? 'font-mono tabular-nums tracking-tight' : ''}`}>
-        {value || "—"}
+        {value || <span className="text-stone-300 font-normal italic">Not recorded</span>}
       </span>
     </div>
   );

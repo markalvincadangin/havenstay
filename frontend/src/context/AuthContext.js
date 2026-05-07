@@ -8,24 +8,29 @@ import { apiRequest, clearAuthToken, UNAUTHORIZED_EVENT } from "@/lib/api";
 const AuthContext = createContext({
   user: null,
   loading: true,
+  isLoggingOut: false,
   logout: () => { },
 });
 
 export function AuthProvider({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState(() => {
-    if (typeof window !== "undefined") {
-      const cached = localStorage.getItem("havenstay_user");
+  // Initializing with null mounted state check
+  const [loading, setLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [user, setUser] = useState(null);
+
+  // Sync hydration from localStorage safely
+  useEffect(() => {
+    const cached = localStorage.getItem("havenstay_user");
+    if (cached) {
       try {
-        return cached ? JSON.parse(cached) : null;
+        setUser(JSON.parse(cached));
       } catch {
-        return null;
+        localStorage.removeItem("havenstay_user");
       }
     }
-    return null;
-  });
-  const [loading, setLoading] = useState(true);
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -88,6 +93,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    setIsLoggingOut(true);
     try {
       await apiRequest("/api/auth/logout", {
         method: "POST",
@@ -101,6 +107,7 @@ export function AuthProvider({ children }) {
       }
       clearAuthToken();
       setUser(null);
+      setIsLoggingOut(false);
       if (pathname !== "/login") {
         router.replace("/login");
       }
@@ -108,7 +115,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout, login }}>
+    <AuthContext.Provider value={{ user, loading, isLoggingOut, logout, login }}>
       {children}
     </AuthContext.Provider>
   );

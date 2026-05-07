@@ -15,52 +15,53 @@ import Alert from "@/components/ui/Alert";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import FilterChips from "@/components/ui/FilterChips";
+import FilterPanelCard from "@/components/ui/FilterPanelCard";
 import { Field, Input, Select } from "@/components/ui/Fields";
 import { SkeletonListPage } from "@/components/ui/Skeleton";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { Table } from "@/components/ui/Table";
 import { METHOD_LABELS } from "@/lib/constants";
-import { TrendingUp, Calendar, Landmark, DollarSign } from "lucide-react";
+import { TrendingUp, Calendar, Landmark, DollarSign, Search, XCircle, Percent } from "lucide-react";
 import ResourceView from "@/components/ui/ResourceView";
 import TablePagination from "@/components/ui/TablePagination";
 import StandardPage from "@/components/ui/StandardPage";
-import {
-  buildReportListQuery,
-  normalizeReportRows,
-  readStoredPerPage,
-} from "@/lib/pagination";
+import { normalizeReportRows } from "@/lib/pagination";
+import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
+import { useReportExport } from "@/hooks/useReportExport";
 import ReportHeaderActions from "@/components/ui/ReportHeaderActions";
-import ReportFilterCard from "@/components/ui/ReportFilterCard";
 import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import CurrencyCell from "@/components/ui/CurrencyCell";
 
 export default function CollectionsPerformanceReportPage() {
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const { showToast } = useToasts();
-  const [exporting, setExporting] = useState(false);
+  const { exporting, performExport } = useReportExport();
   const [apiError, setApiError] = useState("");
   const [report, setReport] = useState({ summary: null, rows: [] });
   const [tableMeta, setTableMeta] = useState(null);
-  const [filters, setFilters] = useState({ start_date: "", end_date: "", payment_method: "" });
-  const [appliedFilters, setAppliedFilters] = useState({
-    start_date: "",
-    end_date: "",
-    payment_method: "",
-  });
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(() => readStoredPerPage());
 
-  const reportQs = useMemo(() => {
-    const extra = {};
-    if (appliedFilters.start_date) extra.start_date = appliedFilters.start_date;
-    if (appliedFilters.end_date) extra.end_date = appliedFilters.end_date;
-    if (appliedFilters.payment_method) extra.payment_method = appliedFilters.payment_method;
-    return buildReportListQuery(page, perPage, extra);
-  }, [appliedFilters, page, perPage]);
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { start_date: "", end_date: "", payment_method: "" },
+    buildExtraParams: ({ filters: current }) => {
+      const extra = {};
+      if (current.start_date) extra.start_date = current.start_date;
+      if (current.end_date) extra.end_date = current.end_date;
+      if (current.payment_method) extra.payment_method = current.payment_method;
+      return extra;
+    },
+  });
 
   const { data: reportData, error: reportError, mutate: loadReport, isValidating } = useSWR(
-    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/collections-performance${reportQs}` : null,
+    !authLoading && currentUser && canViewReports(currentUser) ? `/api/reports/collections-performance${queryString}` : null,
     fetcher,
     { keepPreviousData: true }
   );
@@ -82,27 +83,18 @@ export default function CollectionsPerformanceReportPage() {
     }
   }, [reportData]);
 
-  const onApplyFilters = (event) => {
-    event.preventDefault();
-    setApiError("");
-    setAppliedFilters({ ...filters });
-    setPage(1);
-  };
+  const hasActiveFilters = Boolean(filters.start_date) || Boolean(filters.end_date) || Boolean(filters.payment_method);
+
+
 
   const onExport = async () => {
     setApiError("");
-    setExporting(true);
-    try {
-      await exportReportCsv({
-        endpoint: "/api/reports/collections-performance/export",
-        filters: appliedFilters,
-        filenamePrefix: "collections-performance-report",
-      });
-    } catch (error) {
-      showToast(flattenApiErrors(error), "error");
-    } finally {
-      setExporting(false);
-    }
+    await performExport({
+      endpoint: "/api/reports/collections-performance/export",
+      filters,
+      filenamePrefix: "collections-performance-report",
+      label: "Collections Report",
+    });
   };
 
   if (isUnauthorized) return null;
@@ -161,20 +153,34 @@ export default function CollectionsPerformanceReportPage() {
           currency={true}
           className="hs-glass-effect"
         />
+        <KpiCard
+          label="Collection Rate"
+          value={report.summary?.collection_rate ? `${report.summary.collection_rate}%` : "0%"}
+          progress={report.summary?.collection_rate ?? 0}
+          icon={Percent}
+          sub="Collected vs Billed"
+          isSyncing={isValidating}
+          className="hs-glass-effect"
+        />
+        <KpiCard
+          label="Total Voided"
+          value={report.summary?.total_voided ?? 0}
+          icon={XCircle}
+          sub="Voided/Reversed payments"
+          isSyncing={isValidating}
+          currency={true}
+          isDanger={report.summary?.total_voided > 0}
+          className="hs-glass-effect"
+        />
       </div>
 
-      <ReportFilterCard onRefresh={() => loadReport()} className="hs-glass-effect">
-        <form
-          className="grid gap-6 sm:grid-cols-4"
-          onSubmit={onApplyFilters}
-        >
+      <FilterPanelCard icon={Search}>
+        <div className="grid gap-6 sm:grid-cols-4">
           <Field label="Payment From" icon={Calendar}>
             <Input
               type="date"
               value={filters.start_date}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, start_date: event.target.value }))
-              }
+              onChange={(event) => updateFilter("start_date", event.target.value)}
               className="!h-11 border-stone-200"
             />
           </Field>
@@ -182,18 +188,14 @@ export default function CollectionsPerformanceReportPage() {
             <Input
               type="date"
               value={filters.end_date}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, end_date: event.target.value }))
-              }
+              onChange={(event) => updateFilter("end_date", event.target.value)}
               className="!h-11 border-stone-200"
             />
           </Field>
           <Field label="Payment method" icon={Landmark}>
             <Select
               value={filters.payment_method}
-              onChange={(event) =>
-                setFilters((prev) => ({ ...prev, payment_method: event.target.value }))
-              }
+              onChange={(event) => updateFilter("payment_method", event.target.value)}
               className="!h-11 border-stone-200"
             >
               <option value="">All Methods</option>
@@ -202,56 +204,30 @@ export default function CollectionsPerformanceReportPage() {
               ))}
             </Select>
           </Field>
-          <div className="flex items-end">
-            <Button
-              type="submit"
-              variant="secondary"
-              className="w-full !h-11 shadow-sm"
-            >
-              Apply filters
-            </Button>
-          </div>
-        </form>
+        </div>
         <div className="mt-6">
           <FilterChips
             items={[
               {
                 key: "start_date",
                 label: "From",
-                value: appliedFilters.start_date,
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, start_date: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, start_date: "" }));
-                  setPage(1);
-                },
+                value: filters.start_date,
+                onClear: () => updateFilter("start_date", ""),
               },
               {
                 key: "end_date",
                 label: "To",
-                value: appliedFilters.end_date,
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, end_date: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, end_date: "" }));
-                  setPage(1);
-                },
+                value: filters.end_date,
+                onClear: () => updateFilter("end_date", ""),
               },
               {
                 key: "payment_method",
                 label: "Method",
-                value: appliedFilters.payment_method,
-                onClear: () => {
-                  setFilters((prev) => ({ ...prev, payment_method: "" }));
-                  setAppliedFilters((prev) => ({ ...prev, payment_method: "" }));
-                  setPage(1);
-                },
+                value: filters.payment_method ? METHOD_LABELS[filters.payment_method] || filters.payment_method : "",
+                onClear: () => updateFilter("payment_method", ""),
               },
             ]}
-            onClearAll={() => {
-              const cleared = { start_date: "", end_date: "", payment_method: "" };
-              setFilters(cleared);
-              setAppliedFilters(cleared);
-              setPage(1);
-            }}
+            onClearAll={resetFilters}
           />
         </div>
 
@@ -260,7 +236,7 @@ export default function CollectionsPerformanceReportPage() {
             {apiError}
           </Alert>
         ) : null}
-      </ReportFilterCard>
+      </FilterPanelCard>
 
       <ResourceView
         isLoading={loading}
@@ -270,15 +246,24 @@ export default function CollectionsPerformanceReportPage() {
         onRetry={() => loadReport()}
         skeleton={<SkeletonListPage rows={10} />}
         emptyProps={{
-          title: "No collection records found",
-          message: "Adjust filters or clear date fields to check for records in inventory."
+          title: "No collection records",
+          description: "No payments match your criteria. Adjust dates or method to see performance data.",
+          action: hasActiveFilters ? (
+            <Button
+              variant="secondary"
+              className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+              onClick={resetFilters}
+            >
+              Clear filters
+            </Button>
+          ) : null
         }}
       >
         <Card className="mt-8 overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
           <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Collections History</h2>
+            <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">COLLECTIONS HISTORY DIRECTORY</h2>
             <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
-              {totalRecords} records matching
+              {tableMeta?.total ?? rows.length} RECORDS MATCHING
             </div>
           </div>
           <Table

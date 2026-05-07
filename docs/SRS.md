@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## Software Requirements Specification (SRS)
 
-**Version:** 5.2  
-**Last Updated:** April 29, 2026  
+**Version:** 5.3  
+**Last Updated:** May 03, 2026  
 **Status:** Canonical behavioral baseline and forensic requirement specification
 
 ---
@@ -69,7 +69,7 @@ HavenStay BHMS is a centralized web-based system for managing boarding house ope
 - [**BUSINESS_RULES.md**](../BUSINESS_RULES.md) — Authoritative business rules (all BR references below)
 - [**SDD.md**](SDD.md) — System Design Document
 - [**TEST_PLAN.md**](TEST_PLAN.md) — Test strategy and cases
-- [**havenstay_schema.sql**](../db/havenstay_schema.sql) — Database schema (updated to reflect v4.2)
+- [**havenstay_schema.sql**](../db/havenstay_schema.sql) — Canonical database schema (v5.0 — Forensic Hardened). Mirror copy at `backend/database/sql/havenstay_schema.sql`. Both files must remain byte-for-byte identical per `DATABASE.md §3`.
 
 ---
 
@@ -105,7 +105,7 @@ HavenStay BHMS replaces fragmented paper records and spreadsheets with a single 
 ## 3. External Interface Requirements
 
 ### 3.1 User Interface
-- Responsive web UI (Next.js, Vanilla CSS with custom design system)
+- Responsive web UI (Next.js, Tailwind CSS v4 + HS-Utility Layer)
 - Sidebar navigation with role-aware menu visibility
 - Mobile hamburger drawer at tablet breakpoint
 - Design system components: Card, Table, StatusBadge, Field, Button, Alert, KpiCard, FilterChips, EmptyState
@@ -363,6 +363,9 @@ A single authorization service shall make all access control decisions.
 
 Total core entities: **15** — strictly satisfies CCR-001 (≥ 6).
 
+| Table | Constraint Name | Type | Definition |
+| :--- | :--- | :--- | :--- |
+
 | **users** | `active_email` | UNIQUE (Virtual) | (email) WHERE deleted_at IS NULL |
 | **users** | `active_username` | UNIQUE (Virtual) | (username) WHERE deleted_at IS NULL |
 | **tenants** | `active_email` | UNIQUE (Virtual) | (email) WHERE deleted_at IS NULL |
@@ -381,7 +384,7 @@ Total core entities: **15** — strictly satisfies CCR-001 (≥ 6).
 | Entity | Field | Valid Values |
 | :--- | :--- | :--- |
 | **tenants** | status | active, moved_out, archived |
-| **rooms** | status | available, unavailable, maintenance |
+| **rooms** | status | available, unavailable, maintenance, decommissioned |
 | **rooms** | room_type | private, shared |
 | **bed_spaces** | status | vacant, occupied, maintenance |
 | **contracts** | status | pending_payment, active, completed, terminated, voided† |
@@ -472,3 +475,4 @@ Critical test coverage required before release:
 | **v5.0** | **Apr 29, 2026** | **Major Stabilization: Added FR-056/057 (KPI & Forensic Context). Updated FR-036 to specify Resilient Batch Billing (Non-blocking). Integrated BR-BIL-011, BR-PAY-011, and BR-PAY-012 references.** |
 | **v5.1** | **Apr 29, 2026** | **Realigned Analytical Rule references to point to the new ANL category in BUSINESS_RULES.md.** |
 | **v5.2** | **Apr 29, 2026** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |
+| **v5.3** | **May 03, 2026** | **Docs Remediation: Corrected §3.1 technology stack to Tailwind CSS v4. Added `decommissioned` to rooms.status enum in §6.3. Bumped header version to match revision history.** |

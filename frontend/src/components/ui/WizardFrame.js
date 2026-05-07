@@ -24,10 +24,13 @@ export function WizardFrame({
   cancelLabel = "Cancel",
   nextLabel = "Next Step",
   submitLabel = "Confirm & Save",
+  extraActions = null,
+  hideNavigation = false,
+  isLastStepOverride = null,
   children
 }) {
   const isFirstStep = currentStepIndex === 0;
-  const isLastStep = currentStepIndex === steps.length - 1;
+  const isLastStep = isLastStepOverride !== null ? isLastStepOverride : currentStepIndex === steps.length - 1;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-8">
@@ -109,42 +112,46 @@ export function WizardFrame({
       </Card>
 
       {/* Navigation Controls */}
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        {!isFirstStep && (
-          <Button 
-            variant="secondary" 
-            onClick={onBack} 
-            disabled={isSubmitting} 
-            type="button"
-            className="h-12 px-8 rounded-xl font-bold text-sm text-stone-600 hover:text-stone-900 border-stone-200"
-          >
-            Back
-          </Button>
-        )}
-        
-        {isLastStep ? (
-          <Button 
-            variant="primary" 
-            onClick={onSubmit} 
-            disabled={isSubmitting || isSubmitDisabled} 
-            isLoading={isSubmitting}
-            className="h-12 px-10 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-500/20 active:scale-95 transition-transform"
-            type="button"
-          >
-            {submitLabel}
-          </Button>
-        ) : (
-          <Button 
-            variant="primary" 
-            onClick={onNext} 
-            disabled={isNextDisabled}
-            className="h-12 px-10 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-500/20 active:scale-95 transition-transform"
-            type="button"
-          >
-            {nextLabel}
-          </Button>
-        )}
-      </div>
+      {!hideNavigation && (
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end sm:items-center">
+          {!isFirstStep && (
+            <Button 
+              variant="secondary" 
+              onClick={onBack} 
+              disabled={isSubmitting} 
+              type="button"
+              className="h-12 px-8 rounded-xl font-bold text-sm text-stone-600 hover:text-stone-900 border-stone-200"
+            >
+              Back
+            </Button>
+          )}
+
+          {extraActions}
+          
+          {isLastStep ? (
+            <Button 
+              variant="primary" 
+              onClick={onSubmit} 
+              disabled={isSubmitting || isSubmitDisabled} 
+              isLoading={isSubmitting}
+              className="h-12 px-10 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-500/20 active:scale-95 transition-transform"
+              type="button"
+            >
+              {submitLabel}
+            </Button>
+          ) : (
+            <Button 
+              variant="primary" 
+              onClick={onNext} 
+              disabled={isNextDisabled}
+              className="h-12 px-10 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-500/20 active:scale-95 transition-transform"
+              type="button"
+            >
+              {nextLabel}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

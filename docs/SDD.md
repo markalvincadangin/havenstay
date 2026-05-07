@@ -1,8 +1,8 @@
 # HavenStay Boarding House Management System (BHMS)
 ## System Design Document (SDD)
 
-**Version:** 5.2  
-**Last Updated:** April 29, 2026  
+**Version:** 5.4  
+**Last Updated:** May 03, 2026  
 **Status:** Canonical architectural design and forensic implementation patterns
 
 ---
@@ -71,9 +71,9 @@ graph TD
 
 | Layer | Technology | Version |
 | :--- | :--- | :--- |
-| **Backend Framework** | Laravel (PHP 8.3+) | 14.x |
+| **Backend Framework** | Laravel (PHP 8.3+) | 13.x |
 | **Frontend Framework** | Next.js (App Router) | 16.x |
-| **Frontend Styling** | Vanilla CSS (Custom Design System) | — |
+| **Frontend Styling** | Tailwind v4 + HS-Utility Layer | — |
 | **Database (Primary)** | MySQL (InnoDB) | 8.4+ |
 | **Database (Dev/Test)** | SQLite | — |
 | **API Architecture** | RESTful JSON | — |
@@ -144,7 +144,7 @@ The system utilizes PHP‑layer `DB::transaction()` to ensure ACID properties fo
 ### 5.2 Audit Automation (CCR-007)
 Row‑level change logging is handled exclusively by **45 database triggers** on the MySQL primary.
 - **Mechanism:** The application sets a session variable `@current_user_id` via the `SetAuditContext` middleware.
-- **Triggers:** `AFTER INSERT/UPDATE/DELETE` events across 14 tables write full JSON snapshots to `audit_logs`. A `BEFORE INSERT` guard on `meter_assignments` enforces BR-MET-003 integrity at the DB engine level.
+- **Triggers:** `AFTER INSERT/UPDATE/DELETE` events across 14 tables write full JSON snapshots to `audit_logs`. The `meter_assignments` table receives a fourth trigger — a `BEFORE INSERT` guard — in addition to the standard three, enforcing BR-MET-003 integrity at the DB engine level. The full breakdown is: (13 tables × 3 AFTER triggers) + (1 table [`meter_assignments`] × 4 triggers [AFTER INSERT + AFTER UPDATE + AFTER DELETE + BEFORE INSERT]) + 2 immutability triggers (BEFORE UPDATE + BEFORE DELETE on `audit_logs`) = **45 triggers total**.
 - **Immutability:** Protected by engine-level triggers that prevent any modification of the log history.
 
 ### 5.3 Philippine Compliance Workflows
@@ -262,7 +262,9 @@ The following design decisions satisfy the binding constraints of the Informatio
 | v5.0 | 2026-04-29 | Major Stabilization: Documented Resilient Batch Billing (FR-036) and Dual-Path Forensic Context (BR-PAY-011). Updated Section 10 with stabilization decisions. Aligned to v5.0 Documentation Suite. |
 | v5.1 | 2026-04-29 | Realigned Analytical Rule references and footer synchronization. Aligned to SRS v5.1 / BR v2.1. |
 | **v5.2** | **2026-04-29** | **Clean State Release: Synchronized all references to match the new continuous Business Rule numbering (v2.2).** |
+| **v5.3** | **2026-05-02** | **Docs Remediation: Confirmed Laravel 13.x and Next.js 16.x in technology stack table.** |
+| **v5.4** | **2026-05-03** | **Docs Remediation: Corrected §5.2 trigger formula to accurately reflect that `meter_assignments` receives 4 triggers (AFTER INSERT/UPDATE/DELETE + BEFORE INSERT), not 3. Full breakdown: (13 tables × 3) + (1 table × 4) + 2 immutability = 45.** |
 
 ---
 
-*Aligned to: SRS.md v5.2 · BUSINESS_RULES.md v2.2 · db/havenstay_schema.sql (v5.0) · API_REFERENCE.md · OPERATIONS_RUNBOOK.md · TEST_PLAN.md*
+*Aligned to: SRS.md v5.3 · BUSINESS_RULES.md v2.3 · db/havenstay_schema.sql (v5.0) · API_REFERENCE.md v5.3 · OPERATIONS_RUNBOOK.md · TEST_PLAN.md*

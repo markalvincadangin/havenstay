@@ -31,9 +31,9 @@ class PiiMaskingService
         $out = $tenant;
         $out['contact_number'] = self::maskPhone($tenant['contact_number'] ?? null);
         $out['email'] = self::maskEmail($tenant['email'] ?? null);
-        $out['emergency_contact_name'] = 'Redacted';
-        $out['emergency_contact_number'] = '***';
-        $out['address'] = 'Redacted';
+        $out['emergency_contact_name'] = 'Access Restricted';
+        $out['emergency_contact_number'] = '••••••••';
+        $out['address'] = 'Access Restricted';
 
         return $out;
     }
@@ -62,32 +62,32 @@ class PiiMaskingService
     public static function maskPhone(?string $value): string
     {
         if ($value === null || $value === '') {
-            return '—';
+            return '••••';
         }
 
         $digits = preg_replace('/\D+/', '', $value) ?? '';
         if (strlen($digits) >= 4) {
-            return '***-***-'.substr($digits, -4);
+            return '••••-••••-'.substr($digits, -4);
         }
 
-        return '***';
+        return '••••••••';
     }
 
     public static function maskEmail(?string $value): string
     {
         if ($value === null || $value === '') {
-            return '—';
+            return '••••';
         }
 
         $parts = explode('@', $value, 2);
         if (count($parts) !== 2) {
-            return '***@redacted';
+            return '••••@restricted';
         }
 
         $local = $parts[0];
         $first = $local !== '' ? $local[0] : 'x';
 
-        return $first.'***@'.$parts[1];
+        return $first.'••••@'.$parts[1];
     }
 
     /**

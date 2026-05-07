@@ -9,8 +9,8 @@ import {
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { canManageBilling, canViewBilling } from "@/lib/auth";
-import { useTableSort } from "@/hooks/useTableSort";
-import { sortClientRows } from "@/lib/tableSort";
+
+
 import {
   compareTenantDirectoryName,
   formatDateString,
@@ -26,7 +26,7 @@ import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Table } from "@/components/ui/Table";
 import { KpiCard } from "@/components/ui/KpiCard";
 import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
-import { METHOD_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/constants";
+import { METHOD_LABELS, PAYMENT_STATUS_LABELS, SEARCH_LABELS, SEARCH_PLACEHOLDERS, FILTER_ALL_OPTION } from "@/lib/constants";
 import {
   normalizePaginatedList,
 } from "@/lib/pagination";
@@ -51,25 +51,36 @@ function paymentRowStatus(p) {
 export default function PaymentsListPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
-  const { filters, updateFilter, resetFilters, page, setPage, perPage, setPerPage, queryString } =
-    usePaginatedFilters({
-      initialFilters: { query: "", dateFrom: "", dateTo: "", status: "all" },
-      debounceKeys: ["query"],
-      buildExtraParams: ({ filters: current, debounced }) => {
-        const extra = {};
-        const q = String(debounced.query ?? "").trim();
-        if (q) extra.q = q;
-        if (current.dateFrom) extra.from = current.dateFrom;
-        if (current.dateTo) extra.to = current.dateTo;
-        if (current.status !== "all") extra.posting_status = current.status;
-        return extra;
-      },
-    });
+  const {
+    filters,
+    updateFilter,
+    resetFilters,
+    sort,
+    onSortChange,
+    page,
+    setPage,
+    perPage,
+    setPerPage,
+    queryString,
+  } = usePaginatedFilters({
+    initialFilters: { query: "", dateFrom: "", dateTo: "", status: "all" },
+    initialSort: { by: "id", dir: "desc" },
+    debounceKeys: ["query"],
+    buildExtraParams: ({ filters: current, debounced }) => {
+      const extra = {};
+      const q = String(debounced.query ?? "").trim();
+      if (q) extra.q = q;
+      if (current.dateFrom) extra.from = current.dateFrom;
+      if (current.dateTo) extra.to = current.dateTo;
+      if (current.status !== "all") extra.posting_status = current.status;
+      return extra;
+    },
+  });
+
   const tenantQuery = filters.query;
   const dateFrom = filters.dateFrom;
   const dateTo = filters.dateTo;
   const statusFilter = filters.status;
-  const { sortColumn, sortDirection, onSortChange } = useTableSort();
 
   const canView = useMemo(() => canViewBilling(currentUser), [currentUser]);
   const canPostPayments = useMemo(() => canManageBilling(currentUser), [currentUser]);
@@ -111,33 +122,9 @@ export default function PaymentsListPage() {
   }, [paymentsData]);
 
   const loading = !paymentsData && !paymentsError;
+  const sortedFiltered = payments;
 
-  const sortedFiltered = useMemo(() => {
-    if (!sortColumn) return payments;
-    if (sortColumn === "tenant") {
-      const list = [...payments];
-      const dir = sortDirection === "asc" ? 1 : -1;
-      list.sort((a, b) => {
-        const ta = a?.billing?.contract?.tenant || a?.contract?.tenant;
-        const tb = b?.billing?.contract?.tenant || b?.contract?.tenant;
-        if (!ta && !tb) return 0;
-        if (!ta) return 1;
-        if (!tb) return -1;
-        return compareTenantDirectoryName(ta, tb) * dir;
-      });
-      return list;
-    }
-    return sortClientRows(payments, sortColumn, sortDirection, (p) => {
-      switch (sortColumn) {
-        case "payment_id": return Number(p.payment_id) || 0;
-        case "date": return p.payment_date || "";
-        case "amount": return Number(p.amount_paid) || 0;
-        case "method": return p.payment_method || "";
-        case "status": return paymentRowStatus(p);
-        default: return "";
-      }
-    });
-  }, [payments, sortColumn, sortDirection]);
+  const hasActiveFilters = Boolean(String(tenantQuery ?? "").trim()) || statusFilter !== "all" || Boolean(dateFrom) || Boolean(dateTo);
 
   return (
     <StandardPage
@@ -207,13 +194,13 @@ export default function PaymentsListPage() {
         <FilterPanelCard icon={Search}>
           <div className="grid items-end gap-6 lg:grid-cols-12">
             <div className="lg:col-span-5">
-              <Field label="Search Payments">
+              <Field label={SEARCH_LABELS.payments}>
                 <Input
                   icon={Search}
                   value={tenantQuery}
                   onChange={(e) => updateFilter("query", e.target.value)}
-                  placeholder="Resident name, Payment ID, or reference..."
-                  className="!h-12 border-stone-200"
+                  placeholder={SEARCH_PLACEHOLDERS.payments}
+                  className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                 />
               </Field>
             </div>
@@ -222,9 +209,9 @@ export default function PaymentsListPage() {
                 <Select
                   value={statusFilter}
                   onChange={(e) => updateFilter("status", e.target.value)}
-                  className="!h-12 border-stone-200 font-bold uppercase tracking-widest text-[10px]"
+                  className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                 >
-                  <option value="all">All Statuses</option>
+                  <option value="all">{FILTER_ALL_OPTION}</option>
                   {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
@@ -255,10 +242,10 @@ export default function PaymentsListPage() {
           <FilterChips
             className="mt-6"
             items={[
-              { key: "tenant", label: "Search", value: tenantQuery, onClear: () => updateFilter("query", "") },
+              { key: "tenant", label: "Payments", value: tenantQuery, onClear: () => updateFilter("query", "") },
               {
                 key: "status",
-                label: "Status",
+                label: "Payment Status",
                 value: statusFilter !== "all" ? PAYMENT_STATUS_LABELS[statusFilter] || statusFilter : "",
                 onClear: () => updateFilter("status", "all"),
               },
@@ -278,18 +265,32 @@ export default function PaymentsListPage() {
           skeleton={<SkeletonListPage rows={10} />}
           emptyProps={{
             title: "No payments found",
-            description: "Adjust filters or record a payment to see results here."
+            description: "Adjust filters or record a payment to see results here.",
+            action: hasActiveFilters ? (
+              <Button
+                variant="secondary"
+                className="!h-12 rounded-xl px-10 text-[10px] font-bold uppercase tracking-widest"
+                onClick={resetFilters}
+              >
+                Clear filters
+              </Button>
+            ) : null
           }}
         >
           <Card className="!p-0 overflow-hidden border-stone-200 rounded-2xl shadow-sm hs-glass-effect">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">Payment Directory</h2>
+              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">PAYMENT DIRECTORY</h2>
               <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
-                {listMeta?.total ?? sortedFiltered.length} records matching
+                {listMeta?.total ?? sortedFiltered.length} PAYMENTS MATCHING
               </div>
             </div>
             <Table
-              embedded
+              embedded={true}
+              dense={true}
+              sortable={true}
+              sortColumn={sort.by}
+              sortDirection={sort.dir}
+              onSortChange={onSortChange}
               columns={[
                 { key: "payment_id", label: "PAYMENT ID", sortable: true, sortKey: "payment_id", className: "pl-8 w-32" },
                 { key: "date", label: "DATE", sortable: true, sortKey: "date", className: "text-center" },
@@ -299,9 +300,6 @@ export default function PaymentsListPage() {
                 { key: "status", label: "STATUS", sortable: true, sortKey: "status", className: "text-center" },
                 { key: "actions", label: "", className: "text-right w-16 px-8" },
               ]}
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSortChange={onSortChange}
               rows={sortedFiltered.map((payment) => {
                 const tenant = payment?.billing?.contract?.tenant || payment?.contract?.tenant;
                 const tenantName = tenant ? formatTenantDirectoryName(tenant) : "—";

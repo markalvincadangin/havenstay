@@ -3,11 +3,13 @@ import { buildPaginationQuery, readStoredPerPage, writeStoredPerPage } from "@/l
 
 export function usePaginatedFilters({
   initialFilters,
+  initialSort = { by: "id", dir: "desc" },
   debounceKeys = [],
   debounceMs = 300,
   buildExtraParams,
 }) {
   const [filters, setFilters] = useState(initialFilters);
+  const [sort, setSort] = useState(initialSort);
   const [page, setPage] = useState(1);
   const [perPageState, setPerPageState] = useState(() => readStoredPerPage());
 
@@ -35,23 +37,44 @@ export function usePaginatedFilters({
     if (options.resetPage !== false) setPage(1);
   }, []);
 
+  const onSortChange = useCallback((by, dir) => {
+    setSort((prev) => {
+      // If dir is explicitly provided (e.g. from a select dropdown), use it.
+      // Otherwise, toggle direction if the same column is clicked, or reset to 'asc'.
+      const finalDir =
+        dir || (prev.by === by && prev.dir === "asc" ? "desc" : "asc");
+      return { by, dir: finalDir };
+    });
+    setPage(1);
+  }, []);
+
   const resetFilters = useCallback(() => {
     setFilters(initialFilters);
+    setSort(initialSort);
     setPage(1);
-  }, [initialFilters]);
+  }, [initialFilters, initialSort]);
 
   const queryString = useMemo(() => {
-    const extra = typeof buildExtraParams === "function" 
-      ? buildExtraParams({ filters, debounced: debouncedValues })
-      : { ...filters, ...debouncedValues };
+    const extra =
+      typeof buildExtraParams === "function"
+        ? buildExtraParams({ filters, debounced: debouncedValues })
+        : { ...filters, ...debouncedValues };
+
+    // Inject sorting
+    extra.sort_by = sort.by;
+    extra.sort_dir = sort.dir;
+
     return buildPaginationQuery(page, perPage, extra);
-  }, [buildExtraParams, debouncedValues, filters, page, perPage]);
+  }, [buildExtraParams, debouncedValues, filters, page, perPage, sort.by, sort.dir]);
 
   return {
     filters,
     setFilters,
     updateFilter,
     resetFilters,
+    sort,
+    setSort,
+    onSortChange,
     page,
     setPage,
     perPage,

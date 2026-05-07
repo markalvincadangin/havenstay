@@ -9,6 +9,7 @@ use App\Enums\ContractType;
 use App\Enums\RoomType;
 use App\Enums\TenantStatus;
 use App\Models\BedSpace;
+use App\Models\Billing;
 use App\Models\Contract;
 use App\Models\MeterReading;
 use App\Models\Room;
@@ -66,7 +67,7 @@ class ContractService
 
         self::validateCreateInput($data);
 
-        $contract = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'TENANT_CHECKIN',
             payload: [
@@ -103,6 +104,9 @@ class ContractService
                 // Auto-initialize first billing cycle (optional, but standard)
                 BillingService::initializeContractBilling($actor, (int) $contract->contract_id);
 
+                TenantService::syncStatus((int) $data['tenant_id']);
+                self::clearCache($data['tenant_id'] ?? null);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator', 'latestBilling']);
             },
             resultDetails: fn (Contract $contract): array => [
@@ -110,10 +114,6 @@ class ContractService
                 'bed_space_id' => $contract->bed_space_id,
             ]
         );
-
-        self::clearCache($data['tenant_id'] ?? null);
-
-        return $contract;
     }
 
     /**
@@ -136,26 +136,60 @@ class ContractService
         }
 
         if (! empty($filters['status'])) {
-            $query->where('status', $filters['status']);
+            if ($filters['status'] === 'archived') {
+                $query->onlyTrashed();
+            } else {
+                $query->where('status', $filters['status']);
+            }
         }
 
         if (! empty($filters['q'])) {
             $needle = trim((string) $filters['q']);
-            $query->where(function ($w) use ($needle): void {
-                $w->where('contracts.contract_id', 'like', "%{$needle}%")
-                    ->orWhereHas('tenant', function ($t) use ($needle): void {
-                        $t->where('first_name', 'like', "%{$needle}%")
-                            ->orWhere('last_name', 'like', "%{$needle}%")
-                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$needle}%"]);
-                    })
-                    ->orWhereHas('room', function ($r) use ($needle): void {
-                        $r->where('room_code', 'like', "%{$needle}%");
-                    });
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $query->where(function ($w) use ($needle, $forensicId): void {
+                if ($forensicId) {
+                    $w->where('contracts.contract_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $w->where('contracts.contract_id', 'like', "%{$stripped}%")
+                        ->orWhereHas('tenant', function ($t) use ($stripped): void {
+                            $t->where('first_name', 'like', "%{$stripped}%")
+                                ->orWhere('last_name', 'like', "%{$stripped}%")
+                                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$stripped}%"]);
+                        })
+                        ->orWhereHas('room', function ($r) use ($stripped): void {
+                            $r->where('room_code', 'like', "%{$stripped}%");
+                        });
+                }
             });
         }
 
-        $paginator = $query->orderByDesc('contract_id')
-            ->paginate($perPage, ['*'], 'page', $page);
+        $sortBy = $filters['sort_by'] ?? 'id';
+        $sortDir = $filters['sort_dir'] ?? 'desc';
+
+        // Optimized Registry Pattern: Use scopes for calculated/related fields
+        $query->withTenantName()->withRoomContext();
+
+        $sortMap = [
+            'id'         => 'contracts.contract_id',
+            'tenant'     => 'tenant_name',
+            'start_date' => 'move_in_date',
+            'end_date'   => 'expected_move_out_date',
+            'rate'       => 'monthly_rate',
+            'status'     => 'status',
+        ];
+
+        if (isset($sortMap[$sortBy])) {
+            $query->orderBy($sortMap[$sortBy], $sortDir);
+        } else {
+            $query->orderByDesc('contracts.contract_id');
+        }
+
+        // Secondary tie-breaker
+        $query->orderByDesc('contracts.contract_id');
+
+        $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
         // Optimization: only load unbilled readings for active contract lists (e.g. Billing Wizard)
         if (isset($filters['status']) && $filters['status'] === 'active') {
@@ -176,6 +210,7 @@ class ContractService
             'creator',
             'latestBilling',
         ])
+            ->withTrashed()
             ->find($id);
 
         if ($contract) {
@@ -192,37 +227,48 @@ class ContractService
     {
         $contractId = $contract->contract_id;
 
-        return Cache::remember("contracts:unbilled:{$contractId}", 300, function () use ($contract) {
-            $roomId = $contract->room->room_id;
+        $cached = Cache::get("contracts:unbilled:{$contractId}");
+        
+        // Handle serialization edge cases or incomplete class objects
+        if ($cached instanceof Collection) {
+            return $cached;
+        }
 
-            // Find meters currently or previously assigned to this room
-            return MeterReading::query()
-                ->with(['meter.utility'])
-                ->whereIn('meter_id', function ($q) use ($roomId) {
-                    $q->select('meter_id')
-                        ->from('meter_assignments')
-                        ->where('room_id', $roomId);
-                })
-                ->whereNotExists(function ($q) use ($contract) {
-                    $q->select(DB::raw(1))
-                        ->from('billing_line_items')
-                        ->join('billing', 'billing.billing_id', '=', 'billing_line_items.billing_id')
-                        ->whereColumn('billing_line_items.reading_id', 'meter_readings.reading_id')
-                        ->where('billing.contract_id', $contract->contract_id);
-                })
-                ->orderBy('reading_date', 'desc')
-                ->get()
-                ->map(function (MeterReading $reading) {
-                    // Flatten for frontend consumption
-                    $r = $reading->toArray();
-                    $r['utility_name'] = $reading->meter->utility->name;
-                    $r['utility_type'] = strtolower($reading->meter->utility->name); // for legacy FE compatibility
-                    $r['unit'] = $reading->meter->utility->unit_of_measurement;
-                    $r['calculated_amount'] = Financials::computeUtilityCost($reading->meter_id, (float) $reading->reading_value);
+        $roomId = $contract->room?->room_id;
+        if (! $roomId) {
+            return collect();
+        }
 
-                    return $r;
-                });
-        });
+        $readings = MeterReading::query()
+            ->with(['meter.utility'])
+            ->whereIn('meter_id', function ($q) use ($roomId) {
+                $q->select('meter_id')
+                    ->from('meter_assignments')
+                    ->where('room_id', $roomId);
+            })
+            ->whereNotExists(function ($q) use ($contract) {
+                $q->select(DB::raw(1))
+                    ->from('billing_line_items')
+                    ->join('billing', 'billing.billing_id', '=', 'billing_line_items.billing_id')
+                    ->whereColumn('billing_line_items.reading_id', 'meter_readings.reading_id')
+                    ->where('billing.contract_id', $contract->contract_id);
+            })
+            ->orderBy('reading_date', 'desc')
+            ->get()
+            ->map(function (MeterReading $reading) {
+                // Flatten for frontend consumption
+                $r = $reading->toArray();
+                $r['utility_name'] = $reading->meter->utility->name ?? 'Utility';
+                $r['utility_type'] = strtolower($reading->meter->utility->name ?? 'utility');
+                $r['unit'] = $reading->meter->utility->unit_of_measurement ?? '';
+                $r['calculated_amount'] = Financials::computeUtilityCost($reading->meter_id, (float) $reading->reading_value);
+
+                return $r;
+            });
+
+        Cache::put("contracts:unbilled:{$contractId}", $readings, 300);
+
+        return $readings;
     }
 
     /**
@@ -237,7 +283,7 @@ class ContractService
             ]);
         }
 
-        $contract = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'UPDATE_CONTRACT',
             payload: ['contract_id' => $contract->contract_id, 'old_rate_fact' => $contract->monthly_rate],
@@ -249,13 +295,11 @@ class ContractService
 
                 $contract->update($data);
 
+                self::clearCache($contract->tenant_id, $contract->contract_id);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace']);
             }
         );
-
-        self::clearCache($contract->tenant_id, $contract->contract_id);
-
-        return $contract;
     }
 
     /**
@@ -294,7 +338,7 @@ class ContractService
             ]);
         }
 
-        $contract = self::runWriteWorkflow(
+        return self::runWriteWorkflow(
             actorId: $actor->user_id,
             action: 'TENANT_MOVEOUT',
             payload: ['contract_id' => $contract->contract_id, 'move_out_date_fact' => $actualMoveOut],
@@ -310,13 +354,11 @@ class ContractService
                     $contract->bedSpace->save();
                 }
 
+                self::clearCache($contract->tenant_id, $contract->contract_id);
+
                 return $contract->fresh(['tenant', 'room', 'bedSpace', 'creator']);
             }
         );
-
-        self::clearCache($contract->tenant_id, $contract->contract_id);
-
-        return $contract;
     }
 
     /**
@@ -370,11 +412,13 @@ class ContractService
             ]);
         }
 
-        $paymentCount = $contract->payments()->whereNull('voided_at')->count();
-
-        if ($paymentCount > 0) {
+        // Rule BR-CON-012: Voiding is only for pure correction. 
+        // If any ACTIVE payments exist, it must be Archived/Terminated instead.
+        $hasActivePayments = $contract->payments()->whereNull('voided_at')->exists();
+        
+        if ($hasActivePayments) {
             throw ValidationException::withMessages([
-                'contract' => ['This contract has recorded payments and cannot be voided.'],
+                'contract' => ['This contract has active payments and cannot be voided. Please void the payments first or use Archive/Terminate.'],
             ]);
         }
 
@@ -387,11 +431,22 @@ class ContractService
 
         return self::runWriteWorkflow(
             actorId: $actor->user_id,
-            action: 'VOID_CONTRACT',
+            action: 'VOID',
             payload: ['contract_id' => $contract->contract_id, 'void_reason_fact' => $reason],
             operation: function () use ($contract, $reason): Contract {
-                // Cascade voiding to all unpaid billings
-                $contract->billings()->where('status', BillingStatus::UNPAID)->delete();
+                // Forensic cleanup of associated billings
+                $contract->billings()->get()->each(function (Billing $billing) use ($contract) {
+                    // Forensic Re-anchoring: Decouple payments from billing but anchor them 
+                    // to the contract to satisfy the 'chk_pay_target' DB constraint.
+                    $billing->payments()->update([
+                        'billing_id' => null,
+                        'contract_id' => $contract->contract_id
+                    ]);
+                    
+                    // Child-First deletion for database integrity
+                    $billing->lineItems()->delete();
+                    $billing->delete();
+                });
 
                 // Release the bed lock immediately (triggering BedSpaceObserver)
                 if ($contract->bedSpace) {

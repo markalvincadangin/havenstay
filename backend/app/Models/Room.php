@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\RoomStatus;
 use App\Enums\RoomType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -68,5 +69,19 @@ class Room extends Model
         return $this->hasMany(MeterAssignment::class, 'room_id', 'room_id')
             ->whereNull('valid_to')
             ->orWhere('valid_to', '>', now()->toDateString());
+    }
+
+    /**
+     * Scope: Enrich query with occupancy and bed-space stats.
+     */
+    public function scopeWithOccupancyStats(Builder $query): Builder
+    {
+        return $query->addSelect([
+            'total_beds' => BedSpace::selectRaw('COUNT(*)')
+                ->whereColumn('bed_spaces.room_id', 'rooms.room_id'),
+            'occupied_beds' => BedSpace::selectRaw('COUNT(*)')
+                ->whereColumn('bed_spaces.room_id', 'rooms.room_id')
+                ->where('status', 'occupied'),
+        ]);
     }
 }

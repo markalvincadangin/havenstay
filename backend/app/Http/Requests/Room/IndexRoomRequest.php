@@ -32,7 +32,7 @@ class IndexRoomRequest extends FormRequest
     {
         return array_merge([
             'q' => ['nullable', 'string', 'max:200'],
-            'status' => ['nullable', 'string', Rule::in(['available', 'unavailable', 'maintenance', 'archived'])],
+            'status' => ['nullable', 'string', Rule::in(['available', 'unavailable', 'maintenance', 'decommissioned'])],
             'room_type' => ['nullable', Rule::enum(RoomType::class)],
         ], Pagination::queryRules());
     }

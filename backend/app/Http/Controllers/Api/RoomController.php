@@ -9,6 +9,7 @@ use App\Http\Requests\Room\ManageRoomRequest;
 use App\Http\Requests\Room\OccupyBedSpaceRequest;
 use App\Http\Requests\Room\StoreRoomRequest;
 use App\Http\Requests\Room\UpdateRoomRequest;
+use App\Http\Requests\Room\ViewRoomRequest;
 use App\Http\Resources\BedSpaceResource;
 use App\Http\Resources\RoomResource;
 use App\Models\BedSpace;
@@ -51,7 +52,7 @@ class RoomController extends Controller
     /**
      * Retrieve detailed room profile.
      */
-    public function show(ManageRoomRequest $request, Room $room): JsonResponse
+    public function show(ViewRoomRequest $request, Room $room): JsonResponse
     {
         return $this->success('Room retrieved successfully.', new RoomResource($room->load([
             'bedSpaces.activeContract.tenant',
@@ -92,7 +93,7 @@ class RoomController extends Controller
     /**
      * Provide aggregate stats for Room Inventory dashboard.
      */
-    public function stats(ManageRoomRequest $request): JsonResponse
+    public function stats(ViewRoomRequest $request): JsonResponse
     {
         return $this->success('Room statistics retrieved successfully.', RoomService::statsSummary());
     }
@@ -100,7 +101,7 @@ class RoomController extends Controller
     /**
      * FR-015: Check bed availability.
      */
-    public function availability(ManageRoomRequest $request): JsonResponse
+    public function availability(ViewRoomRequest $request): JsonResponse
     {
         $availability = RoomService::getAllAvailability();
 

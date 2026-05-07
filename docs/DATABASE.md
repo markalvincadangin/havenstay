@@ -1,7 +1,7 @@
 # HavenStay Database Documentation
 
-**Version:** 5.2  
-**Last Updated:** April 29, 2026  
+**Version:** 5.3  
+**Last Updated:** May 03, 2026  
 **Status:** Canonical integration contract for backend services; forensic alignment baseline (v5.0 engine)
 
 ---
@@ -14,7 +14,7 @@ This document is the authoritative specification for the HavenStay data layer. I
 ## 2. Distributed Architecture (CCR-002)
 
 The system utilizes a **Primary-Replica** topology to ensure data durability and optimize reporting performance:
-- **Primary Node (`db-primary`):** Processes all Data Manipulation Language (DML) operations (INSERT, UPDATE, DELETE). This node is the authoritative host for all 44 forensic triggers.
+- **Primary Node (`db-primary`):** Processes all Data Manipulation Language (DML) operations (INSERT, UPDATE, DELETE). This node is the authoritative host for all 45 forensic triggers.
 - **Replica Node (`db-replica`):** A read‑only instance synchronized via GTID‑based asynchronous replication. It handles all reporting queries and dashboard aggregations (`vw_*` views).
 - **Service Routing:** Laravel's database configuration automatically splits "read" and "write" connections based on the operational context.
 
@@ -80,7 +80,11 @@ To ensure financial integrity across all operational modules, the following stan
 
 The system utilizes a trigger-based auditing mechanism to ensure a verifiable change-set history of all operational and financial events.
 The MySQL primary node hosts **45 dedicated triggers** to ensure high-fidelity change capture while preventing infinite recursion on log tables.
-- **Forensic Math:** (14 Operational Tables × 3 Actions) + 2 Immutability Triggers + 1 Assignment Guard Trigger = **45 Triggers**.
+- **Forensic Math:** The `meter_assignments` table receives 4 triggers (AFTER INSERT + AFTER UPDATE + AFTER DELETE + BEFORE INSERT guard), while all other 13 operational tables each receive the standard 3 AFTER triggers. The full breakdown is: **(13 tables × 3 AFTER triggers) + (1 table [`meter_assignments`] × 4 triggers) + 2 Immutability Triggers (BEFORE UPDATE + BEFORE DELETE on `audit_logs`) = 45 triggers total**.
+- **Breakdown by type:**
+  - 42 data-capture triggers: 13 tables × 3 (AFTER INSERT + AFTER UPDATE + AFTER DELETE) = 39, plus `meter_assignments` × 3 AFTER triggers = 42 total AFTER triggers.
+  - 1 assignment guard: `trg_meter_assignments_bi` (BEFORE INSERT) enforces BR-MET-003.
+  - 2 immutability protection triggers: BEFORE UPDATE + BEFORE DELETE on `audit_logs`.
 - **Assignment Guard:** `trg_meter_assignments_bi` (BEFORE INSERT) enforces BR-MET-003 — prevents double-assigning a meter that already has an open `valid_to = NULL` assignment.
 - **Correlation:** Every record is tagged with an `@current_user_id` and a `correlation_id` to link row changes to the initiating workflow.
 
@@ -97,7 +101,7 @@ To maintain reporting consistency and ensure that complex JOINS do not leak into
 | `vw_room_occupancy` | Aggregation / LEFT JOIN | Real‑time vacancy per room. |
 | `vw_occupancy_status` | 5-Table LEFT JOIN | Individual bed space vacancy list. |
 | `vw_collections_summary` | 6-Table INNER JOIN | Collections performance by period/method. |
-| `vw_tenant_contract_history`| 4-Table INNER JOIN | Forensic ledger of all historical contracts. |
+| `vw_tenant_contract_history` | 4-Table INNER JOIN | Forensic ledger of all historical contracts. |
 
 ---
 
@@ -124,5 +128,5 @@ erDiagram
 
 ---
 
-*Aligned to: SRS.md v5.2 · SDD.md v5.2 · BUSINESS_RULES.md v2.2 · havenstay_schema.sql (v5.0) · API_REFERENCE.md*  
-*Last Updated: April 29, 2026 (v5.2 — Clean State Release: Synchronized all references to match the new continuous Business Rule numbering v2.2.)*
+*Aligned to: SRS.md v5.3 · SDD.md v5.4 · BUSINESS_RULES.md v2.3 · havenstay_schema.sql (v5.0) · API_REFERENCE.md v5.3*  
+*Last Updated: May 03, 2026 (v5.3 — Docs Remediation: Corrected trigger count formula in §5 to accurately reflect that `meter_assignments` receives 4 triggers. Detailed breakdown added for full transparency.)*

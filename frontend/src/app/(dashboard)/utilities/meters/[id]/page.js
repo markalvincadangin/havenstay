@@ -24,6 +24,7 @@ import { useToasts } from "@/context/ToastContext";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { MeterQuickEditForm } from '@/features/utilities/components/MeterQuickEditForm';
 import { MeterReadingForm } from '@/features/utilities/components/MeterReadingForm';
+import DetailHeader from "@/components/ui/DetailHeader";
 /**
  * Meter Registry Detail — /admin/meters/[id]
  */
@@ -61,19 +62,21 @@ export default function MeterDetailPage({ params }) {
   const UtilityIcon = isElectric ? Zap : Droplet;
   const assignments = meter?.assignments ? [...meter.assignments].sort((a, b) => new Date(b.valid_from) - new Date(a.valid_from)) : [];
   const readings = meter?.readings ? [...meter.readings].sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date)) : [];
+  const header = DetailHeader({
+    type: "meter",
+    id: meterId,
+    title: meter ? `Meter #${meter.meter_id} (${meter.serial_number})` : "Meter Record",
+    subtitle: "Authoritative hardware profile and consumption ledger.",
+    status: meter?.status,
+    loading: authLoading || loading,
+    listHref: "/utilities/meters",
+    listLabel: "Meter Registry",
+    detailLabel: meter ? `SN: ${meter.serial_number}` : "Detail"
+  });
+
   return (
     <StandardPage
-      title={title}
-      subtitle="Authoritative hardware profile and consumption ledger."
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Utilities", href: "/utilities" },
-            { label: "Meters", href: "/utilities/meters" },
-            { label: title },
-          ]}
-        />
-      }
+      {...header}
       loading={authLoading || loading}
       skeleton={<SkeletonDetailPage />}
       actions={

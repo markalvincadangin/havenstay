@@ -1,7 +1,6 @@
 "use client";
 
 import Button from "./Button";
-import UserRoleBadge from "./UserRoleBadge";
 
 export default function ReportHeaderActions({
   user,
@@ -13,7 +12,6 @@ export default function ReportHeaderActions({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
-      <UserRoleBadge username={user?.username} roleName={user?.role?.role_name} />
       {showExport ? (
         <Button
           type="button"

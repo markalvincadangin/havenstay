@@ -18,7 +18,7 @@ class ManageUtilityRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        AuthorizationService::ensureCanManageUsers($this->user());
+        AuthorizationService::ensureCanViewUtilities($this->user());
 
         return true;
     }

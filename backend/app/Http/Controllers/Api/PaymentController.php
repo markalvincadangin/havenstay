@@ -61,6 +61,22 @@ class PaymentController extends Controller
     }
 
     /**
+     * FR-024c: Record a combined (Rent + Deposit) onboarding payment.
+     */
+    public function storeComposite(\App\Http\Requests\Payment\StoreCompositePaymentRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+        $data['idempotency_key'] = $request->header('Idempotency-Key');
+
+        $results = PaymentService::recordCompositeInitial($request->user(), $data);
+
+        return $this->created('Initial settlement recorded successfully.', [
+            'rent' => new PaymentResource($results['rent']),
+            'deposit' => new PaymentResource($results['deposit']),
+        ]);
+    }
+
+    /**
      * FR-043: Void a payment and reverse impacts.
      */
     public function void(VoidPaymentRequest $request, Payment $payment): JsonResponse

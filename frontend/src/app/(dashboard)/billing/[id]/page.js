@@ -23,6 +23,8 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { useAuth } from "@/context/AuthContext";
 import PageHeaderActions from "@/components/ui/PageHeaderActions";
 import { SkeletonDetailPage } from "@/components/ui/Skeleton";
+import RecordStateAlert from "@/components/ui/RecordStateAlert";
+import DetailHeader from "@/components/ui/DetailHeader";
 
 /** Metric item — standard registry detail atom. */
 function MetricItem({ label, children, icon: Icon }) {
@@ -67,33 +69,24 @@ export default function BillingDetailsPage() {
   const lineItems = billing?.line_items || [];
   const payments = billing?.payments || [];
 
+  const header = DetailHeader({
+    type: "billing",
+    id: billingId,
+    title: billing ? `#BILL-${String(billingId).padStart(6, '0')}` : "Billing Detail",
+    subtitle: "Itemized charges and payments for this bill.",
+    status: billing?.status,
+    loading: loading,
+    listHref: "/billing",
+    listLabel: "Billing",
+    detailLabel: `Bill #${billingId}`
+  });
+
   return (
     <StandardPage
-      title={title}
-      subtitle={
-        loading ? (
-          "Loading billing details..."
-        ) : billing ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-stone-500">
-              Itemized charges and payments for this bill.
-            </span>
-            <div className="hidden sm:block h-3 w-[1px] bg-stone-200" />
-            <ResourceIdCell id={billing.billing_id} type="billing" />
-          </div>
-        ) : null
-      }
+      {...header}
       loading={loading}
       skeleton={<SkeletonDetailPage />}
       error={billingError}
-      breadcrumbs={
-        <Breadcrumbs
-          items={[
-            { label: "Billing", href: "/billing" },
-            { label: `Billing #${billingId || ""}` }
-          ]}
-        />
-      }
       actions={
         <PageHeaderActions
           backHref="/billing"
@@ -105,6 +98,13 @@ export default function BillingDetailsPage() {
       {billing ? (
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
+            <RecordStateAlert
+              show={billing?.status === 'paid'}
+              variant="info"
+              title="Bill Settled"
+            >
+              This billing cycle has been fully collected. No further payments are required.
+            </RecordStateAlert>
             <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
               <div className="flex items-center gap-3 border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
@@ -126,10 +126,10 @@ export default function BillingDetailsPage() {
                   <MetricItem label="Room / Bed" icon={Building2}>
                     {roomId ? (
                       <Link href={`/rooms/${roomId}`} className="text-teal-700 underline decoration-teal-700/30 hover:shadow-[0_1px_0_0_currentColor]">
-                        Room {roomCode}{bedSpace?.bed_label ? ` / ${bedSpace.bed_label}` : ""}
+                        {roomCode}{bedSpace?.bed_label ? ` / ${bedSpace.bed_label}` : ""}
                       </Link>
                     ) : (
-                      `Room ${roomCode}${bedSpace?.bed_label ? " / " + bedSpace.bed_label : ""}`
+                      `${roomCode}${bedSpace?.bed_label ? " / " + bedSpace.bed_label : ""}`
                     )}
                   </MetricItem>
                   <MetricItem label="Billing Cycle" icon={Calendar}>
@@ -226,7 +226,10 @@ export default function BillingDetailsPage() {
                         </div>
                       </td>
                       <td className="py-5 text-right">
-                        <CurrencyDisplay amount={payment.amount_paid} className="text-sm font-bold text-emerald-700" />
+                        <CurrencyDisplay
+                          amount={payment.amount_paid}
+                          className={`text-sm font-bold ${payment.voided_at ? "text-stone-400 line-through" : "text-emerald-700"}`}
+                        />
                       </td>
                       <td className="py-5 text-center">
                         <ResourceIdCell id={payment.payment_id} type="payment" />

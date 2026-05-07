@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Utility\ManageUtilityRequest;
+use App\Services\Core\AuthorizationService;
 use App\Http\Requests\Utility\StoreUtilityRateRequest;
 use App\Http\Requests\Utility\StoreUtilityRequest;
 use App\Http\Requests\Utility\UpdateUtilityRequest;
@@ -11,6 +12,7 @@ use App\Http\Resources\UtilityRateResource;
 use App\Http\Resources\UtilityResource;
 use App\Models\Utility;
 use App\Services\Operations\UtilityService;
+use App\Support\OperationalHardening;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -26,9 +28,35 @@ class UtilityController extends Controller
      */
     public function index(ManageUtilityRequest $request): JsonResponse
     {
-        // Fetch all utilities, ordered by name, and eager load their rates ordered by effective_from DESC
-        $utilities = Utility::with(['meters', 'rates' => function ($query) {
-            $query->orderBy('effective_from', 'desc');
+        $query = Utility::query();
+
+        // Handle status filter
+        $status = $request->query('status', 'active');
+        if ($status === 'archived') {
+            $query->onlyTrashed();
+        } elseif ($status === 'all') {
+            $query->withTrashed();
+        }
+
+        if ($request->filled('q')) {
+            $needle = trim((string) $request->query('q'));
+            $forensicId = OperationalHardening::parseForensicId($needle);
+
+            $query->where(function ($sub) use ($needle, $forensicId) {
+                if ($forensicId) {
+                    $sub->where('utility_id', $forensicId);
+                } else {
+                    $stripped = ltrim($needle, '#');
+                    $sub->where('utility_id', 'LIKE', "%{$stripped}%")
+                        ->orWhere('name', 'LIKE', "%{$stripped}%")
+                        ->orWhere('unit_of_measurement', 'LIKE', "%{$stripped}%");
+                }
+            });
+        }
+
+        // Fetch utilities, ordered by name, and eager load their rates ordered by effective_from DESC
+        $utilities = $query->with(['meters', 'rates' => function ($q) {
+            $q->orderBy('effective_from', 'desc');
         }])->orderBy('name')->get();
 
         return $this->success('Utility catalog retrieved successfully.', UtilityResource::collection($utilities));
@@ -72,6 +100,8 @@ class UtilityController extends Controller
      */
     public function archive(ManageUtilityRequest $request, Utility $utility): JsonResponse
     {
+        AuthorizationService::ensureCanManageUtilities($request->user());
+
         UtilityService::archive($request->user(), $utility);
 
         return $this->success('Utility category archived successfully.', ['utility_id' => $utility->utility_id]);

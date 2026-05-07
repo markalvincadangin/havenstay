@@ -29,6 +29,9 @@ class IndexPaymentRequest extends FormRequest
             'q' => ['nullable', 'string', 'max:200'],
             'category' => ['nullable', 'string', 'in:billing,deposit,refund,rollover'],
             'include_voided' => ['nullable', 'boolean'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+            'posting_status' => ['nullable', 'string', 'in:posted,voided,all'],
         ], Pagination::queryRules());
     }
 }

@@ -16,6 +16,7 @@ import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import StandardPage from "@/components/ui/StandardPage";
 import { SkeletonDetailPage } from "@/components/ui/Skeleton";
 import { WizardFrame } from "@/components/ui/WizardFrame";
+import Button from "@/components/ui/Button";
 
 const PH_MOBILE_REGEX = /^(09\d{9}|(\+639)\d{9})$/;
 
@@ -25,6 +26,8 @@ export default function NewTenantPage() {
    const { showToast } = useToasts();
 
    const [currentStepIndex, setCurrentStepIndex] = useState(0);
+   const [existenceMatch, setExistenceMatch] = useState(null);
+   const [isScanning, setIsScanning] = useState(false);
 
    const {
       register,
@@ -33,6 +36,7 @@ export default function NewTenantPage() {
       getValues,
       formState: { errors, isSubmitting, isDirty },
    } = useForm({
+      mode: "onChange",
       defaultValues: {
          first_name: "",
          last_name: "",
@@ -46,15 +50,77 @@ export default function NewTenantPage() {
 
    useUnsavedChangesWarning(isDirty && !isSubmitting);
 
+   const performExistenceScan = async () => {
+      const vals = getValues();
+      const hasMinData = (vals.first_name && vals.last_name) || vals.email || vals.contact_number;
+      if (!hasMinData) {
+         setExistenceMatch(null);
+         return null;
+      }
+
+      setIsScanning(true);
+      try {
+         const result = await apiRequest("/api/tenants/existence-check", {
+            method: "POST",
+            body: JSON.stringify({
+               first_name: vals.first_name,
+               last_name: vals.last_name,
+               email: vals.email,
+               contact_number: vals.contact_number
+            })
+         });
+         const match = result?.data || result;
+         setExistenceMatch(match?.exists ? match : null);
+         return match;
+      } catch (e) {
+         return null;
+      } finally {
+         setIsScanning(false);
+      }
+   };
+
+   const handleRestoreTenant = async (id) => {
+      try {
+         await apiRequest(`/api/tenants/${id}/restore`, { method: "POST" });
+         showToast("Tenant profile restored successfully.", "success");
+         router.push(`/tenants/${id}`);
+      } catch (error) {
+         showToast("Failed to restore tenant profile.", "error");
+      }
+   };
+
    const validateStep = async (index) => {
       if (index === 0) {
-         return await trigger(["first_name", "last_name", "address"]);
+         const ok = await trigger(["first_name", "last_name", "address"]);
+         if (ok) await performExistenceScan();
+         return ok;
       }
       if (index === 1) {
-         return await trigger(["contact_number", "email"]);
+         const ok = await trigger(["contact_number", "email"]);
+         if (ok) {
+            const match = await performExistenceScan();
+            if (match?.exists && (match.match_type === 'email' || match.match_type === 'phone')) {
+               return false;
+            }
+         }
+         return ok;
       }
       return true;
    };
+
+   const isStepInvalid = useMemo(() => {
+      if (currentStepIndex === 0) {
+         return !!(errors.first_name || errors.last_name || errors.address);
+      }
+      if (currentStepIndex === 1) {
+         const hardMatch = existenceMatch?.exists && (existenceMatch.match_type === 'email' || existenceMatch.match_type === 'phone');
+         return !!(errors.email || errors.contact_number || hardMatch);
+      }
+      if (currentStepIndex === 2) {
+         return !!(errors.emergency_contact_name || errors.emergency_contact_number);
+      }
+      return false;
+   }, [currentStepIndex, errors, existenceMatch]);
 
    const onNext = async () => {
       const isValid = await validateStep(currentStepIndex);
@@ -131,38 +197,91 @@ export default function NewTenantPage() {
             onNext={onNext}
             onBack={onBack}
             onCancel={() => router.push("/tenants")}
-            onSubmit={() => onSubmitTenant("view")}
+            onSubmit={() => onSubmitTenant("lease")}
             isSubmitting={isSubmitting}
+            isNextDisabled={isStepInvalid || isScanning || readOnly}
+            isSubmitDisabled={isStepInvalid || isScanning || readOnly}
             nextLabel="Next Step"
-            submitLabel="Register Tenant"
+            submitLabel="Register & Create Lease"
             cancelLabel="Discard Changes"
+            extraActions={
+               currentStepIndex === 2 && (
+                  <Button
+                     variant="outline"
+                     size="lg"
+                     onClick={() => onSubmitTenant("view")}
+                     disabled={readOnly || isSubmitting || isStepInvalid || isScanning}
+                     className="rounded-xl text-xs font-black uppercase tracking-widest text-stone-500"
+                  >
+                     Register Tenant Only
+                  </Button>
+               )
+            }
          >
             <div className="space-y-6">
                {currentStepIndex === 0 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                      <div className="grid gap-6 sm:grid-cols-2">
-                        <Field label="First Name" required error={errors.first_name?.message}>
+                        <Field
+                           label="First Name"
+                           required
+                           error={errors.first_name?.message}
+                        >
                            <Input
                               autoFocus
                               disabled={readOnly}
+                              hasError={Boolean(errors.first_name)}
                               placeholder="Juan"
                               className="!h-11 border-stone-200"
                               {...register("first_name", { required: "First name is required." })}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
                         <Field label="Last Name" required error={errors.last_name?.message}>
                            <Input
                               disabled={readOnly}
+                              hasError={Boolean(errors.last_name)}
                               placeholder="Dela Cruz"
                               className="!h-11 border-stone-200"
                               {...register("last_name", { required: "Last name is required." })}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
                      </div>
+
+                     {existenceMatch?.match_type === 'name' && (
+                        <Alert variant="warning" title="Potential Duplicate Detected">
+                           <p className="text-sm">
+                              A profile with the name <strong>{getValues().first_name} {getValues().last_name}</strong> already exists in the registry.
+                              If this is the same person, consider using the existing profile to avoid data fragmentation.
+                           </p>
+                           <div className="mt-3 flex gap-3">
+                              <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => router.push(`/tenants/${existenceMatch.tenant_id}`)}
+                                 className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                              >
+                                 View Profile
+                              </Button>
+                              {existenceMatch.status === 'archived' && (
+                                 <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => handleRestoreTenant(existenceMatch.tenant_id)}
+                                    className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                                 >
+                                    Restore Profile
+                                 </Button>
+                              )}
+                           </div>
+                        </Alert>
+                     )}
                      <Field label="Home Address" required error={errors.address?.message}>
                         <Textarea
                            rows={3}
                            disabled={readOnly}
+                           hasError={Boolean(errors.address)}
                            className="border-stone-200"
                            {...register("address", { required: "Please provide a home address." })}
                         />
@@ -173,27 +292,74 @@ export default function NewTenantPage() {
                {currentStepIndex === 1 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                      <div className="grid gap-6 sm:grid-cols-2">
-                        <Field label="Contact Number" required error={errors.contact_number?.message}>
+                        <Field
+                           label="Contact Number"
+                           required
+                           error={errors.contact_number?.message || (existenceMatch?.match_type === 'phone' ? "This number is already registered." : null)}
+                        >
                            <Input
                               autoFocus
                               disabled={readOnly}
+                              hasError={Boolean(errors.contact_number || existenceMatch?.match_type === 'phone')}
                               className="!h-11 font-mono tabular-nums border-stone-200"
                               {...register("contact_number", {
                                  required: "Contact number is required.",
                                  pattern: { value: PH_MOBILE_REGEX, message: "Please enter a valid PH mobile number." }
                               })}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
-                        <Field label="Email Address" required error={errors.email?.message}>
+                        <Field
+                           label="Email Address"
+                           required
+                           error={errors.email?.message || (existenceMatch?.match_type === 'email' ? "This email is already in use." : null)}
+                        >
                            <Input
                               disabled={readOnly}
+                              hasError={Boolean(errors.email || existenceMatch?.match_type === 'email')}
                               type="email"
                               placeholder="juan@example.ph"
                               className="!h-11 border-stone-200 gap-x-6"
-                              {...register("email", { required: "Email address is required." })}
+                              {...register("email", {
+                                 required: "Email address is required.",
+                                 pattern: {
+                                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                                    message: "Please enter a valid email address."
+                                 }
+                              })}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
                      </div>
+
+                     {existenceMatch?.exists && (existenceMatch.match_type === 'email' || existenceMatch.match_type === 'phone') && (
+                        <Alert variant="error" title="Hard Duplicate Blocked">
+                           <p className="text-sm">
+                              The <strong>{existenceMatch.match_type === 'email' ? 'email address' : 'contact number'}</strong> provided is already associated with an {existenceMatch.status === 'archived' ? 'archived' : 'active'} profile.
+                              Duplicate tenant profiles are not allowed.
+                           </p>
+                           <div className="mt-3 flex gap-3">
+                              <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => router.push(`/tenants/${existenceMatch.tenant_id}`)}
+                                 className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                              >
+                                 View Existing Profile
+                              </Button>
+                              {existenceMatch.status === 'archived' && (
+                                 <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => handleRestoreTenant(existenceMatch.tenant_id)}
+                                    className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                                 >
+                                    Restore & Edit Profile
+                                 </Button>
+                              )}
+                           </div>
+                        </Alert>
+                     )}
                   </div>
                )}
 
@@ -204,6 +370,7 @@ export default function NewTenantPage() {
                            <Input
                               autoFocus
                               disabled={readOnly}
+                              hasError={Boolean(errors.emergency_contact_name)}
                               className="!h-11 border-stone-200"
                               {...register("emergency_contact_name", { required: "Emergency contact name is required." })}
                            />
@@ -211,6 +378,7 @@ export default function NewTenantPage() {
                         <Field label="Emergency Number" required error={errors.emergency_contact_number?.message}>
                            <Input
                               disabled={readOnly}
+                              hasError={Boolean(errors.emergency_contact_number)}
                               className="!h-11 font-mono tabular-nums border-stone-200"
                               {...register("emergency_contact_number", {
                                  required: "Please provide a valid emergency contact number.",
@@ -218,17 +386,6 @@ export default function NewTenantPage() {
                               })}
                            />
                         </Field>
-                     </div>
-
-                     <div className="pt-8 flex sm:justify-end">
-                        <button
-                           type="button"
-                           onClick={() => onSubmitTenant("lease")}
-                           disabled={readOnly || isSubmitting}
-                           className="text-xs font-black uppercase tracking-widest text-[#0e7490] hover:text-[#164e63] underline underline-offset-4 decoration-2"
-                        >
-                           Or Save & Generate Lease Immediately
-                        </button>
                      </div>
                   </div>
                )}

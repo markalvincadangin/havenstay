@@ -37,7 +37,6 @@ export function UserQuickEditForm({ user, onSuccess, onCancel }) {
       username: user?.username || "",
       email: user?.email || "",
       role_id: user?.role_id || "",
-      is_active: user ? Boolean(user.is_active) : true,
       password: "",
       password_confirmation: "",
     },
@@ -66,7 +65,6 @@ export function UserQuickEditForm({ user, onSuccess, onCancel }) {
       username: values.username,
       email: values.email,
       role_id: Number(values.role_id),
-      is_active: Boolean(values.is_active),
       ...(pwd ? { password: pwd } : {})
     };
 
@@ -146,21 +144,6 @@ export function UserQuickEditForm({ user, onSuccess, onCancel }) {
                 {rolesList.map(r => <option key={r.role_id} value={r.role_id}>{r.role_name.toUpperCase()}</option>)}
               </Select>
             </Field>
-
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-100 bg-stone-50/50 p-4 transition-colors hover:bg-stone-100/50">
-              <input
-                type="checkbox"
-                disabled={isSelf}
-                className="mt-0.5 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500/20 disabled:opacity-50 cursor-pointer"
-                {...register("is_active")}
-              />
-              <div>
-                <span className="block text-xs font-black uppercase tracking-widest text-stone-900">Active Account</span>
-                <span className="mt-1 block text-[10px] font-medium text-stone-400">
-                  {isSelf ? "Self-account state cannot be changed." : "Uncheck to revoke system access."}
-                </span>
-              </div>
-            </label>
           </div>
         </div>
 

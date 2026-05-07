@@ -27,6 +27,22 @@ export default function ResourceView({
   emptyProps = {},
   children
 }) {
+  // Optimization: Only show the syncing 'blur' if the request takes longer than 150ms.
+  // This prevents the 'hardcoded blur' feeling for fast, optimized database queries.
+  const [showSyncingEffect, setShowSyncingEffect] = React.useState(false);
+
+  React.useEffect(() => {
+    let timer;
+    if (isSyncing) {
+      // Background syncing should be invisible unless it's taking a significant amount of time.
+      // 500ms is the standard threshold for 'noticeable' background activity.
+      timer = setTimeout(() => setShowSyncingEffect(true), 500);
+    } else {
+      setShowSyncingEffect(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isSyncing]);
+
   // 1. Initial Loading State (Skeleton)
   if (isLoading) {
     return skeleton || (
@@ -86,23 +102,28 @@ export default function ResourceView({
       <AnimatePresence>
         {isSyncing && (
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute left-0 top-0 z-50 h-[2px] w-full overflow-hidden bg-stone-100/20 pointer-events-none"
+            initial={{ opacity: 0, scaleY: 0 }}
+            animate={{ opacity: 1, scaleY: 1 }}
+            exit={{ opacity: 0, scaleY: 0 }}
+            transition={{ 
+              duration: 0.1, // Quick entry
+              exit: { duration: 0 } // Instant exit when data is ready
+            }}
+            className="absolute left-0 top-0 z-50 h-[3px] w-full overflow-hidden bg-teal-600/10 pointer-events-none origin-top"
           >
-            <div className="hs-indeterminate-bar h-full w-full bg-teal-600" />
+            <div className="hs-indeterminate-bar hs-loading-glow h-full w-full bg-teal-600" />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <motion.div
-        animate={{ opacity: isSyncing ? 0.6 : 1 }}
-        transition={{ duration: 0.2, ease: "easeInOut" }}
-        className="h-full"
+      <div
+        className={[
+          "h-full transition-all duration-300",
+          showSyncingEffect ? "hs-resource-syncing" : ""
+        ].join(" ")}
       >
         {children}
-      </motion.div>
+      </div>
     </div>
   );
 }

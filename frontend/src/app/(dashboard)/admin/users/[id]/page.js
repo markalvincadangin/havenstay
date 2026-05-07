@@ -1,18 +1,20 @@
 "use client";
-import { Shield, User, Mail, ShieldCheck, Activity, Edit2 } from "lucide-react";
+import { Shield, User, Mail, ShieldCheck, Activity, Edit2, Calendar, History } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { fetcher } from "@/lib/api";
+import { fetcher, apiRequest } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { canManageUsers } from "@/lib/auth";
 import { formatDateString } from "@/lib/formatters";
 import { normalizePaginatedList } from "@/lib/pagination";
 import Alert from "@/components/ui/Alert";
+import RecordStateAlert from "@/components/ui/RecordStateAlert";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import { Table } from "@/components/ui/Table";
+import { formatTimestamp } from "@/lib/formatters";
 import TablePagination from "@/components/ui/TablePagination";
 import ResourceView from "@/components/ui/ResourceView";
 import StandardPage from "@/components/ui/StandardPage";
@@ -22,17 +24,27 @@ import ResourceIdCell from "@/components/ui/ResourceIdCell";
 import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { UserQuickEditForm } from '@/features/admin/users/components/UserQuickEditForm';
+import LifecycleActions from "@/components/ui/LifecycleActions";
+import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import DetailHeader from "@/components/ui/DetailHeader";
+import { useToasts } from "@/context/ToastContext";
+import { flattenApiErrors } from "@/lib/errors";
+import { Input } from "@/components/ui/Fields";
+import Avatar from "@/components/ui/Avatar";
+import MetricItem from "@/components/ui/MetricItem";
+import DetailRow from "@/components/ui/DetailRow";
 export default function UserDetailPage() {
     const router = useRouter();
     const params = useParams();
     const userId = params?.id;
     const { user: currentUser, authLoading } = useAuth();
+    const { showToast } = useToasts();
     const { page, setPage, perPage, setPerPage, queryString } = usePaginatedFilters({
         initialFilters: {},
         buildExtraParams: () => ({ user_id: userId }),
     });
     const canManage = useMemo(() => canManageUsers(currentUser), [currentUser]);
-    const { data: uData, error: uError } = useSWR(
+    const { data: uData, error: uError, mutate: mutateUser } = useSWR(
         currentUser && userId && canManage ? `/api/users/${userId}` : null,
         fetcher
     );
@@ -45,6 +57,10 @@ export default function UserDetailPage() {
     const { rows: auditLogsList, meta: auditMeta } = useMemo(() => normalizePaginatedList(aData), [aData]);
     const isSelf = String(userId) === String(currentUser?.user_id);
     const [editingUser, setEditingUser] = useState(null);
+    const [busyAction, setBusyAction] = useState("");
+    const [isDeactivating, setIsDeactivating] = useState(false);
+    const [isArchiving, setIsArchiving] = useState(false);
+    const [confirmInput, setConfirmInput] = useState("");
     if (authLoading || loading) {
         return <StandardPage title="Loading User..." loading={true} />;
     }
@@ -52,36 +68,106 @@ export default function UserDetailPage() {
         return (
             <StandardPage title="Error" breadcrumbs={<Breadcrumbs items={[{ label: "Administration" }, { label: "User Directory", href: "/admin/users" }]} />}>
                 <Alert variant="error" title="Failed to load user account">
-                    {uError?.message || "Internal system error occurred while retrieving user profile."}
+                    {uError?.status === 404 ? "This user account does not exist or has been permanently removed." : (uError?.message || "Internal system error occurred while retrieving user profile.")}
                 </Alert>
             </StandardPage>
         );
     }
+    const isArchived = !!uData?.deleted_at;
+    const isActive = !!uData?.is_active;
+
+    async function handleDeactivate() {
+        if (uData.username !== confirmInput) {
+            showToast("Username mismatch.", "error");
+            return;
+        }
+        setBusyAction("deactivate");
+        try {
+            await apiRequest(`/api/users/${userId}/deactivate`, { method: "POST" });
+            setIsDeactivating(false);
+            setConfirmInput("");
+            await mutateUser();
+            showToast("User deactivated.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
+    }
+
+    async function handleReactivate() {
+        setBusyAction("reactivate");
+        try {
+            await apiRequest(`/api/users/${userId}/reactivate`, { method: "POST" });
+            await mutateUser();
+            showToast("Access restored.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
+    }
+
+    async function handleArchive() {
+        setBusyAction("archive");
+        try {
+            await apiRequest(`/api/users/${userId}/archive`, { method: "POST" });
+            setIsArchiving(false);
+            await mutateUser();
+            showToast("User account archived.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
+    }
+
+    async function handleRestore() {
+        setBusyAction("restore");
+        try {
+            await apiRequest(`/api/users/${userId}/restore`, { method: "POST" });
+            await mutateUser();
+            showToast("User account restored.", "success");
+        } catch (e) {
+            showToast(flattenApiErrors(e), "error");
+        } finally {
+            setBusyAction("");
+        }
+    }
+    const header = DetailHeader({
+        type: "user",
+        id: userId,
+        title: uData ? `${uData.first_name} ${uData.last_name}` : "User Profile",
+        subtitle: "User account details and forensic activity log.",
+        status: isArchived ? "archived" : (isActive ? "active" : "inactive"),
+        loading: authLoading || loading,
+        listHref: "/admin/users",
+        listLabel: "Users",
+        detailLabel: uData?.username || "Detail"
+    });
+
     return (
         <StandardPage
-            title={uData ? `${uData.first_name} ${uData.last_name}` : "User Profile"}
-            subtitle="User account details and recent activity."
-            breadcrumbs={
-                <Breadcrumbs
-                    items={[
-                        { label: "Users", href: "/admin/users" },
-                        { label: uData?.username || "Detail" }
-                    ]}
-                />
-            }
+            {...header}
             actions={
                 <div className="flex items-center gap-3">
-                    <Button
-                        variant="secondary"
-                        onClick={() => router.push("/admin/users")}
-                        className="!h-11 px-6 text-[10px] font-black uppercase tracking-widest border-stone-200"
-                    >
-                        Back to Directory
-                    </Button>
+                    <LifecycleActions
+                        mode="user"
+                        canManage={canManage}
+                        isActive={isActive}
+                        isArchived={isArchived}
+                        isSelf={isSelf}
+                        busyAction={busyAction}
+                        onDeactivate={() => setIsDeactivating(true)}
+                        onReactivate={handleReactivate}
+                        onArchive={() => setIsArchiving(true)}
+                        onRestore={handleRestore}
+                    />
+                    <div className="h-8 w-px bg-stone-200 mx-1" />
                     <Button
                         variant="primary"
                         onClick={() => setEditingUser(uData)}
-                        disabled={isSelf} // Self-management restricted as per security audit
+                        disabled={isSelf || isArchived}
                         className="!h-11 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 border-0"
                     >
                         <Edit2 size={14} className="mr-2" />
@@ -90,74 +176,104 @@ export default function UserDetailPage() {
                 </div>
             }
         >
-            <div className="mx-auto w-full max-w-4xl space-y-8">
+            <div className="space-y-8">
                 {!canManage && (
                     <Alert variant="warning" title="Access Restricted">
                         Only administrators are authorized to view detailed system user profiles.
                     </Alert>
                 )}
-                <div className="grid gap-6 lg:grid-cols-3">
-                    <div className="lg:col-span-2 space-y-6">
-                        <FormSection title="User Details" icon={User} className="hs-glass-effect">
-                            <div className="grid gap-8 sm:grid-cols-2">
-                                <div>
-                                    <span className="block text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Name</span>
-                                    <span className="text-sm font-bold text-stone-900">{uData?.first_name} {uData?.last_name}</span>
-                                </div>
-                                <div>
-                                    <span className="block text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Email</span>
+
+                <RecordStateAlert show={isArchived} variant="archived">
+                    This user account has been archived and soft-deleted. Access is revoked and the account is hidden from standard directory listings. Use "Restore Account" above to re-enable.
+                </RecordStateAlert>
+
+                <RecordStateAlert show={!isArchived && !isActive} variant="inactive">
+                    This account is currently deactivated. System access is revoked across all platforms. Profile details remain visible for auditing purposes.
+                </RecordStateAlert>
+
+                <div className="grid gap-8 lg:grid-cols-12">
+                    {/* --- Left Column: Overview & Security --- */}
+                    <aside className="lg:col-span-4 space-y-6">
+                        <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
+                            <div className="bg-stone-50/50 border-b border-stone-100 px-8 py-8 flex flex-col items-center text-center">
+                                <Avatar user={uData} size="xl" className="ring-4 ring-white shadow-xl" />
+                                <h2 className="mt-6 text-xl font-black text-stone-900 tracking-tight flex flex-col items-center gap-2">
+                                    {uData.first_name} {uData.last_name}
                                     <div className="flex items-center gap-2">
-                                        <Mail size={12} className="text-stone-400" />
-                                        <span className="text-sm font-medium text-stone-700">{uData?.email || "—"}</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <span className="block text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Username</span>
-                                    <span className="font-mono text-sm font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">@{uData?.username}</span>
-                                </div>
-                                <div>
-                                    <span className="block text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Resource ID</span>
-                                    <ResourceIdCell id={userId} type="user" />
-                                </div>
-                            </div>
-                        </FormSection>
-                        <FormSection title="Role & Status" icon={Shield} className="hs-glass-effect">
-                            <div className="grid gap-8 sm:grid-cols-2">
-                                <div>
-                                    <span className="block text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Role</span>
-                                    <StatusBadge>{uData?.role?.role_name}</StatusBadge>
-                                </div>
-                                <div>
-                                    <span className="block text-[9px] font-black uppercase tracking-widest text-stone-400 mb-1">Account Status</span>
-                                    <div className="flex items-center gap-2">
-                                        <StatusBadge>{uData?.is_active ? "active" : "inactive"}</StatusBadge>
-                                        {isSelf && (
-                                            <span className="text-[10px] font-bold text-stone-400 uppercase italic">Active Session</span>
+                                        <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">@{uData?.username}</span>
+                                        {uData.oauth_provider === 'google' && (
+                                            <div className="flex items-center gap-1 bg-blue-50 text-blue-600 text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border border-blue-100" title="Identity verified via Google OAuth">
+                                                <ShieldCheck size={10} />
+                                                Verified
+                                            </div>
                                         )}
                                     </div>
+                                </h2>
+                                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                                    <StatusBadge size="sm">{uData?.role?.role_name}</StatusBadge>
+                                    <StatusBadge variant={isArchived ? "neutral" : (isActive ? "success" : "neutral")} size="sm">
+                                        {isArchived ? "archived" : (isActive ? "active" : "inactive")}
+                                    </StatusBadge>
                                 </div>
                             </div>
-                        </FormSection>
-                    </div>
-                    <div className="space-y-6">
-                        <Card className="bg-stone-50 border-stone-200 p-6 hs-glass-effect">
-                            <h3 className="hs-strip-title text-stone-400 uppercase tracking-widest font-black text-[9px] mb-4">Activity Summary</h3>
-                            <div className="space-y-4">
-                                <div className="flex items-start gap-3">
-                                    <Activity size={16} className="text-teal-600 mt-0.5" />
-                                    <div>
-                                        <span className="block text-xs font-black text-stone-900">Total Actions</span>
-                                        <span className="block text-xl font-mono font-black text-stone-900 tabular-nums mt-0.5">
-                                            {auditMeta?.total || 0}
-                                        </span>
-                                        <span className="block text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-1">Logged Events</span>
-                                    </div>
+                            <div className="flex justify-center border-b border-stone-100 bg-stone-50/30 px-4 py-3">
+                                <span className="text-xs font-bold uppercase tracking-widest text-stone-400">Quick Profile</span>
+                            </div>
+                            <div className="p-8 space-y-2">
+                                <MetricItem
+                                    label="Total Actions"
+                                    value={auditMeta?.total || 0}
+                                    icon={Activity}
+                                />
+                                <MetricItem
+                                    label="Member Since"
+                                    value={formatDateString(uData?.created_at)}
+                                    icon={Calendar}
+                                />
+                                <MetricItem
+                                    label="Last Access"
+                                    value={uData?.last_login_at ? formatTimestamp(uData.last_login_at) : "NEVER"}
+                                    icon={ShieldCheck}
+                                />
+                            </div>
+                        </Card>
+
+                        <Card className="bg-stone-50 border-stone-200 p-8 hs-glass-effect relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                <Shield size={80} className="text-teal-900" />
+                            </div>
+                            <h3 className="hs-strip-title text-stone-400 uppercase tracking-widest font-black text-[9px] mb-4">Account Security</h3>
+                            <div className="space-y-4 relative z-10">
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-stone-500 font-medium">Auth Method</span>
+                                    <span className="font-bold text-stone-900 uppercase tracking-widest text-[10px]">
+                                        {uData.oauth_provider ? `OAuth (${uData.oauth_provider})` : "Local Password"}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-stone-500 font-medium">Verification</span>
+                                    <span className={`font-bold ${uData.oauth_provider ? 'text-teal-600' : 'text-amber-600'} uppercase tracking-widest text-[10px]`}>
+                                        {uData.oauth_provider ? "Provider Verified" : "Pending Manual"}
+                                    </span>
                                 </div>
                             </div>
                         </Card>
-                    </div>
-                </div>
-                <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm mt-8 hs-glass-effect">
+                    </aside>
+
+                    {/* --- Right Column: Details & Logs --- */}
+                    <main className="lg:col-span-8 space-y-8">
+                        <FormSection title="Identity & Permissions" icon={User} className="hs-glass-effect">
+                            <div className="grid gap-x-12 gap-y-2 md:grid-cols-2">
+                                <DetailRow label="First Name" value={uData?.first_name} icon={User} />
+                                <DetailRow label="Last Name" value={uData?.last_name} icon={User} />
+                                <DetailRow label="Email Address" value={uData?.email} icon={Mail} />
+                                <DetailRow label="Username" value={`@${uData?.username}`} icon={Shield} mono />
+                                <div className="md:col-span-2">
+                                    <DetailRow label="System Resource ID" value={userId} icon={ShieldCheck} mono />
+                                </div>
+                            </div>
+                        </FormSection>
+                        <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm mt-0 hs-glass-effect">
                     <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                         <div className="flex items-center gap-3">
                             <div className="flex size-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-100/50">
@@ -209,7 +325,16 @@ export default function UserDetailPage() {
                                         </div>
                                     </td>
                                     <td className="py-5 text-center">
-                                        <StatusBadge size="sm">{log.action}</StatusBadge>
+                                        <StatusBadge
+                                            size="sm"
+                                            variant={
+                                                log.action === 'created' || log.action === 'restored' ? 'success' :
+                                                    log.action === 'deleted' || log.action === 'archived' || log.action === 'deactivated' ? 'danger' :
+                                                        log.action === 'updated' ? 'warning' : 'neutral'
+                                            }
+                                        >
+                                            {log.action}
+                                        </StatusBadge>
                                     </td>
                                     <td className="pr-8 py-5">
                                         <div className="flex flex-col items-center gap-1.5">
@@ -245,7 +370,47 @@ export default function UserDetailPage() {
                         disabled={loading || isSyncingActions}
                         className="hs-glass-effect"
                     />
-                </Card>
+                        </Card>
+                    </main>
+                </div>
+
+                <ConfirmationDialog
+                    open={isDeactivating}
+                    title="Confirm Account Deactivation"
+                    description={`You are about to revoke all system access for @${uData?.username}. This will invalidate all active sessions immediately.`}
+                    confirmLabel="CONFIRM DEACTIVATION"
+                    isDanger
+                    isLoading={busyAction === "deactivate"}
+                    onConfirm={handleDeactivate}
+                    onCancel={() => {
+                        setIsDeactivating(false);
+                        setConfirmInput("");
+                    }}
+                >
+                    <div className="space-y-4">
+                        <p className="text-xs font-medium text-stone-500">
+                            Type the username <span className="font-bold text-rose-600">{uData?.username}</span> below to confirm.
+                        </p>
+                        <Input
+                            autoFocus
+                            value={confirmInput}
+                            onChange={(e) => setConfirmInput(e.target.value)}
+                            placeholder={uData?.username}
+                            className="!h-11 border-stone-200 focus:border-rose-500/50"
+                        />
+                    </div>
+                </ConfirmationDialog>
+
+                <ConfirmationDialog
+                    open={isArchiving}
+                    title="Confirm Account Archival"
+                    description={`You are about to archive @${uData?.username}. Archived users are hidden from the directory and cannot access the system until restored.`}
+                    confirmLabel="ARCHIVE ACCOUNT"
+                    isDanger
+                    isLoading={busyAction === "archive"}
+                    onConfirm={handleArchive}
+                    onCancel={() => setIsArchiving(false)}
+                />
             </div>
             <SideSheetOverlay
                 isOpen={!!editingUser}
