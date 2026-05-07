@@ -9,6 +9,7 @@ use App\Enums\ContractType;
 use App\Enums\RoomType;
 use App\Enums\TenantStatus;
 use App\Models\BedSpace;
+use App\Models\Billing;
 use App\Models\Contract;
 use App\Models\MeterReading;
 use App\Models\Room;
@@ -135,7 +136,11 @@ class ContractService
         }
 
         if (! empty($filters['status'])) {
-            $query->where('status', $filters['status']);
+            if ($filters['status'] === 'archived') {
+                $query->onlyTrashed();
+            } else {
+                $query->where('status', $filters['status']);
+            }
         }
 
         if (! empty($filters['q'])) {
@@ -160,28 +165,29 @@ class ContractService
             });
         }
 
-        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortBy = $filters['sort_by'] ?? 'id';
         $sortDir = $filters['sort_dir'] ?? 'desc';
 
-        if ($sortByRaw === 'id') {
-            $query->orderBy('contracts.contract_id', $sortDir);
-        } elseif ($sortByRaw === 'tenant') {
-            $query->leftJoin('tenants', 'contracts.tenant_id', '=', 'tenants.tenant_id')
-                  ->orderBy('tenants.last_name', $sortDir)
-                  ->orderBy('tenants.first_name', $sortDir)
-                  ->orderBy('contracts.contract_id', $sortDir)
-                  ->select('contracts.*');
-        } elseif ($sortByRaw === 'start_date') {
-            $query->orderBy('start_date', $sortDir)->orderBy('contracts.contract_id', $sortDir);
-        } elseif ($sortByRaw === 'end_date') {
-            $query->orderBy('expected_move_out_date', $sortDir)->orderBy('contracts.contract_id', $sortDir);
-        } elseif ($sortByRaw === 'rate') {
-            $query->orderBy('monthly_rate', $sortDir)->orderBy('contracts.contract_id', $sortDir);
-        } elseif ($sortByRaw === 'status') {
-            $query->orderBy('status', $sortDir)->orderBy('contracts.contract_id', $sortDir);
+        // Optimized Registry Pattern: Use scopes for calculated/related fields
+        $query->withTenantName()->withRoomContext();
+
+        $sortMap = [
+            'id'         => 'contracts.contract_id',
+            'tenant'     => 'tenant_name',
+            'start_date' => 'move_in_date',
+            'end_date'   => 'expected_move_out_date',
+            'rate'       => 'monthly_rate',
+            'status'     => 'status',
+        ];
+
+        if (isset($sortMap[$sortBy])) {
+            $query->orderBy($sortMap[$sortBy], $sortDir);
         } else {
             $query->orderByDesc('contracts.contract_id');
         }
+
+        // Secondary tie-breaker
+        $query->orderByDesc('contracts.contract_id');
 
         $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
@@ -204,6 +210,7 @@ class ContractService
             'creator',
             'latestBilling',
         ])
+            ->withTrashed()
             ->find($id);
 
         if ($contract) {
@@ -405,11 +412,13 @@ class ContractService
             ]);
         }
 
-        $paymentCount = $contract->payments()->whereNull('voided_at')->count();
-
-        if ($paymentCount > 0) {
+        // Rule BR-CON-012: Voiding is only for pure correction. 
+        // If any ACTIVE payments exist, it must be Archived/Terminated instead.
+        $hasActivePayments = $contract->payments()->whereNull('voided_at')->exists();
+        
+        if ($hasActivePayments) {
             throw ValidationException::withMessages([
-                'contract' => ['This contract has recorded payments and cannot be voided.'],
+                'contract' => ['This contract has active payments and cannot be voided. Please void the payments first or use Archive/Terminate.'],
             ]);
         }
 
@@ -422,11 +431,22 @@ class ContractService
 
         return self::runWriteWorkflow(
             actorId: $actor->user_id,
-            action: 'VOID_CONTRACT',
+            action: 'VOID',
             payload: ['contract_id' => $contract->contract_id, 'void_reason_fact' => $reason],
             operation: function () use ($contract, $reason): Contract {
-                // Cascade voiding to all unpaid billings
-                $contract->billings()->where('status', BillingStatus::UNPAID)->delete();
+                // Forensic cleanup of associated billings
+                $contract->billings()->get()->each(function (Billing $billing) use ($contract) {
+                    // Forensic Re-anchoring: Decouple payments from billing but anchor them 
+                    // to the contract to satisfy the 'chk_pay_target' DB constraint.
+                    $billing->payments()->update([
+                        'billing_id' => null,
+                        'contract_id' => $contract->contract_id
+                    ]);
+                    
+                    // Child-First deletion for database integrity
+                    $billing->lineItems()->delete();
+                    $billing->delete();
+                });
 
                 // Release the bed lock immediately (triggering BedSpaceObserver)
                 if ($contract->bedSpace) {

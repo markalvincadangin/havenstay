@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
-import { ShieldCheck } from "lucide-react";
+import { CheckCircle2, Wallet, ArrowRight, ReceiptText, ShieldCheck } from "lucide-react";
 import { apiRequest, fetcher } from "@/lib/api";
 import useSWR from "swr";
 import { canManageContracts } from "@/lib/auth";
@@ -22,6 +22,10 @@ import { SkeletonDetailPage } from "@/components/ui/Skeleton";
 import { useAuth } from "@/context/AuthContext";
 import { useToasts } from "@/context/ToastContext";
 import { WizardFrame } from "@/components/ui/WizardFrame";
+import Button from "@/components/ui/Button";
+import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
+import PaymentWizard from "@/features/payments/components/PaymentWizard";
+
 export default function NewContractPage() {
    const router = useRouter();
    const searchParams = useSearchParams();
@@ -30,7 +34,11 @@ export default function NewContractPage() {
    const { showToast } = useToasts();
    const [bedSpaceOptions, setBedSpaceOptions] = useState([]);
    const [currentStepIndex, setCurrentStepIndex] = useState(0);
-   const totalSteps = 3;
+   const [createdContract, setCreatedContract] = useState(null);
+   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
+   const [isFullySettled, setIsFullySettled] = useState(false);
+   const totalSteps = 3; // Steps 0, 1, 2 are navigational. Step 3 is Success/Settlement.
+
    const {
       register,
       control,
@@ -57,16 +65,11 @@ export default function NewContractPage() {
 
    const { execute: submitContract, isPending: isActionPending } = useAction("/api/contracts", {
       method: "POST",
-      successMessage: "Contract registered and initial billing generated.",
+      successMessage: "Contract record created successfully.",
       onSuccess: (response) => {
-         const initialBillingId = response?.data?.latest_billing?.billing_id || response?.latest_billing?.billing_id;
-         if (initialBillingId) {
-            router.push(`/billing/${initialBillingId}`);
-         } else if (response?.data?.contract_id) {
-            router.push(`/contracts/${response.data.contract_id}`);
-         } else {
-            router.push("/contracts");
-         }
+         // apiRequest already unwraps the Laravel 'data' envelope
+         setCreatedContract(response);
+         setCurrentStepIndex(3); // Transition to Settlement Step
       },
       onError: (err) => {
          applyServerFieldErrors(err, setError, { showToast });
@@ -266,7 +269,8 @@ export default function NewContractPage() {
    const wizardSteps = [
       { label: "Room Assignment" },
       { label: "Financial Terms" },
-      { label: "Final Review" }
+      { label: "Final Review" },
+      { label: "Initial Settlement" }
    ];
    return (
       <StandardPage
@@ -317,6 +321,8 @@ export default function NewContractPage() {
             onSubmit={onSubmit}
             submitLabel="Register Contract"
             isSubmitting={isActionPending}
+            hideNavigation={currentStepIndex === 3 || !!createdContract}
+            isLastStepOverride={currentStepIndex === 2}
          >
             <div className="space-y-6">
                {currentStepIndex === 0 && (
@@ -543,8 +549,127 @@ export default function NewContractPage() {
                      </div>
                   </div>
                )}
+
+               {currentStepIndex === 3 && (
+                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                   {!createdContract ? (
+                      <div className="flex flex-col items-center justify-center py-20 text-stone-400">
+                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-300 mb-4" />
+                         <p className="text-[10px] font-black uppercase tracking-[0.2em]">Finalizing Agreement...</p>
+                      </div>
+                   ) : (
+                    <>
+                    <div className="flex flex-col items-center text-center space-y-4 py-4">
+                      <div className="flex size-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-500 shadow-sm border border-emerald-100">
+                        <CheckCircle2 size={32} strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black text-stone-900">Registration Complete</h3>
+                        <p className="text-xs font-medium text-stone-500 mt-1 uppercase tracking-widest">Contract #{String(createdContract.contract_id).padStart(6, '0')}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div className="rounded-2xl border border-stone-100 bg-stone-50/50 p-6 space-y-4">
+                        <div className="flex items-center gap-2 text-stone-400">
+                          <ReceiptText size={16} />
+                          <span className="text-[10px] font-black uppercase tracking-widest">Ledger Balance</span>
+                        </div>
+                        <div className="space-y-3">
+                           <div className="flex justify-between items-center text-xs">
+                             <span className="font-medium text-stone-500">Security Deposit</span>
+                             <div className="flex items-center gap-2">
+                               <CurrencyDisplay amount={createdContract?.deposit_amount || 0} className="font-bold text-stone-600" />
+                               {isFullySettled ? <CheckCircle2 size={12} className="text-emerald-500" /> : <div className="size-2 rounded-full bg-amber-400 animate-pulse" />}
+                             </div>
+                           </div>
+                           <div className="flex justify-between items-center text-xs">
+                             <span className="font-medium text-stone-500">First Month Rent</span>
+                             <div className="flex items-center gap-2">
+                               <CurrencyDisplay amount={createdContract?.monthly_rate || 0} className="font-bold text-stone-600" />
+                               {isFullySettled ? <CheckCircle2 size={12} className="text-emerald-500" /> : <div className="size-2 rounded-full bg-amber-400 animate-pulse" />}
+                             </div>
+                           </div>
+                           <div className="pt-3 border-t border-stone-200/50 flex justify-between items-baseline">
+                             <span className="text-[10px] font-black uppercase text-rose-500">Total Settlement Required</span>
+                             <CurrencyDisplay 
+                               amount={isFullySettled ? 0 : Number(createdContract?.monthly_rate || 0) + Number(createdContract?.deposit_amount || 0)} 
+                               className="text-2xl font-black text-stone-900" 
+                             />
+                           </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col justify-center space-y-3">
+                         {!isFullySettled ? (
+                           <Button
+                             variant="primary"
+                             className="!h-14 w-full rounded-xl text-xs font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/10 active:scale-95 transition-all"
+                             onClick={() => setShowPaymentSheet(true)}
+                           >
+                             <Wallet className="mr-2" size={16} />
+                             Settle Full Amount
+                           </Button>
+                         ) : (
+                           <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700">
+                             <CheckCircle2 size={20} />
+                             <span className="text-xs font-black uppercase tracking-widest">Onboarding Fully Settled</span>
+                           </div>
+                         )}
+                         
+                         <Button
+                           variant="secondary"
+                           className="!h-14 w-full rounded-xl text-xs font-black uppercase tracking-widest border-stone-200 text-stone-600 hover:bg-stone-100 active:scale-95 transition-all"
+                           onClick={() => router.push(`/contracts/${createdContract.contract_id}`)}
+                           disabled={!createdContract?.contract_id}
+                         >
+                           View Contract Details
+                           <ArrowRight className="ml-2" size={16} />
+                         </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-teal-600/10 bg-teal-50/30 p-6 flex items-start gap-4 hs-glass-effect">
+                       <ShieldCheck className="text-teal-600 mt-1" size={20} />
+                       <div className="space-y-1">
+                          <p className="text-xs font-bold text-teal-900">Professional Onboarding Tip</p>
+                          <p className="text-[10px] font-medium text-teal-700 leading-relaxed">
+                            Collecting the security deposit and first month's rent upfront ensures the lease is legally enforceable and protects the property from occupancy risks.
+                          </p>
+                       </div>
+                    </div>
+                    </>
+                   )}
+                 </div>
+               )}
             </div>
          </WizardFrame>
+
+         <SideSheetOverlay
+            isOpen={showPaymentSheet}
+            onClose={() => setShowPaymentSheet(false)}
+            title="Record Initial Payment"
+            size="lg"
+         >
+            <div className="p-6 pt-0">
+              <PaymentWizard 
+                isInitialSettlement={true}
+                initialValues={{
+                  contract_id: createdContract?.contract_id,
+                  billing_id: createdContract?.latest_billing?.billing_id,
+                  rent_amount: createdContract?.monthly_rate,
+                  deposit_amount: createdContract?.deposit_amount,
+                  amount_paid: Number(createdContract?.deposit_amount || 0) + Number(createdContract?.monthly_rate || 0),
+                }}
+                onSuccess={() => {
+                  setIsFullySettled(true);
+                  setShowPaymentSheet(false);
+                  showToast("Full onboarding settlement recorded successfully.", "success");
+                }}
+                onCancel={() => setShowPaymentSheet(false)}
+              />
+            </div>
+         </SideSheetOverlay>
       </StandardPage>
    );
 }

@@ -56,6 +56,7 @@ export default function TenantDetailsPage() {
   const loading = !tenant && !tenantError;
   const [actionError, setActionError] = useState("");
   const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [editingTenant, setEditingTenant] = useState(null);
   const fullName = tenant ? formatTenantDirectoryName(tenant) : "Profile";
@@ -68,12 +69,28 @@ export default function TenantDetailsPage() {
     setBusyAction("archive");
     try {
       await apiRequest(`/api/tenants/${tenantId}/archive`, { method: "POST" });
-      showToast("Tenant record archived successfully.", "success");
+      showToast(`${fullName} archived successfully.`, "success");
       setShowArchiveModal(false);
       router.push("/tenants");
     } catch (error) {
       setActionError(flattenApiErrors(error));
       setShowArchiveModal(false);
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const handleRestoreTenant = async () => {
+    if (!tenant) return;
+    setActionError("");
+    setBusyAction("restore");
+    try {
+      await apiRequest(`/api/tenants/${tenantId}/restore`, { method: "POST" });
+      showToast(`${fullName} restored successfully.`, "success");
+      setShowRestoreModal(false);
+      await mutateTenant();
+    } catch (error) {
+      setActionError(flattenApiErrors(error));
+      setShowRestoreModal(false);
     } finally {
       setBusyAction("");
     }
@@ -131,7 +148,7 @@ export default function TenantDetailsPage() {
                 hasActiveContract={hasActiveContract}
                 busyAction={busyAction}
                 onDeactivate={() => runLifecycleAction("deactivate", `/api/tenants/${tenantId}/deactivate`)}
-                onRestore={() => runLifecycleAction("restore", `/api/tenants/${tenantId}/restore`)}
+                onRestore={() => setShowRestoreModal(true)}
                 onArchive={() => setShowArchiveModal(true)}
               />
             </div>
@@ -148,6 +165,15 @@ export default function TenantDetailsPage() {
         isLoading={busyAction === "archive"}
         onConfirm={handleArchiveTenant}
         onCancel={() => busyAction !== "archive" && setShowArchiveModal(false)}
+      />
+      <ConfirmationDialog
+        open={showRestoreModal}
+        title="Restore Tenant Record"
+        description={`You are about to restore ${fullName} from archives. This will allow the tenant to be assigned to new contracts and appear in active directories.`}
+        confirmLabel="Restore Tenant"
+        isLoading={busyAction === "restore"}
+        onConfirm={handleRestoreTenant}
+        onCancel={() => busyAction !== "restore" && setShowRestoreModal(false)}
       />
       {tenant ? (
         <div className="space-y-6">

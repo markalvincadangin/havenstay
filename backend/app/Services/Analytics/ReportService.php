@@ -2,6 +2,7 @@
 
 namespace App\Services\Analytics;
 
+use App\Enums\AuditAction;
 use App\Models\Contract;
 use App\Services\Concerns\HasReportingFilters;
 use App\Support\Financials;
@@ -182,26 +183,28 @@ class ReportService
      */
     public static function tenantSummary(): array
     {
-        $now = now();
-        $startOfMonth = $now->copy()->startOfMonth()->toDateTimeString();
+        return \Cache::remember('reports:tenant_summary', 300, function () {
+            $now = now();
+            $startOfMonth = $now->copy()->startOfMonth()->toDateTimeString();
 
-        return [
-            'total_records' => DB::table('tenants')->count(),
-            'active_tenants' => DB::table('tenants')->where('status', 'active')->count(),
-            'new_onboarded_mtd' => DB::table('tenants')
-                ->where('created_at', '>=', $startOfMonth)
-                ->count(),
-            'pending_move_outs' => DB::table('contracts')
-                ->where('status', 'active')
-                ->whereNull('deleted_at')
-                ->whereNotNull('expected_move_out_date')
-                ->whereBetween('expected_move_out_date', [
-                    $now->toDateTimeString(),
-                    $now->copy()->addDays(30)->toDateTimeString(),
-                ])
-                ->count(),
-            'archived_count' => DB::table('tenants')->whereNotNull('deleted_at')->count(),
-        ];
+            return [
+                'total_records' => DB::table('tenants')->count(),
+                'active_tenants' => DB::table('tenants')->where('status', 'active')->count(),
+                'new_onboarded_mtd' => DB::table('tenants')
+                    ->where('created_at', '>=', $startOfMonth)
+                    ->count(),
+                'pending_move_outs' => DB::table('contracts')
+                    ->where('status', 'active')
+                    ->whereNull('deleted_at')
+                    ->whereNotNull('expected_move_out_date')
+                    ->whereBetween('expected_move_out_date', [
+                        $now->toDateTimeString(),
+                        $now->copy()->addDays(30)->toDateTimeString(),
+                    ])
+                    ->count(),
+                'archived_count' => DB::table('tenants')->whereNotNull('deleted_at')->count(),
+            ];
+        });
     }
 
     /**
@@ -597,22 +600,42 @@ class ReportService
      */
     public static function securityPulse(): array
     {
-        $last24h = now()->subDay()->toDateTimeString();
+        return \Cache::remember('reports:security_pulse', 300, function () {
+            $last24h = now()->subDay()->toDateTimeString();
 
-        return [
-            'total_events_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->count(),
-            'sensitive_mutations_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->whereIn('target_table', ['payments', 'users', 'billing_line_items'])
-                ->count(),
-            'access_denied_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->where('action', 'access_denied')
-                ->count(),
-            'audit_integrity' => 'Verified',
-        ];
+            $sensitiveMutations = [
+                AuditAction::CREATE->value,
+                AuditAction::UPDATE->value,
+                AuditAction::DELETE->value,
+                AuditAction::SOFT_DELETE->value,
+                AuditAction::RESTORE->value,
+                AuditAction::VOID->value,
+            ];
+
+            $accessDenialActions = [
+                AuditAction::FAILED_LOGIN->value,
+                AuditAction::ACCESS_DENIED->value,
+            ];
+
+            return [
+                'total_events_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->count(),
+
+                'sensitive_mutations_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->whereIn('target_table', ['payments', 'users', 'billing_line_items'])
+                    ->whereIn('action', $sensitiveMutations)
+                    ->count(),
+
+                'access_denied_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->whereIn('action', $accessDenialActions)
+                    ->count(),
+
+                'audit_integrity' => 'Verified',
+            ];
+        });
     }
 
     /**
@@ -620,23 +643,24 @@ class ReportService
      */
     public static function meterSummary(): array
     {
-        $totalMeters = DB::table('meters')->count();
+        return \Cache::remember('reports:meter_summary', 300, function () {
+            $totalMeters = DB::table('meters')->count();
 
-        // Coverage = Meters with readings in the current billing cycle (this month)
-        $monthStart = now()->startOfMonth()->toDateTimeString();
-        $coveredMeters = DB::table('meter_readings')
-            ->where('reading_date', '>=', $monthStart)
-            ->distinct('meter_id')
-            ->count();
+            $monthStart = now()->startOfMonth()->toDateTimeString();
+            $coveredMeters = DB::table('meter_readings')
+                ->where('reading_date', '>=', $monthStart)
+                ->distinct('meter_id')
+                ->count();
 
-        return [
-            'total_meters' => $totalMeters,
-            'coverage_pct' => $totalMeters > 0 ? round(($coveredMeters / $totalMeters) * 100, 1) : 0,
-            'anomalous_spikes' => 0, // Anomaly detection pending baseline
-            'total_pending' => DB::table('meters')
-                ->where('status', 'active')
-                ->count() - $coveredMeters,
-        ];
+            return [
+                'total_meters' => $totalMeters,
+                'coverage_pct' => $totalMeters > 0 ? round(($coveredMeters / $totalMeters) * 100, 1) : 0,
+                'anomalous_spikes' => 0,
+                'total_pending' => DB::table('meters')
+                    ->where('status', 'active')
+                    ->count() - $coveredMeters,
+            ];
+        });
     }
 
     /**
@@ -644,21 +668,23 @@ class ReportService
      */
     public static function userSummary(): array
     {
-        $last24h = now()->subDay()->toDateTimeString();
+        return \Cache::remember('reports:user_summary', 300, function () {
+            $last24h = now()->subDay()->toDateTimeString();
 
-        return [
-            'staff_count' => DB::table('users')->whereNull('deleted_at')->count(),
-            'active_last_24h' => DB::table('audit_logs')
-                ->where('changed_at', '>=', $last24h)
-                ->distinct('changed_by')
-                ->count(),
-            'admin_count' => DB::table('users')
-                ->join('roles', 'users.role_id', '=', 'roles.role_id')
-                ->where('roles.role_name', 'admin')
-                ->whereNull('users.deleted_at')
-                ->count(),
-            'hygiene_count' => DB::table('users')->whereNotNull('deleted_at')->count(),
-        ];
+            return [
+                'staff_count' => DB::table('users')->whereNull('deleted_at')->count(),
+                'active_last_24h' => DB::table('audit_logs')
+                    ->where('changed_at', '>=', $last24h)
+                    ->distinct('changed_by')
+                    ->count(),
+                'admin_count' => DB::table('users')
+                    ->join('roles', 'users.role_id', '=', 'roles.role_id')
+                    ->where('roles.role_name', 'admin')
+                    ->whereNull('users.deleted_at')
+                    ->count(),
+                'hygiene_count' => DB::table('users')->whereNotNull('deleted_at')->count(),
+            ];
+        });
     }
 
     /**

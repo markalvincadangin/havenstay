@@ -26,7 +26,7 @@ export default function NewTenantPage() {
    const { showToast } = useToasts();
 
    const [currentStepIndex, setCurrentStepIndex] = useState(0);
-   const [scannedDuplicates, setScannedDuplicates] = useState({ email: null, phone: null, name: null });
+   const [existenceMatch, setExistenceMatch] = useState(null);
    const [isScanning, setIsScanning] = useState(false);
 
    const {
@@ -50,76 +50,58 @@ export default function NewTenantPage() {
 
    useUnsavedChangesWarning(isDirty && !isSubmitting);
 
-   const checkUniqueness = async (field, value) => {
-      if (!value || value.length < 3) return null;
+   const performExistenceScan = async () => {
+      const vals = getValues();
+      const hasMinData = (vals.first_name && vals.last_name) || vals.email || vals.contact_number;
+      if (!hasMinData) {
+         setExistenceMatch(null);
+         return null;
+      }
+
       setIsScanning(true);
       try {
-         const results = await apiRequest(`/api/tenants/search?q=${encodeURIComponent(value.trim())}`);
-         const rows = results?.data || results || [];
-
-         if (field === 'email') {
-            const match = rows.find(t => t.email?.toLowerCase() === value.trim().toLowerCase());
-            const matchId = match ? match.tenant_id : null;
-            setScannedDuplicates(prev => ({ ...prev, email: matchId }));
-            return matchId;
-         } else if (field === 'contact_number') {
-            const match = rows.find(t => t.contact_number === value.trim());
-            const matchId = match ? match.tenant_id : null;
-            setScannedDuplicates(prev => ({ ...prev, phone: matchId }));
-            return matchId;
-         }
-         return null;
+         const result = await apiRequest("/api/tenants/existence-check", {
+            method: "POST",
+            body: JSON.stringify({
+               first_name: vals.first_name,
+               last_name: vals.last_name,
+               email: vals.email,
+               contact_number: vals.contact_number
+            })
+         });
+         const match = result?.data || result;
+         setExistenceMatch(match?.exists ? match : null);
+         return match;
       } catch (e) {
-         console.error("Scanning failed", e);
          return null;
       } finally {
          setIsScanning(false);
       }
    };
 
-   const checkNameCollision = async () => {
-      const { first_name, last_name } = getValues();
-      if (!first_name || !last_name) {
-         setScannedDuplicates(prev => ({ ...prev, name: null }));
-         return null;
-      }
-
-      setIsScanning(true);
+   const handleRestoreTenant = async (id) => {
       try {
-         const fullName = `${first_name.trim()} ${last_name.trim()}`;
-         const results = await apiRequest(`/api/tenants/search?q=${encodeURIComponent(fullName)}`);
-         const rows = results?.data || results || [];
-         const match = rows.find(t =>
-            t.first_name?.toLowerCase().trim() === first_name.trim().toLowerCase() &&
-            t.last_name?.toLowerCase().trim() === last_name.trim().toLowerCase()
-         );
-         const matchId = match ? match.tenant_id : null;
-         setScannedDuplicates(prev => ({ ...prev, name: matchId }));
-         return matchId;
-      } catch (e) {
-         return null;
-      } finally {
-         setIsScanning(false);
+         await apiRequest(`/api/tenants/${id}/restore`, { method: "POST" });
+         showToast("Tenant profile restored successfully.", "success");
+         router.push(`/tenants/${id}`);
+      } catch (error) {
+         showToast("Failed to restore tenant profile.", "error");
       }
    };
 
    const validateStep = async (index) => {
       if (index === 0) {
          const ok = await trigger(["first_name", "last_name", "address"]);
-         if (ok) {
-            await checkNameCollision();
-         }
+         if (ok) await performExistenceScan();
          return ok;
       }
       if (index === 1) {
          const ok = await trigger(["contact_number", "email"]);
          if (ok) {
-            const vals = getValues();
-            const emailDup = await checkUniqueness('email', vals.email);
-            await checkUniqueness('contact_number', vals.contact_number);
-            
-            if (emailDup) return false;
-            return ok;
+            const match = await performExistenceScan();
+            if (match?.exists && (match.match_type === 'email' || match.match_type === 'phone')) {
+               return false;
+            }
          }
          return ok;
       }
@@ -131,13 +113,14 @@ export default function NewTenantPage() {
          return !!(errors.first_name || errors.last_name || errors.address);
       }
       if (currentStepIndex === 1) {
-         return !!(errors.email || errors.contact_number || scannedDuplicates.email);
+         const hardMatch = existenceMatch?.exists && (existenceMatch.match_type === 'email' || existenceMatch.match_type === 'phone');
+         return !!(errors.email || errors.contact_number || hardMatch);
       }
       if (currentStepIndex === 2) {
          return !!(errors.emergency_contact_name || errors.emergency_contact_number);
       }
       return false;
-   }, [currentStepIndex, errors, scannedDuplicates.email]);
+   }, [currentStepIndex, errors, existenceMatch]);
 
    const onNext = async () => {
       const isValid = await validateStep(currentStepIndex);
@@ -243,7 +226,6 @@ export default function NewTenantPage() {
                            label="First Name"
                            required
                            error={errors.first_name?.message}
-                           warning={scannedDuplicates.name ? "A tenant with this name already exists in the registry." : null}
                         >
                            <Input
                               autoFocus
@@ -252,7 +234,7 @@ export default function NewTenantPage() {
                               placeholder="Juan"
                               className="!h-11 border-stone-200"
                               {...register("first_name", { required: "First name is required." })}
-                              onBlur={checkNameCollision}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
                         <Field label="Last Name" required error={errors.last_name?.message}>
@@ -262,10 +244,39 @@ export default function NewTenantPage() {
                               placeholder="Dela Cruz"
                               className="!h-11 border-stone-200"
                               {...register("last_name", { required: "Last name is required." })}
-                              onBlur={checkNameCollision}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
                      </div>
+
+                     {existenceMatch?.match_type === 'name' && (
+                        <Alert variant="warning" title="Potential Duplicate Detected">
+                           <p className="text-sm">
+                              A profile with the name <strong>{getValues().first_name} {getValues().last_name}</strong> already exists in the registry.
+                              If this is the same person, consider using the existing profile to avoid data fragmentation.
+                           </p>
+                           <div className="mt-3 flex gap-3">
+                              <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => router.push(`/tenants/${existenceMatch.tenant_id}`)}
+                                 className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                              >
+                                 View Profile
+                              </Button>
+                              {existenceMatch.status === 'archived' && (
+                                 <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => handleRestoreTenant(existenceMatch.tenant_id)}
+                                    className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                                 >
+                                    Restore Profile
+                                 </Button>
+                              )}
+                           </div>
+                        </Alert>
+                     )}
                      <Field label="Home Address" required error={errors.address?.message}>
                         <Textarea
                            rows={3}
@@ -284,29 +295,28 @@ export default function NewTenantPage() {
                         <Field
                            label="Contact Number"
                            required
-                           error={errors.contact_number?.message}
-                           warning={scannedDuplicates.phone ? "This number is already registered to another profile." : null}
+                           error={errors.contact_number?.message || (existenceMatch?.match_type === 'phone' ? "This number is already registered." : null)}
                         >
                            <Input
                               autoFocus
                               disabled={readOnly}
-                              hasError={Boolean(errors.contact_number)}
+                              hasError={Boolean(errors.contact_number || existenceMatch?.match_type === 'phone')}
                               className="!h-11 font-mono tabular-nums border-stone-200"
                               {...register("contact_number", {
                                  required: "Contact number is required.",
                                  pattern: { value: PH_MOBILE_REGEX, message: "Please enter a valid PH mobile number." }
                               })}
-                              onBlur={(e) => checkUniqueness('contact_number', e.target.value)}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
                         <Field
                            label="Email Address"
                            required
-                           error={errors.email?.message || (scannedDuplicates.email ? "This email is already associated with an active tenant." : null)}
+                           error={errors.email?.message || (existenceMatch?.match_type === 'email' ? "This email is already in use." : null)}
                         >
                            <Input
                               disabled={readOnly}
-                              hasError={Boolean(errors.email || scannedDuplicates.email)}
+                              hasError={Boolean(errors.email || existenceMatch?.match_type === 'email')}
                               type="email"
                               placeholder="juan@example.ph"
                               className="!h-11 border-stone-200 gap-x-6"
@@ -317,10 +327,39 @@ export default function NewTenantPage() {
                                     message: "Please enter a valid email address."
                                  }
                               })}
-                              onBlur={(e) => checkUniqueness('email', e.target.value)}
+                              onBlur={performExistenceScan}
                            />
                         </Field>
                      </div>
+
+                     {existenceMatch?.exists && (existenceMatch.match_type === 'email' || existenceMatch.match_type === 'phone') && (
+                        <Alert variant="error" title="Hard Duplicate Blocked">
+                           <p className="text-sm">
+                              The <strong>{existenceMatch.match_type === 'email' ? 'email address' : 'contact number'}</strong> provided is already associated with an {existenceMatch.status === 'archived' ? 'archived' : 'active'} profile.
+                              Duplicate tenant profiles are not allowed.
+                           </p>
+                           <div className="mt-3 flex gap-3">
+                              <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => router.push(`/tenants/${existenceMatch.tenant_id}`)}
+                                 className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                              >
+                                 View Existing Profile
+                              </Button>
+                              {existenceMatch.status === 'archived' && (
+                                 <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => handleRestoreTenant(existenceMatch.tenant_id)}
+                                    className="h-8 text-[10px] uppercase tracking-wider font-bold"
+                                 >
+                                    Restore & Edit Profile
+                                 </Button>
+                              )}
+                           </div>
+                        </Alert>
+                     )}
                   </div>
                )}
 

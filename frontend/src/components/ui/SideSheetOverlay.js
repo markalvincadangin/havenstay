@@ -10,8 +10,14 @@ import { createPortal } from "react-dom";
  * Provides a context-aware slide-over for rapid edits.
  * Complies with the new floating elevation spec (backdrop-blur).
  */
-export function SideSheetOverlay({ isOpen, onClose, title, children }) {
+export function SideSheetOverlay({ isOpen, onClose, title, children, size = "md" }) {
   const overlayRef = useRef(null);
+
+  const sizeClasses = {
+    md: "max-w-md",
+    lg: "max-w-2xl",
+    xl: "max-w-4xl"
+  };
 
   // Lock body scroll and handle Escape key
   useEffect(() => {
@@ -54,7 +60,7 @@ export function SideSheetOverlay({ isOpen, onClose, title, children }) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="h-full w-full max-w-md bg-white shadow-[0_0_40px_rgba(0,0,0,0.1)] flex flex-col pointer-events-auto border-l border-stone-200"
+            className={`h-full w-full ${sizeClasses[size] || sizeClasses.md} bg-white shadow-[0_0_40px_rgba(0,0,0,0.1)] flex flex-col pointer-events-auto border-l border-stone-200`}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-8 py-5 border-b border-stone-100 bg-white z-10 shrink-0 shadow-sm shadow-stone-900/5">

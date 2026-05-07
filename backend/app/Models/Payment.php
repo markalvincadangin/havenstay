@@ -4,10 +4,12 @@ namespace App\Models;
 
 use App\Enums\PaymentCategory;
 use App\Enums\PaymentMethod;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Payment Model
@@ -88,5 +90,23 @@ class Payment extends Model
     public function isVoided(): bool
     {
         return ! is_null($this->voided_at);
+    }
+
+    /**
+     * Scope: Resolve tenant name context whether linked to bill or contract.
+     */
+    public function scopeWithTenantContext(Builder $query): Builder
+    {
+        return $query->addSelect([
+            'tenant_name' => Tenant::select(DB::raw('CONCAT(last_name, ", ", first_name)'))
+                ->join('contracts', 'tenants.tenant_id', '=', 'contracts.tenant_id')
+                ->where(function($q) {
+                    $q->whereColumn('contracts.contract_id', 'payments.contract_id')
+                      ->orWhereColumn('contracts.contract_id', function($sub) {
+                          $sub->select('contract_id')->from('billing')->whereColumn('billing.billing_id', 'payments.billing_id');
+                      });
+                })
+                ->limit(1)
+        ]);
     }
 }

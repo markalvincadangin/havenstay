@@ -90,6 +90,7 @@ export const CONTRACT_STATUS_LABELS = {
   completed: "Completed",
   terminated: "Terminated",
   voided: "Voided",
+  archived: "Archived",
 };
 
 /**
@@ -134,6 +135,7 @@ export const AUDIT_ACTION_LABELS = {
   status_change: "Status Change",
   archive: "Archive",
   restore: "Restore",
+  soft_delete: "Soft Delete",
   // Uppercase keys for Direct Database Trigger Parity
   CREATE: "Create",
   UPDATE: "Update",
@@ -324,7 +326,7 @@ export function isContractActive(status) {
  */
 export function isContractEnded(status) {
   const key = normalizeEnumKey(status);
-  return ["completed", "terminated", "voided"].includes(key);
+  return ["completed", "terminated", "voided", "archived"].includes(key);
 }
 
 /**
@@ -341,7 +343,7 @@ export function isContractEditable(status) {
  */
 export function isContractFinanciallyLocked(status) {
   const key = normalizeEnumKey(status);
-  return ["active", "completed", "terminated", "voided"].includes(key);
+  return ["active", "completed", "terminated", "voided", "archived"].includes(key);
 }
 
 export function isPaymentMethodCash(method) {

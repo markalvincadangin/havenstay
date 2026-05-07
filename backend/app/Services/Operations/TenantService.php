@@ -155,22 +155,38 @@ class TenantService
     public static function summary(): array
     {
         return Cache::remember('tenants:summary', 300, function () {
-            return [
-                'total_records' => Tenant::count(),
-                'active_tenants' => Tenant::where('status', TenantStatus::ACTIVE)->count(),
-                'new_onboarded_mtd' => Tenant::whereBetween('created_at', [
+            // High-Performance Industry Pattern: Compute all aggregates in a single database pass.
+            $stats = DB::table('tenants')
+                ->selectRaw("
+                    COUNT(*) as total_records,
+                    SUM(CASE WHEN status = ? AND deleted_at IS NULL THEN 1 ELSE 0 END) as active_tenants,
+                    SUM(CASE WHEN status = ? AND deleted_at IS NULL THEN 1 ELSE 0 END) as moved_out,
+                    SUM(CASE WHEN created_at BETWEEN ? AND ? AND deleted_at IS NULL THEN 1 ELSE 0 END) as new_onboarded_mtd,
+                    SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END) as archived_count
+                ", [
+                    TenantStatus::ACTIVE->value,
+                    TenantStatus::MOVED_OUT->value,
                     now()->startOfMonth()->toDateTimeString(),
                     now()->endOfMonth()->toDateTimeString(),
-                ])->count(),
-                'pending_move_outs' => Contract::where('status', ContractStatus::ACTIVE)
-                    ->whereNotNull('expected_move_out_date')
-                    ->whereBetween('expected_move_out_date', [
-                        now()->toDateTimeString(),
-                        now()->addDays(30)->toDateTimeString(),
-                    ])
-                    ->count(),
-                'moved_out' => Tenant::where('status', TenantStatus::MOVED_OUT)->count(),
-                'archived_count' => Tenant::onlyTrashed()->count(),
+                ])
+                ->first();
+
+            // Pending move-outs is a separate table, so it remains a single optimized hit.
+            $pendingExits = Contract::where('status', ContractStatus::ACTIVE)
+                ->whereNotNull('expected_move_out_date')
+                ->whereBetween('expected_move_out_date', [
+                    now()->toDateTimeString(),
+                    now()->addDays(30)->toDateTimeString(),
+                ])
+                ->count();
+
+            return [
+                'total_records' => (int) ($stats->total_records ?? 0),
+                'active_tenants' => (int) ($stats->active_tenants ?? 0),
+                'new_onboarded_mtd' => (int) ($stats->new_onboarded_mtd ?? 0),
+                'pending_move_outs' => $pendingExits,
+                'moved_out' => (int) ($stats->moved_out ?? 0),
+                'archived_count' => (int) ($stats->archived_count ?? 0),
             ];
         });
     }
@@ -223,25 +239,10 @@ class TenantService
             $q->withoutTrashed();
         }
 
-        // Include room, bed, and balance context
-        $driver = DB::getDriverName();
-        $nowExpr = $driver === 'sqlite' ? "datetime('now')" : 'NOW()';
-        $upperExpr = $driver === 'sqlite' ? "datetime('now','+30 day')" : 'DATE_ADD(NOW(), INTERVAL 30 DAY)';
-
+        // Clean Industry Pattern: Delegate query construction to Model Scopes
         $q->select('tenants.*')
-            ->leftJoin('vw_active_contracts', 'tenants.tenant_id', '=', 'vw_active_contracts.tenant_id')
-            ->addSelect(['vw_active_contracts.room_code', 'vw_active_contracts.bed_label'])
-            ->leftJoin('vw_billing_summary', 'tenants.tenant_id', '=', 'vw_billing_summary.tenant_id')
-            ->addSelect([
-                DB::raw('COALESCE(SUM(vw_billing_summary.total_amount - vw_billing_summary.total_paid), 0) as outstanding_balance'),
-                DB::raw('(SELECT COUNT(*) FROM contracts WHERE contracts.tenant_id = tenants.tenant_id AND contracts.status = "'.ContractStatus::ACTIVE->value.'" AND contracts.deleted_at IS NULL AND contracts.expected_move_out_date IS NOT NULL AND contracts.expected_move_out_date BETWEEN '.$nowExpr.' AND '.$upperExpr.') as pending_move_outs'),
-            ])
-            ->groupBy(
-                'tenants.tenant_id', 'tenants.first_name', 'tenants.last_name', 'tenants.email',
-                'tenants.contact_number', 'tenants.emergency_contact_name', 'tenants.emergency_contact_number',
-                'tenants.address', 'tenants.status', 'tenants.created_at', 'tenants.updated_at', 'tenants.deleted_at',
-                'vw_active_contracts.room_code', 'vw_active_contracts.bed_label'
-            );
+            ->withActiveContractContext()
+            ->withOutstandingBalance();
 
         if (! empty($query)) {
             $needle = trim((string) $query);
@@ -254,7 +255,6 @@ class TenantService
                     $stripped = ltrim($needle, '#');
                     $iq->where('tenants.first_name', 'LIKE', "%{$stripped}%")
                         ->orWhere('tenants.last_name', 'LIKE', "%{$stripped}%")
-                        ->orWhere(DB::raw("CONCAT(tenants.first_name, ' ', tenants.last_name)"), 'LIKE', "%{$stripped}%")
                         ->orWhere('tenants.email', 'LIKE', "%{$stripped}%")
                         ->orWhere('tenants.contact_number', 'LIKE', "%{$stripped}%");
                 }
@@ -265,8 +265,11 @@ class TenantService
             $q->where('tenants.status', $status);
         }
 
-        return $q->orderBy($sortBy, $sortOrder === 'desc' ? 'desc' : 'asc')
-            ->orderBy('tenants.tenant_id', $sortOrder === 'desc' ? 'desc' : 'asc');
+        // Primary sort
+        $q->orderBy($sortBy, $sortOrder === 'desc' ? 'desc' : 'asc');
+        
+        // Tie-breaker
+        return $q->orderBy('tenants.tenant_id', $sortOrder === 'desc' ? 'desc' : 'asc');
     }
 
     /**
@@ -321,6 +324,64 @@ class TenantService
         }
 
         self::clearCache();
+    }
+
+    /**
+     * High-Performance Existence Check (Deterministic Matching).
+     * Scans for duplicates across both active and archived records.
+     *
+     * @return array{exists: bool, status: ?string, tenant_id: ?int, match_type: ?string}
+     */
+    public static function checkExistence(array $data): array
+    {
+        $firstName = trim($data['first_name'] ?? '');
+        $lastName = trim($data['last_name'] ?? '');
+        $email = trim($data['email'] ?? '');
+        $phone = trim($data['contact_number'] ?? '');
+
+        // 1. Email check (Highest Confidence)
+        if (! empty($email)) {
+            $match = Tenant::withTrashed()->where('email', $email)->first(['tenant_id', 'status', 'deleted_at']);
+            if ($match) {
+                return [
+                    'exists' => true,
+                    'status' => $match->trashed() ? 'archived' : $match->status->value,
+                    'tenant_id' => $match->tenant_id,
+                    'match_type' => 'email',
+                ];
+            }
+        }
+
+        // 2. Phone check (High Confidence)
+        if (! empty($phone)) {
+            $match = Tenant::withTrashed()->where('contact_number', $phone)->first(['tenant_id', 'status', 'deleted_at']);
+            if ($match) {
+                return [
+                    'exists' => true,
+                    'status' => $match->trashed() ? 'archived' : $match->status->value,
+                    'tenant_id' => $match->tenant_id,
+                    'match_type' => 'phone',
+                ];
+            }
+        }
+
+        // 3. Name check (Identity Warning)
+        if (! empty($firstName) && ! empty($lastName)) {
+            $match = Tenant::withTrashed()
+                ->where('first_name', $firstName)
+                ->where('last_name', $lastName)
+                ->first(['tenant_id', 'status', 'deleted_at']);
+            if ($match) {
+                return [
+                    'exists' => true,
+                    'status' => $match->trashed() ? 'archived' : $match->status->value,
+                    'tenant_id' => $match->tenant_id,
+                    'match_type' => 'name',
+                ];
+            }
+        }
+
+        return ['exists' => false];
     }
 
     /**

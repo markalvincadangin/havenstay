@@ -5,14 +5,8 @@ import { getTenantInitials } from "@/lib/formatters";
 /**
  * Avatar — variants per design-system/havenstay/MASTER.md.
  * Supports both tenant and user entity objects.
- * 
- * @param {object} [tenant] - Tenant entity.
- * @param {object} [user] - User entity.
- * @param {object} [entity] - Generic entity (backwards compatibility).
- * @param {"stone"|"teal"|"blue"} [variant="stone"]
- * @param {"sm"|"md"|"lg"|"xl"} [size="md"]
  */
-export default function Avatar({ tenant, user, entity, size = "md", variant = "stone" }) {
+function AvatarComponent({ tenant, user, entity, size = "md", variant = "stone" }) {
   const [hasError, setHasError] = useState(false);
 
   // Resolve entity priority
@@ -58,3 +52,6 @@ export default function Avatar({ tenant, user, entity, size = "md", variant = "s
     </div>
   );
 }
+
+// Industry Pattern: Memoize repeating list components to prevent CPU jank during scrolls.
+export default React.memo(AvatarComponent);

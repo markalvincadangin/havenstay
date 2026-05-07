@@ -37,33 +37,35 @@ class DemoSeeder extends Seeder
 
     public function run(): void
     {
-        try {
-            AuditService::setSystemContext('demo-seeder');
+        \DB::transaction(function () {
+            try {
+                AuditService::setSystemContext('demo-seeder');
 
-            echo "[seeder] Initializing Roles & Users...\n";
-            $users = $this->seedUsers();
+                echo "[seeder] Initializing Roles & Users...\n";
+                $users = $this->seedUsers();
 
-            echo "[seeder] Setting up Utilities & Rates (Iloilo Standards)...\n";
-            $this->seedUtilities();
+                echo "[seeder] Setting up Utilities & Rates...\n";
+                $this->seedUtilities();
 
-            echo "[seeder] Generating Unified Boarding House Inventory...\n";
-            $inventory = $this->seedInventory();
+                echo "[seeder] Generating Boarding House Inventory...\n";
+                $inventory = $this->seedInventory();
 
-            echo "[seeder] Deploying Meters & Baseline Readings...\n";
-            $this->seedMeters($inventory['rooms']);
+                echo "[seeder] Deploying Meters & Baseline Readings...\n";
+                $this->seedMeters($inventory['rooms']);
 
-            echo "[seeder] Simulating Operational Scenarios...\n";
-            $this->seedOperationalScenarios($users, $inventory);
+                echo "[seeder] Simulating Operational Scenarios...\n";
+                $this->seedOperationalScenarios($users, $inventory);
 
-            echo "[seeder] Synchronizing System States...\n";
-            $this->syncInventoryStatus($inventory['rooms']);
+                echo "[seeder] Synchronizing System States...\n";
+                $this->syncInventoryStatus($inventory['rooms']);
 
-            echo "[seeder] Demo Seeder Complete. HavenStay Iloilo is ready.\n";
-            gc_collect_cycles();
-        } catch (\Throwable $e) {
-            echo "\n[SEEDER ERROR] " . $e->getMessage() . "\n";
-            throw $e;
-        }
+                echo "[seeder] Demo Seeder Complete.\n";
+                gc_collect_cycles();
+            } catch (\Throwable $e) {
+                echo "\n[SEEDER ERROR] " . $e->getMessage() . "\n";
+                throw $e;
+            }
+        });
     }
 
     private function seedUsers(): array
@@ -199,15 +201,23 @@ class DemoSeeder extends Seeder
         $adminId = User::first()->user_id;
 
         foreach ($rooms as $room) {
-            if (!$room->is_metered)
-                continue;
+            if (!$room->is_metered) continue;
 
-            $eMeter = Meter::updateOrCreate(['serial_number' => "MORE-{$room->room_code}"], ['utility_id' => $elec->utility_id]);
-            MeterAssignment::updateOrCreate(['meter_id' => $eMeter->meter_id, 'room_id' => $room->room_id], ['valid_from' => '2025-01-01']);
+            // Clear existing assignments to avoid trg_meter_assignments_bi conflict
+            MeterAssignment::where('room_id', $room->room_id)->delete();
+
+            $eMeter = Meter::updateOrCreate(['serial_number' => "MORE-{$room->room_code}"], [
+                'utility_id' => $elec->utility_id,
+                'status' => 'active'
+            ]);
+            MeterAssignment::create(['meter_id' => $eMeter->meter_id, 'room_id' => $room->room_id, 'valid_from' => '2025-01-01']);
             MeterReading::create(['meter_id' => $eMeter->meter_id, 'reading_date' => '2025-01-01', 'reading_value' => 500.00, 'recorded_by' => $adminId]);
 
-            $wMeter = Meter::updateOrCreate(['serial_number' => "MPIW-{$room->room_code}"], ['utility_id' => $water->utility_id]);
-            MeterAssignment::updateOrCreate(['meter_id' => $wMeter->meter_id, 'room_id' => $room->room_id], ['valid_from' => '2025-01-01']);
+            $wMeter = Meter::updateOrCreate(['serial_number' => "MPIW-{$room->room_code}"], [
+                'utility_id' => $water->utility_id,
+                'status' => 'active'
+            ]);
+            MeterAssignment::create(['meter_id' => $wMeter->meter_id, 'room_id' => $room->room_id, 'valid_from' => '2025-01-01']);
             MeterReading::create(['meter_id' => $wMeter->meter_id, 'reading_date' => '2025-01-01', 'reading_value' => 20.00, 'recorded_by' => $adminId]);
         }
     }
@@ -229,9 +239,9 @@ class DemoSeeder extends Seeder
         $tenant = Tenant::updateOrCreate(['email' => 'althea.dalisay@cpu.edu.ph'], [
             'first_name' => 'Althea Mae',
             'last_name' => 'Dalisay',
-            'contact_number' => '0917-888-1234',
+            'contact_number' => '09175524412',
             'emergency_contact_name' => 'Ricardo Dalisay',
-            'emergency_contact_number' => '0917-000-9999',
+            'emergency_contact_number' => '09178819920',
             'address' => 'Brgy. Balabag, Pavia, Iloilo',
             'status' => TenantStatus::ACTIVE,
         ]);
@@ -260,9 +270,9 @@ class DemoSeeder extends Seeder
         $tenant = Tenant::updateOrCreate(['email' => 'johnmark.mercado@upv.edu.ph'], [
             'first_name' => 'John Mark',
             'last_name' => 'Mercado',
-            'contact_number' => '0918-777-5678',
+            'contact_number' => '09189223345',
             'emergency_contact_name' => 'Lucila Mercado',
-            'emergency_contact_number' => '0918-111-2222',
+            'emergency_contact_number' => '09184412290',
             'address' => 'Brgy. Poblacion, Oton, Iloilo',
             'status' => TenantStatus::ACTIVE,
         ]);
@@ -298,9 +308,9 @@ class DemoSeeder extends Seeder
         $tenant = Tenant::updateOrCreate(['email' => 'sophia.villa@outlook.com'], [
             'first_name' => 'Sophia Lorenza',
             'last_name' => 'Villa',
-            'contact_number' => '0922-333-4444',
+            'contact_number' => '09228154432',
             'emergency_contact_name' => 'Anton Villa',
-            'emergency_contact_number' => '0922-999-0000',
+            'emergency_contact_number' => '09227710012',
             'address' => 'Mandurriao, Iloilo City',
             'status' => TenantStatus::ACTIVE,
         ]);
@@ -341,12 +351,12 @@ class DemoSeeder extends Seeder
 
     private function scenarioLegacyOverride(array $users, array $inventory): void
     {
-        $tenant = Tenant::updateOrCreate(['email' => 'mangben@iloilo.ph'], [
+        $tenant = Tenant::updateOrCreate(['email' => 'ben.santos@gmail.com'], [
             'first_name' => 'Benjamin',
             'last_name' => 'Santos',
-            'contact_number' => '0908-111-2222',
+            'contact_number' => '09081129981',
             'emergency_contact_name' => 'Rosa Santos',
-            'emergency_contact_number' => '0908-333-4444',
+            'emergency_contact_number' => '09084431120',
             'address' => 'Brgy. Tacas, Jaro, Iloilo',
             'status' => TenantStatus::ACTIVE,
         ]);
@@ -368,12 +378,12 @@ class DemoSeeder extends Seeder
 
     private function scenarioMovedOutArchived(array $users, array $inventory): void
     {
-        $tenant = Tenant::updateOrCreate(['email' => 'efren.bayani@legacy.ph'], [
+        $tenant = Tenant::updateOrCreate(['email' => 'boy.bayani@gmail.com'], [
             'first_name' => 'Efren "Boy"',
             'last_name' => 'Bayani',
-            'contact_number' => '0920-555-0000',
+            'contact_number' => '09205518872',
             'emergency_contact_name' => 'Nenita Bayani',
-            'emergency_contact_number' => '0920-111-1111',
+            'emergency_contact_number' => '09203321145',
             'address' => 'Antique, Western Visayas',
             'status' => TenantStatus::ARCHIVED,
         ]);
@@ -395,12 +405,12 @@ class DemoSeeder extends Seeder
 
     private function scenarioRollover(array $users, array $inventory): void
     {
-        $tenant = Tenant::updateOrCreate(['email' => 'mariaelena.cruz@iloilo.com'], [
+        $tenant = Tenant::updateOrCreate(['email' => 'lena.cruz@gmail.com'], [
             'first_name' => 'Maria Elena',
             'last_name' => 'Cruz',
-            'contact_number' => '0915-444-3333',
+            'contact_number' => '09154429901',
             'emergency_contact_name' => 'Jose Cruz',
-            'emergency_contact_number' => '0915-000-1111',
+            'emergency_contact_number' => '09158811120',
             'address' => 'Brgy. San Jose, San Miguel, Iloilo',
             'status' => TenantStatus::ACTIVE,
         ]);
@@ -445,12 +455,12 @@ class DemoSeeder extends Seeder
 
     private function scenarioNewEnrollment(array $users, array $inventory): void
     {
-        $tenant = Tenant::updateOrCreate(['email' => 'nathaniel.torres@youth.ph'], [
+        $tenant = Tenant::updateOrCreate(['email' => 'nathan.torres@usa.edu.ph'], [
             'first_name' => 'Nathaniel Angelo',
             'last_name' => 'Torres',
-            'contact_number' => '0927-444-8888',
+            'contact_number' => '09274412298',
             'emergency_contact_name' => 'Elena Torres',
-            'emergency_contact_number' => '0927-000-5555',
+            'emergency_contact_number' => '09275510021',
             'address' => 'Guimaras, PH',
             'status' => TenantStatus::ACTIVE,
         ]);

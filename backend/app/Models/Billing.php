@@ -3,11 +3,13 @@
 namespace App\Models;
 
 use App\Enums\BillingStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Billing Model
@@ -71,5 +73,23 @@ class Billing extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class, 'billing_id', 'billing_id');
+    }
+
+    /**
+     * Scope: Enrich query with financial totals using subqueries.
+     * This is the industry-standard way to handle aggregates without GROUP BY issues.
+     */
+    public function scopeWithFinancials(Builder $query): Builder
+    {
+        return $query->withSum([
+            'lineItems as total_amount' => function ($q) {
+                $q->select(DB::raw('COALESCE(SUM(amount), 0)'));
+            },
+        ], 'amount')
+        ->withSum([
+            'payments as total_paid' => function ($q) {
+                $q->select(DB::raw('COALESCE(SUM(amount_paid), 0)'))->whereNull('voided_at');
+            },
+        ], 'amount_paid');
     }
 }

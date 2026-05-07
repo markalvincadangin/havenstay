@@ -81,6 +81,10 @@ return new class extends Migration
             $table->string('active_email', 150)->nullable()->unique();
             $table->timestamps();
             $table->softDeletes();
+
+            // Performance Hardening
+            $table->index(['last_name', 'first_name'], 'idx_tenant_name');
+            $table->index('status', 'idx_tenant_status');
         });
 
         Schema::create('rooms', function (Blueprint $table) {
@@ -95,6 +99,10 @@ return new class extends Migration
             $table->boolean('is_metered')->default(true);
             $table->timestamps();
             $table->softDeletes();
+
+            // Performance Hardening
+            $table->index('status', 'idx_room_status');
+            $table->index('room_type', 'idx_room_type');
         });
 
         Schema::create('bed_spaces', function (Blueprint $table) {
@@ -123,9 +131,14 @@ return new class extends Migration
             $table->boolean('is_cleared')->default(false);
             $table->enum('status', ['pending_payment', 'active', 'completed', 'terminated', 'voided'])->default('pending_payment');
             $table->text('notes')->nullable();
-            $table->string('idempotency_key', 36)->nullable()->unique('uq_contracts_idempotency');
+            $table->string('idempotency_key', 255)->nullable()->unique('uq_contracts_idempotency');
             $table->timestamps();
             $table->softDeletes();
+
+            // Performance Hardening
+            $table->index('status', 'idx_contract_status');
+            $table->index('move_in_date', 'idx_contract_dates');
+            $table->index('expected_move_out_date', 'idx_contract_expiry');
             $table->foreign('tenant_id')->references('tenant_id')->on('tenants');
             $table->foreign('bed_space_id')->references('bed_space_id')->on('bed_spaces');
             $table->foreign('created_by')->references('user_id')->on('users');
@@ -189,9 +202,13 @@ return new class extends Migration
             $table->date('billing_period_to');
             $table->date('due_date');
             $table->enum('status', ['unpaid', 'partial', 'paid', 'overdue'])->default('unpaid');
-            $table->string('idempotency_key', 36)->nullable()->unique('uq_billing_idempotency');
+            $table->string('idempotency_key', 255)->nullable()->unique('uq_billing_idempotency');
             $table->timestamps();
             $table->unique(['contract_id', 'billing_period_from', 'billing_period_to'], 'uq_billing_cycle');
+
+            // Performance Hardening
+            $table->index('status', 'idx_billing_status');
+            $table->index('due_date', 'idx_billing_due');
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
         });
 
@@ -222,8 +239,12 @@ return new class extends Migration
             $table->timestamp('voided_at')->nullable();
             $table->unsignedInteger('voided_by')->nullable();
             $table->string('void_reason', 255)->nullable();
-            $table->string('idempotency_key', 36)->nullable()->unique('uq_payments_idempotency');
+            $table->string('idempotency_key', 255)->nullable()->unique('uq_payments_idempotency');
             $table->timestamp('created_at')->useCurrent();
+
+            // Performance Hardening
+            $table->index('payment_date', 'idx_payment_date');
+            $table->index('payment_category', 'idx_payment_category');
             $table->foreign('billing_id')->references('billing_id')->on('billing');
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
             $table->foreign('processed_by')->references('user_id')->on('users');
@@ -282,13 +303,24 @@ return new class extends Migration
                 CONCAT(t.last_name, ', ', t.first_name) AS tenant_name,
                 r.room_code,
                 bs.bed_label,
-                (SELECT COALESCE(SUM(amount), 0) FROM billing_line_items WHERE billing_id = b.billing_id) AS total_amount,
-                (SELECT COALESCE(SUM(amount_paid), 0) FROM payments WHERE billing_id = b.billing_id AND voided_at IS NULL AND payment_category = 'billing') AS total_paid
+                COALESCE(bli_agg.total_amount, 0) AS total_amount,
+                COALESCE(pay_agg.total_paid, 0) AS total_paid
             FROM billing b
             JOIN contracts  c  ON b.contract_id  = c.contract_id
             JOIN tenants    t  ON c.tenant_id    = t.tenant_id
             JOIN bed_spaces bs ON c.bed_space_id = bs.bed_space_id
-            JOIN rooms      r  ON bs.room_id      = r.room_id");
+            JOIN rooms      r  ON bs.room_id      = r.room_id
+            LEFT JOIN (
+                SELECT billing_id, SUM(amount) as total_amount 
+                FROM billing_line_items 
+                GROUP BY billing_id
+            ) bli_agg ON b.billing_id = bli_agg.billing_id
+            LEFT JOIN (
+                SELECT billing_id, SUM(amount_paid) as total_paid 
+                FROM payments 
+                WHERE voided_at IS NULL AND payment_category = 'billing'
+                GROUP BY billing_id
+            ) pay_agg ON b.billing_id = pay_agg.billing_id");
 
         DB::statement('DROP VIEW IF EXISTS vw_active_contracts');
         DB::statement("CREATE VIEW vw_active_contracts AS

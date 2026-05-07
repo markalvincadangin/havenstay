@@ -51,6 +51,7 @@ export default function RoomDetailsPage() {
   );
   const loading = !room && !roomError;
   const [showDecommissionModal, setShowDecommissionModal] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [editingRoom, setEditingRoom] = useState(null);
   const title = room ? `Room ${room.room_code}` : "Room";
@@ -73,12 +74,27 @@ export default function RoomDetailsPage() {
     setBusyAction("decommission");
     try {
       await apiRequest(`/api/rooms/${roomId}/archive`, { method: "POST" });
-      showToast(`Room ${room?.room_code} decommissioned.`, "success");
+      showToast(`Room ${room?.room_code} decommissioned successfully.`, "success");
       setShowDecommissionModal(false);
       router.push("/rooms");
     } catch (err) {
       showToast(err?.message || "Failed to decommission room.", "error");
       setShowDecommissionModal(false);
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const handleRestoreRoom = async () => {
+    if (!roomId) return;
+    setBusyAction("restore");
+    try {
+      await apiRequest(`/api/rooms/${roomId}/restore`, { method: "POST" });
+      showToast(`Room ${room?.room_code} restored to active inventory.`, "success");
+      setShowRestoreModal(false);
+      await mutateRoom();
+    } catch (err) {
+      showToast(err?.message || "Failed to restore room.", "error");
+      setShowRestoreModal(false);
     } finally {
       setBusyAction("");
     }
@@ -136,7 +152,7 @@ export default function RoomDetailsPage() {
                 busyAction={busyAction}
                 mode="room"
                 onArchive={() => setShowDecommissionModal(true)}
-                onRestore={() => runLifecycleAction("restore", `/api/rooms/${roomId}/restore`)}
+                onRestore={() => setShowRestoreModal(true)}
               />
             </div>
           )}
@@ -152,6 +168,15 @@ export default function RoomDetailsPage() {
         isLoading={busyAction === "decommission"}
         onConfirm={handleDecommissionRoom}
         onCancel={() => busyAction !== "decommission" && setShowDecommissionModal(false)}
+      />
+      <ConfirmationDialog
+        open={showRestoreModal}
+        title="Restore Room"
+        description={`You are about to restore Room ${room?.room_code} to active inventory. This will allow the room and its bed spaces to be assigned to new tenant contracts.`}
+        confirmLabel="Restore Room"
+        isLoading={busyAction === "restore"}
+        onConfirm={handleRestoreRoom}
+        onCancel={() => busyAction !== "restore" && setShowRestoreModal(false)}
       />
       {room ? (
         <div className="space-y-6">

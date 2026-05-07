@@ -26,6 +26,7 @@ import {
 import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
 import { ContractQuickEditForm } from '@/features/contracts/components/ContractQuickEditForm';
 import MoveOutModal from "@/features/contracts/components/MoveOutModal";
+import PaymentWizard from "@/features/payments/components/PaymentWizard";
 
 import { apiRequest, fetcher } from "@/lib/api";
 import { canManageContracts } from "@/lib/auth";
@@ -125,7 +126,7 @@ export default function ContractDetailsPage() {
     return items.reduce((sum, b) => sum + (Number(b.balance) || 0), 0);
   }, [billData]);
 
-  const { data: paymentsData } = useSWR(
+  const { data: paymentsData, mutate: refetchPayments } = useSWR(
     !authLoading && currentUser && contractId ? `/api/payments?contract_id=${contractId}` : null,
     fetcher
   );
@@ -143,6 +144,20 @@ export default function ContractDetailsPage() {
   const [isArchiving, setIsArchiving] = useState(false);
   const [editingContract, setEditingContract] = useState(null);
   const [isActivating, setIsActivating] = useState(false);
+  const [showPaymentSheet, setShowPaymentSheet] = useState(false);
+
+  const minRequired = useMemo(() => {
+    if (!contract) return 0;
+    return Number(contract.monthly_rate) + Number(contract.deposit_amount);
+  }, [contract]);
+
+  const totalPaid = useMemo(() => {
+    return payments.filter(p => !p.voided_at).reduce((sum, p) => sum + Number(p.amount_paid), 0);
+  }, [payments]);
+
+  const isFinanciallyReady = totalPaid >= (minRequired - 0.01);
+  const hasSetupBill = !!contract?.latest_billing;
+
   const pageTitle = contract ? `CONTRACT #${String(contractId).padStart(6, "0")}` : "Contract Detail";
 
   const loadContract = () => refetchContract();
@@ -253,7 +268,11 @@ export default function ContractDetailsPage() {
       });
       setShowArchiveConfirm(false);
 
-      // Global revalidation
+      // Forensic Cache Eviction: Manually clear the contract data from the local cache
+      // before redirecting to prevent the SWR 404 console error during unmounting.
+      globalMutate(`/api/contracts/${contractId}`, null, false);
+      
+      // Global revalidation for lists and reports
       globalMutate(key => typeof key === 'string' && key.startsWith('/api/contracts'));
       globalMutate(key => typeof key === 'string' && key.startsWith('/api/reports'));
 
@@ -346,31 +365,33 @@ export default function ContractDetailsPage() {
         animate={shouldReduceMotion ? false : pageVariants.animate}
         transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
       >
-        {fetchError && <Alert variant="error" title="Load Failed">{fetchError}</Alert>}
+        {fetchError && <Alert variant="error" title="Load Failed" className="mb-6">{fetchError}</Alert>}
+        
+        <div className="mb-6 space-y-4">
+          <RecordStateAlert
+            show={contract?.status === 'voided'}
+            variant="warning"
+            title="Contract Voided"
+          >
+            This contract was voided due to a registration error. Associated billing was cancelled and inventory released.
+          </RecordStateAlert>
 
-        <RecordStateAlert
-          show={contract?.status === 'voided'}
-          variant="warning"
-          title="Contract Voided"
-        >
-          This contract was voided due to a registration error. Associated billing was cancelled and inventory released.
-        </RecordStateAlert>
+          <RecordStateAlert
+            show={contract?.status === 'terminated'}
+            variant="warning"
+            title="Contract Terminated"
+          >
+            This contract was terminated early. Operational access for this agreement has been revoked.
+          </RecordStateAlert>
 
-        <RecordStateAlert
-          show={contract?.status === 'terminated'}
-          variant="warning"
-          title="Contract Terminated"
-        >
-          This contract was terminated early. Operational access for this agreement has been revoked.
-        </RecordStateAlert>
-
-        <RecordStateAlert
-          show={contract?.status === 'completed'}
-          variant="info"
-          title="Contract Completed"
-        >
-          This contract is completed. Resident has moved out and all terms have been finalized.
-        </RecordStateAlert>
+          <RecordStateAlert
+            show={contract?.status === 'completed'}
+            variant="info"
+            title="Contract Completed"
+          >
+            This contract is completed. Resident has moved out and all terms have been finalized.
+          </RecordStateAlert>
+        </div>
 
         {!loading && contract ? (
           <div className="grid gap-6 lg:grid-cols-12">
@@ -420,81 +441,89 @@ export default function ContractDetailsPage() {
               </Card>
 
               {canManageContracts(currentUser) && contract.status === "pending_payment" ? (
-                <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-teal-50/20 border-teal-100">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-teal-700">Onboarding Action Required</h3>
-
-                  {contract.latest_billing ? (
-                    <>
-                      <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
-                        Setup billing has been initialized. Resident must settle the balance to activate this lease.
-                      </p>
-                      <Button
-                        variant="primary"
-                        className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all"
-                        onClick={() => router.push(`/billing/${contract.latest_billing.billing_id}`)}
-                      >
-                        View Setup Bill & Pay
-                      </Button>
-                    </>
-                  ) : outstandingBalance > 0 ? (
-                    <>
-                      <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
-                        Initial billing has been generated. Resident must settle the outstanding balance to live-activate this lease.
-                      </p>
-                      <div className="mt-4 flex flex-col gap-2 rounded-xl bg-white/50 p-4 border border-teal-100">
-                        <span className="text-[10px] font-black uppercase text-teal-600/60">Required for Activation</span>
-                        <CurrencyDisplay amount={outstandingBalance} className="text-xl font-black text-teal-700" />
+                <Card className="rounded-2xl border-stone-200 !p-0 shadow-sm overflow-hidden hs-glass-effect border-teal-100">
+                  <div className="bg-teal-50/50 px-6 py-4 border-b border-teal-100/50">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-teal-700">Onboarding Progress</h3>
+                  </div>
+                  
+                  <div className="p-6 space-y-5">
+                    {/* Step 1: Financial Initialization */}
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${hasSetupBill ? "bg-teal-500 border-teal-500 text-white" : "border-stone-200 text-stone-300"}`}>
+                        {hasSetupBill ? <FileCheck size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">1</span>}
                       </div>
-                      <Button
-                        variant="primary"
-                        className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all"
-                        onClick={() => {
-                          const unpaidBill = normalizePaginatedList(billData).rows[0];
-                          if (unpaidBill) router.push(`/billing/${unpaidBill.billing_id}`);
-                        }}
-                      >
-                        View & Record Payment
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed text-teal-800">
-                        Generate the setup billing (Advance Rent + Deposit) to enable payment collection and activate this contract.
-                      </p>
-                      <Button
-                        variant="primary"
-                        className="mt-5 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/5 transition-all"
-                        onClick={handleInitializeBilling}
-                        isLoading={isInitializingBilling}
-                      >
-                        Generate Initial Bill
-                      </Button>
-                    </>
-                  )}
+                      <div>
+                        <p className={`text-xs font-bold ${hasSetupBill ? "text-stone-900" : "text-stone-400"}`}>Setup Billing</p>
+                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">Generate initial rent & deposit invoice.</p>
+                      </div>
+                    </div>
 
-                  <Button
-                    variant="secondary"
-                    className="mt-3 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest border-amber-200 text-amber-700 hover:bg-amber-50"
-                    onClick={() => router.push(`/payments/new?category=deposit&contract_id=${contractId}&amount=${contract.deposit_amount}`)}
-                  >
-                    Record Deposit Payment
-                  </Button>
+                    {/* Step 2: Collection */}
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${isFinanciallyReady ? "bg-teal-500 border-teal-500 text-white" : hasSetupBill ? "border-teal-200 text-teal-400" : "border-stone-200 text-stone-300"}`}>
+                        {isFinanciallyReady ? <FileCheck size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">2</span>}
+                      </div>
+                      <div>
+                        <p className={`text-xs font-bold ${isFinanciallyReady ? "text-stone-900" : hasSetupBill ? "text-stone-600" : "text-stone-400"}`}>Balance Settlement</p>
+                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">Collect required ₱{minRequired.toLocaleString()} payment.</p>
+                        {hasSetupBill && !isFinanciallyReady && (
+                          <div className="mt-2 text-[10px] font-black text-rose-500 uppercase tracking-tighter">
+                            Shortfall: ₱{(minRequired - totalPaid).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-                  <Button
-                    variant="primary"
-                    className="mt-3 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/5 transition-all"
-                    onClick={handleActivate}
-                    isLoading={isActivating}
-                  >
-                    Activate Contract
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="mt-3 !h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest border-teal-200 text-teal-700 hover:bg-teal-50"
-                    onClick={() => setShowVoidConfirm(true)}
-                  >
-                    Void Contract
-                  </Button>
+                    {/* Step 3: Activation */}
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${contract.status === 'active' ? "bg-teal-500 border-teal-500 text-white" : "border-stone-200 text-stone-300"}`}>
+                        {contract.status === 'active' ? <ShieldCheck size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">3</span>}
+                      </div>
+                      <div>
+                        <p className={`text-xs font-bold ${contract.status === 'active' ? "text-stone-900" : "text-stone-400"}`}>Lease Activation</p>
+                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">Formalize agreement and start operations.</p>
+                      </div>
+                    </div>
+
+                    {/* Dynamic Action Button */}
+                    <div className="pt-2">
+                      {!hasSetupBill ? (
+                        <Button
+                          variant="primary"
+                          className="!h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
+                          onClick={handleInitializeBilling}
+                          isLoading={isInitializingBilling}
+                        >
+                          Generate Initial Bill
+                        </Button>
+                      ) : !isFinanciallyReady ? (
+                        <Button
+                          variant="primary"
+                          className="!h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10"
+                          onClick={() => setShowPaymentSheet(true)}
+                        >
+                          Proceed to Payment
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          className="!h-11 w-full rounded-xl text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/10 animate-pulse-subtle"
+                          onClick={handleActivate}
+                          isLoading={isActivating}
+                        >
+                          Finalize Activation
+                        </Button>
+                      )}
+                      
+                      <button
+                        type="button"
+                        onClick={() => setShowVoidConfirm(true)}
+                        className="mt-6 w-full text-[10px] font-black uppercase tracking-[0.2em] text-stone-300 hover:text-rose-400 transition-colors py-2"
+                      >
+                        Void Registration
+                      </button>
+                    </div>
+                  </div>
                 </Card>
               ) : null}
 
@@ -535,7 +564,7 @@ export default function ContractDetailsPage() {
                 <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-stone-50/50 border-stone-200">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">History Management</h3>
 
-                  {isEnded && !contract.is_cleared && (
+                  {isEnded && contract.status !== 'voided' && !contract.is_cleared && (
                     <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-100 mb-4">
                       <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-2">Unsettled Deposit</p>
                       <p className="text-[10px] font-medium text-amber-600 leading-relaxed mb-4">
@@ -558,11 +587,11 @@ export default function ContractDetailsPage() {
                     variant="outline"
                     className="mt-4 !h-9 w-full rounded-lg text-[10px] font-black uppercase tracking-widest border-stone-200 text-stone-600 hover:bg-white"
                     onClick={() => setShowArchiveConfirm(true)}
-                    disabled={!contract.is_cleared}
+                    disabled={!contract.is_cleared && contract.status !== "voided"}
                   >
                     Archive Contract
                   </Button>
-                  {!contract.is_cleared && (
+                  {!contract.is_cleared && contract.status !== "voided" && (
                     <p className="mt-2 text-[9px] font-bold text-rose-400 uppercase tracking-tighter text-center">
                       Settlement required before archiving
                     </p>
@@ -771,6 +800,41 @@ export default function ContractDetailsPage() {
             onCancel={() => setEditingContract(null)}
           />
         )}
+      </SideSheetOverlay>
+       <SideSheetOverlay
+        isOpen={showPaymentSheet}
+        onClose={() => setShowPaymentSheet(false)}
+        title="Record Onboarding Payment"
+        size="lg"
+      >
+        <div className="p-6 pt-0">
+          {(!contract || !billData) ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <div className="h-10 w-10 border-4 border-teal-600/20 border-t-teal-600 rounded-full animate-spin" />
+              <p className="text-xs font-black uppercase tracking-widest text-stone-400">Syncing Ledger...</p>
+            </div>
+          ) : (
+            <PaymentWizard 
+              contract={contract}
+              isInitialSettlement={contract?.status === 'pending_payment'}
+              initialValues={{
+                contract_id: contractId,
+                billing_id: contract?.latest_billing?.billing_id || normalizePaginatedList(billData).rows[0]?.billing_id,
+                rent_amount: contract?.monthly_rate_override || contract?.monthly_rate,
+                deposit_amount: contract?.deposit_amount,
+                payment_category: "billing"
+              }}
+              onSuccess={() => {
+                setShowPaymentSheet(false);
+                showToast("Payment recorded successfully.", "success");
+                refetchContract();
+                refetchBills();
+                refetchPayments();
+              }}
+              onCancel={() => setShowPaymentSheet(false)}
+            />
+          )}
+        </div>
       </SideSheetOverlay>
     </StandardPage>
   );

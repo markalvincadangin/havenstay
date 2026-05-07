@@ -19,31 +19,52 @@ class IdentitySeeder extends Seeder
     public function run(): void
     {
         AuditService::setSystemContext('identity');
-        $adminEmail = env('SEED_ADMIN_EMAIL');
-
-        if (!$adminEmail) {
-            return;
-        }
 
         $adminRole = Role::where('role_name', 'admin')->first();
-
         if (!$adminRole) {
             $this->command->error('Admin role not found. Please run RoleSeeder first.');
             return;
         }
 
-        User::updateOrCreate(
-            ['email' => $adminEmail],
-            [
-                'role_id' => $adminRole->role_id,
-                'first_name' => env('SEED_ADMIN_FIRST_NAME', 'System'),
-                'last_name' => env('SEED_ADMIN_LAST_NAME', 'Administrator'),
-                'username' => env('SEED_ADMIN_USERNAME', 'admin'),
-                'password_hash' => Hash::make(Str::random(32)),
-                'is_active' => 1,
-            ]
-        );
+        // 1. Seed System Admin from Environment
+        $envAdminEmail = env('SEED_ADMIN_EMAIL');
+        if ($envAdminEmail) {
+            User::updateOrCreate(
+                ['email' => $envAdminEmail],
+                [
+                    'role_id' => $adminRole->role_id,
+                    'first_name' => env('SEED_ADMIN_FIRST_NAME'),
+                    'last_name' => env('SEED_ADMIN_LAST_NAME'),
+                    'username' => env('SEED_ADMIN_USERNAME'),
+                    'password_hash' => Hash::make(env('SEED_ADMIN_PASSWORD')),
+                    'is_active' => 1,
+                ]
+            );
+            $this->command->info("System administrator seeded: {$envAdminEmail}");
+        }
 
-        $this->command->info("Authorized identity seeded: {$adminEmail}");
+        // 2. Seed Academic Administrators
+        $academicAdmins = [
+            ['email' => 'alyannabianca.serra@wvsu.edu.ph', 'first' => 'Alyanna Bianca', 'last' => 'Serra', 'user' => 'alyannabianca'],
+            ['email' => 'luisarose.brillantes@wvsu.edu.ph', 'first' => 'Luisa Rose', 'last' => 'Brillantes', 'user' => 'luisarose'],
+            ['email' => 'elizamay.calisa@wvsu.edu.ph', 'first' => 'Eliza May', 'last' => 'Calisa', 'user' => 'elizamay'],
+            ['email' => 'ellenmae.tacleon@wvsu.edu.ph', 'first' => 'Ellen Mae', 'last' => 'Tacleon', 'user' => 'ellenmae'],
+            ['email' => 'christianpaul.delacruz@wvsu.edu.ph', 'first' => 'Christian Paul', 'last' => 'Dela Cruz', 'user' => 'christianpaul'],
+        ];
+
+        foreach ($academicAdmins as $adm) {
+            User::updateOrCreate(
+                ['email' => $adm['email']],
+                [
+                    'role_id' => $adminRole->role_id,
+                    'first_name' => $adm['first'],
+                    'last_name' => $adm['last'],
+                    'username' => $adm['user'],
+                    'password_hash' => Hash::make('HavenStayAdmin2026!'), // Standardized initial password
+                    'is_active' => 1,
+                ]
+            );
+            $this->command->info("Academic administrator seeded: {$adm['email']}");
+        }
     }
 }

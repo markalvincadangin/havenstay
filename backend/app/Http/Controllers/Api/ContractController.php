@@ -40,11 +40,11 @@ class ContractController extends Controller
     /**
      * FR-021a: Retrieve detailed contract forensic record.
      */
-    public function show(Request $request, Contract $contract): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
         AuthorizationService::ensureCanViewContracts($request->user());
 
-        $loaded = ContractService::getById((int) $contract->contract_id);
+        $loaded = ContractService::getById((int) $id);
         if (! $loaded) {
             return $this->error('Contract not found.', 404);
         }

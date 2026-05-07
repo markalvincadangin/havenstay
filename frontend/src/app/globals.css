@@ -182,11 +182,15 @@
 
   /** Subtle content feedback when syncing in the background */
   .hs-resource-syncing {
-    filter: blur(0.8px) grayscale(0.2);
-    opacity: 0.6;
-    transition: filter var(--transition-base), opacity var(--transition-base);
-    pointer-events: none;
+    opacity: 0.95;
+    /* Instant return to full opacity when syncing stops */
+    transition: opacity 0s; 
     user-select: none;
+  }
+  
+  /* Only animate when ENTERING the syncing state */
+  .group\/resource:has(.hs-resource-syncing) .hs-resource-syncing {
+    transition: opacity var(--transition-base);
   }
 }
 

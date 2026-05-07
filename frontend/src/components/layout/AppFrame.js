@@ -16,7 +16,7 @@ export default function AppFrame({ children }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const { user, loading, logout } = useAuth();
+  const { user, loading, isLoggingOut, logout } = useAuth();
 
   const handleToggleHelp = () => setShowHelp((prev) => !prev);
 
@@ -45,6 +45,25 @@ export default function AppFrame({ children }) {
           <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">
             Initializing HavenStay...
           </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Logout Overlay Guard: Prevent any interaction while session is being invalidated
+  if (isLoggingOut) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="flex flex-col items-center gap-4 rounded-3xl bg-white p-8 shadow-2xl ring-1 ring-black/5">
+          <Loader2 className="h-10 w-10 animate-spin text-rose-500 stroke-[2.5px]" />
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-xs font-black uppercase tracking-[0.2em] text-stone-800">
+              Securing Session...
+            </span>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">
+              Terminating HavenStay Access
+            </span>
+          </div>
         </div>
       </div>
     );

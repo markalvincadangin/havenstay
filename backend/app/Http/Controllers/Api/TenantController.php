@@ -60,6 +60,17 @@ class TenantController extends Controller
     }
 
     /**
+     * Forensic Duplicate Detection Endpoint.
+     * Lightweight check for existing profiles before registration.
+     */
+    public function existenceCheck(Request $request): JsonResponse
+    {
+        $result = TenantService::checkExistence($request->all());
+
+        return $this->success('Existence check completed.', $result);
+    }
+
+    /**
      * FR-011a: Retrieve detailed tenant forensic record.
      */
     public function show(ViewTenantRequest $request, Tenant $tenant): JsonResponse

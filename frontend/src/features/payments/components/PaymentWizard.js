@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-  CheckCircle, Building2, ShieldCheck, Receipt, CreditCard
+  CheckCircle, Building2, ShieldCheck, Receipt, CreditCard, Wallet
 } from "lucide-react";
 
 import ConfirmPaymentModal from "./ConfirmPaymentModal";
@@ -40,10 +40,14 @@ const pageVariants = {
   transition: { duration: 0.2, ease: "easeOut" },
 };
 
-function BillingSummaryPanel({ selectedBilling, paymentAmount }) {
-  if (!selectedBilling) return null;
+function BillingSummaryPanel({ selectedBilling, paymentAmount, isInitialSettlement, initialValues }) {
+  if (!selectedBilling && !isInitialSettlement) return null;
 
-  const currentBalance = Number(selectedBilling.balance || 0);
+  let currentBalance = Number(selectedBilling?.balance || 0);
+  if (isInitialSettlement) {
+    currentBalance = Number(initialValues?.rent_amount || 0) + Number(initialValues?.deposit_amount || 0);
+  }
+
   const amount = Number(paymentAmount) || 0;
   const newBalance = currentBalance - amount;
   const isOverpayment = amount > currentBalance && currentBalance > 0;
@@ -85,7 +89,10 @@ function BillingSummaryPanel({ selectedBilling, paymentAmount }) {
   );
 }
 
-export default function PaymentWizard() {
+export default function PaymentWizard({ initialValues = null, onSuccess,
+  onCancel,
+  isInitialSettlement = false
+}) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const { showToast } = useToasts();
@@ -113,14 +120,16 @@ export default function PaymentWizard() {
   } = useForm({
     mode: "onChange",
     defaultValues: {
-      billing_id: "",
-      contract_id: "",
-      amount_paid: "",
+      billing_id: initialValues?.billing_id || "",
+      contract_id: initialValues?.contract_id || "",
+      amount_paid: isInitialSettlement
+        ? (Number(initialValues?.rent_amount || 0) + Number(initialValues?.deposit_amount || 0))
+        : (initialValues?.amount_paid || ""),
       payment_date: new Date().toISOString().slice(0, 10),
       payment_method: "cash",
       reference_number: "",
       remarks: "",
-      payment_category: "billing",
+      payment_category: initialValues?.payment_category || "billing",
     },
   });
 
@@ -164,7 +173,8 @@ export default function PaymentWizard() {
   const lastSelectedIdRef = useRef("");
 
   useEffect(() => {
-    if (selectedBillingId && billingOptions.length > 0) {
+    // DO NOT auto-fill balance if we are in a combined settlement (Onboarding)
+    if (selectedBillingId && billingOptions.length > 0 && !isInitialSettlement) {
       if (selectedBillingId !== lastSelectedIdRef.current) {
         const found = billingOptions.find((b) => String(b.billing_id) === String(selectedBillingId));
         if (found && found.balance > 0) {
@@ -175,7 +185,7 @@ export default function PaymentWizard() {
     } else if (!selectedBillingId) {
       lastSelectedIdRef.current = "";
     }
-  }, [selectedBillingId, billingOptions, setValue]);
+  }, [selectedBillingId, billingOptions, setValue, isInitialSettlement]);
 
   const { data: billingData, error: billingError } = useSWR(
     currentUser && canManageBilling(currentUser) ? "/api/billing?per_page=100" : null,
@@ -242,48 +252,105 @@ export default function PaymentWizard() {
     }
   }, [billingData]);
 
+  // 1. Reactive Sync for Onboarding Totals (Ensures 9,000 is set even if props load late)
   useEffect(() => {
-    if (billingOptions.length === 0 || deepLinkApplied.current) return;
-    const bId = searchParams.get("billing_id");
-    const cId = searchParams.get("contract_id");
-    const tId = searchParams.get("tenant_id");
-    const category = searchParams.get("category");
-    const amount = searchParams.get("amount");
-
-    if (category === "refund" || category === "deposit") {
-      setIsRefundMode(category === "refund");
-      setValue("payment_category", category);
-      if (amount) setValue("amount_paid", amount);
-      if (cId) setValue("contract_id", cId);
-    }
-
-    if (bId) setValue("billing_id", bId);
-    else if (cId && category !== "refund") {
-      const matching = billingOptions.find((b) => String(b.contract_id) === String(cId));
-      if (matching) setValue("billing_id", String(matching.billing_id));
-      else if (category === "deposit") {
-         setValue("contract_id", cId);
+    if (isInitialSettlement && initialValues?.rent_amount && initialValues?.deposit_amount) {
+      const total = Number(initialValues.rent_amount) + Number(initialValues.deposit_amount);
+      setValue("amount_paid", total, { shouldValidate: true });
+      
+      // Reactive Fallback: If billing_id was initially null but now exists in props, sync it
+      if (!watch("billing_id") && initialValues.billing_id) {
+        setValue("billing_id", initialValues.billing_id, { shouldValidate: true });
       }
-    } else if (tId) {
-      const matching = billingOptions.find((b) => String(b.tenant_id) === String(tId));
-      if (matching) setValue("billing_id", String(matching.billing_id));
     }
-    deepLinkApplied.current = true;
-  }, [billingOptions, setValue, searchParams]);
+  }, [isInitialSettlement, initialValues?.rent_amount, initialValues?.deposit_amount, initialValues?.billing_id, setValue, watch]);
 
-  const { execute: submitPayment, isPending: isSubmitting } = useAction("/api/payments", {
+  // 2. Deep-linking and initialization
+  useEffect(() => {
+    if (deepLinkApplied.current) return;
+
+    // Handle Onboarding / Initial Settlement Mode
+    if (isInitialSettlement && initialValues) {
+      const total = Number(initialValues.rent_amount || 0) + Number(initialValues.deposit_amount || 0);
+      setValue("amount_paid", total);
+      if (initialValues.payment_category) setValue("payment_category", initialValues.payment_category);
+      if (initialValues.contract_id) setValue("contract_id", initialValues.contract_id);
+      if (initialValues.billing_id) setValue("billing_id", initialValues.billing_id);
+      deepLinkApplied.current = true;
+      return;
+    }
+
+    // Handle Standard Deep-linking (Search Params or Props)
+    if (billingOptions.length > 0 || initialValues) {
+      if (initialValues) {
+        if (initialValues.payment_category) setValue("payment_category", initialValues.payment_category);
+
+        if (!isInitialSettlement && initialValues.amount_paid) {
+          setValue("amount_paid", initialValues.amount_paid);
+        }
+
+        if (initialValues.contract_id) setValue("contract_id", initialValues.contract_id);
+        if (initialValues.billing_id) setValue("billing_id", initialValues.billing_id);
+        if (initialValues.payment_category === "refund") setIsRefundMode(true);
+        else if (initialValues.payment_category === "deposit") setIsRefundMode(false);
+      } else {
+        const bId = searchParams.get("billing_id");
+        const cId = searchParams.get("contract_id");
+        const category = searchParams.get("category");
+        const amount = searchParams.get("amount");
+
+        if (category) {
+          setIsRefundMode(category === "refund");
+          setValue("payment_category", category);
+          if (amount) setValue("amount_paid", amount);
+          if (cId) setValue("contract_id", cId);
+        }
+        if (bId) setValue("billing_id", bId);
+        else if (cId && category !== "refund") {
+          const matching = billingOptions.find((b) => String(b.contract_id) === String(cId));
+          if (matching) setValue("billing_id", String(matching.billing_id));
+        }
+      }
+      deepLinkApplied.current = true;
+    }
+  }, [billingOptions, setValue, searchParams, initialValues, isInitialSettlement]);
+
+  const { execute: submitStandardPayment, isPending: isStandardSubmitting } = useAction("/api/payments", {
     method: "POST",
     successMessage: "Payment recorded successfully.",
     onSuccess: (response) => {
       setShowConfirmModal(false);
-      const updatedBillingId = response?.billing?.billing_id || response?.data?.billing?.billing_id;
-      router.push(updatedBillingId ? `/billing/${updatedBillingId}` : '/payments');
+      if (onSuccess) {
+        onSuccess(response);
+      } else {
+        const updatedBillingId = response?.billing?.billing_id || response?.data?.billing?.billing_id;
+        router.push(updatedBillingId ? `/billing/${updatedBillingId}` : '/payments');
+      }
     },
     onError: (err) => {
       setShowConfirmModal(false);
       applyServerFieldErrors(err, setError, { showToast });
     }
   });
+
+  const { execute: submitCompositePayment, isPending: isCompositeSubmitting } = useAction("/api/payments/composite", {
+    method: "POST",
+    successMessage: "Initial settlement recorded successfully.",
+    onSuccess: (response) => {
+      setShowConfirmModal(false);
+      if (onSuccess) {
+        onSuccess(response);
+      } else {
+        router.push(`/contracts/${initialValues?.contract_id}`);
+      }
+    },
+    onError: (err) => {
+      setShowConfirmModal(false);
+      applyServerFieldErrors(err, setError, { showToast });
+    }
+  });
+
+  const isSubmitting = isStandardSubmitting || isCompositeSubmitting;
 
   const onSubmit = (values) => {
     setPendingValues(values);
@@ -296,16 +363,29 @@ export default function PaymentWizard() {
     const isStandalone = cat === "refund" || cat === "deposit";
 
     try {
-      await submitPayment({
-        billing_id: isStandalone ? null : Number(pendingValues.billing_id),
-        contract_id: isStandalone ? Number(pendingValues.contract_id) : null,
-        amount_paid: Number(pendingValues.amount_paid),
-        payment_date: pendingValues.payment_date,
-        payment_method: pendingValues.payment_method,
-        payment_category: cat,
-        reference_number: isPaymentMethodCash(pendingValues.payment_method) ? null : pendingValues.reference_number || null,
-        remarks: pendingValues.remarks || null,
-      });
+      if (isInitialSettlement) {
+        await submitCompositePayment({
+          billing_id: Number(pendingValues.billing_id),
+          contract_id: Number(pendingValues.contract_id),
+          rent_amount: Number(initialValues.rent_amount || 0),
+          deposit_amount: Number(initialValues.deposit_amount || 0),
+          payment_date: pendingValues.payment_date,
+          payment_method: pendingValues.payment_method,
+          reference_number: isPaymentMethodCash(pendingValues.payment_method) ? null : pendingValues.reference_number || null,
+          remarks: (pendingValues.remarks || '') + " (Full Onboarding Settlement)",
+        });
+      } else {
+        await submitStandardPayment({
+          billing_id: isStandalone ? null : Number(pendingValues.billing_id),
+          contract_id: isStandalone ? Number(pendingValues.contract_id) : null,
+          amount_paid: Number(pendingValues.amount_paid),
+          payment_date: pendingValues.payment_date,
+          payment_method: pendingValues.payment_method,
+          payment_category: cat,
+          reference_number: isPaymentMethodCash(pendingValues.payment_method) ? null : pendingValues.reference_number || null,
+          remarks: pendingValues.remarks || null,
+        });
+      }
     } catch (error) { }
   };
 
@@ -315,8 +395,9 @@ export default function PaymentWizard() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      {showConfirmModal && pendingValues && (selectedBilling || isRefundMode || isDepositMode) && (
+      {showConfirmModal && pendingValues && (selectedBilling || isRefundMode || isDepositMode || isInitialSettlement) && (
         <ConfirmPaymentModal
+          isInitialSettlement={isInitialSettlement}
           selectedBilling={selectedBilling}
           residentName={residentName}
           values={pendingValues}
@@ -328,7 +409,7 @@ export default function PaymentWizard() {
         />
       )}
 
-      {billingOptions.length === 0 && (
+      {billingOptions.length === 0 && !isInitialSettlement && (
         <Alert variant="info" title="No Pending Receivables" className="mb-6 hs-glass-effect">
           There are currently no active bills or pending balances across the ledger.
         </Alert>
@@ -340,89 +421,97 @@ export default function PaymentWizard() {
         transition={shouldReduceMotion ? { duration: 0.2 } : pageVariants.transition}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-5">
-            <div className="lg:col-span-3 space-y-6">
-              <FormSection title="Transaction Context" icon={ShieldCheck} bodyClassName="p-8" className="hs-glass-effect">
-                <Field label="Payment Category" required>
-                  <div className="grid grid-cols-2 gap-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setValue("payment_category", "billing");
-                        setIsRefundMode(false);
-                      }}
-                      className={`flex flex-col items-start p-4 rounded-2xl border-2 transition-all ${watchedCategory === "billing" ? "border-teal-600 bg-teal-50/30" : "border-stone-100 bg-white hover:border-stone-200"}`}
-                    >
-                      <Receipt size={20} className={watchedCategory === "billing" ? "text-teal-600" : "text-stone-400"} />
-                      <span className={`mt-2 text-xs font-black uppercase tracking-widest ${watchedCategory === "billing" ? "text-teal-900" : "text-stone-600"}`}>Rent / Utilities</span>
-                      <span className="text-[10px] text-stone-500 font-medium">Standard monthly collection</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setValue("payment_category", "deposit");
-                        setIsRefundMode(false);
-                      }}
-                      className={`flex flex-col items-start p-4 rounded-2xl border-2 transition-all ${watchedCategory === "deposit" ? "border-amber-600 bg-amber-50/30" : "border-stone-100 bg-white hover:border-stone-200"}`}
-                    >
-                      <ShieldCheck size={20} className={watchedCategory === "deposit" ? "text-amber-600" : "text-stone-400"} />
-                      <span className={`mt-2 text-xs font-black uppercase tracking-widest ${watchedCategory === "deposit" ? "text-amber-900" : "text-stone-600"}`}>Security Deposit</span>
-                      <span className="text-[10px] text-stone-500 font-medium">Initial lease collateral</span>
-                    </button>
-                  </div>
-                </Field>
-              </FormSection>
-
-              <FormSection 
-                title={isRefundMode ? "Refund Authorization" : isDepositMode ? "Deposit Registration" : "Payment Information"} 
-                icon={isRefundMode || isDepositMode ? ShieldCheck : Receipt} 
-                bodyClassName="space-y-6 p-8" 
+          <div className="grid gap-6">
+            <div className="space-y-6">
+              <FormSection
+                title={isInitialSettlement ? "Onboarding Settlement" : "Transaction Context"}
+                icon={ShieldCheck}
+                bodyClassName="p-8"
                 className="hs-glass-effect"
               >
-                <Field label={isRefundMode || isDepositMode ? "Target Contract" : "Target Bill"} required error={errors.billing_id?.message || errors.contract_id?.message}>
-                  {isRefundMode || isDepositMode ? (
-                    <div className={`rounded-xl border p-4 flex flex-col gap-3 ${isDepositMode ? 'border-amber-200 bg-amber-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
-                       <div className="flex items-center justify-between">
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${isDepositMode ? 'text-amber-600' : 'text-amber-600'}`}>
-                            {isDepositMode ? 'Deposit Target' : 'Refund Target'}
-                          </span>
-                          <ShieldCheck className="text-amber-600" size={20} />
-                       </div>
-                       
-                       {isDepositMode ? (
-                          <Select 
-                            className="!h-11 border-amber-200 font-bold focus:ring-amber-500"
-                            {...register("contract_id", { 
-                              required: "Select a contract.",
-                              onChange: (e) => {
-                                const selected = pendingContracts.find(c => String(c.contract_id) === String(e.target.value));
-                                if (selected) {
-                                  setValue("amount_paid", selected.deposit_amount, { shouldDirty: true });
-                                }
-                              }
-                            })}
-                          >
-                            <option value="">Select pending contract</option>
-                            {pendingContracts.map(c => (
-                              <option key={c.contract_id} value={c.contract_id}>
-                                #{c.contract_id} · {c.tenant?.last_name}, {c.tenant?.first_name} · [{formatPHP(c.deposit_amount)}]
-                              </option>
-                            ))}
-                          </Select>
-                       ) : (
-                          <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold">#</span>
-                            <Input 
-                              type="number" 
-                              placeholder="Enter Contract ID" 
-                              className="!pl-8 !h-11 border-amber-200 font-bold focus:ring-amber-500"
-                              {...register("contract_id", { required: "Contract ID is required." })}
-                            />
-                          </div>
-                       )}
+                {!isInitialSettlement ? (
+                  <Field label="Payment Category" required>
+                    <div className="grid gap-4 grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setValue("payment_category", "billing");
+                          setIsRefundMode(false);
+                        }}
+                        className={`flex flex-col items-center text-center gap-3 p-6 rounded-2xl border-2 transition-all ${watchedCategory === "billing" ? "border-teal-600 bg-teal-50/30" : "border-stone-100 bg-white hover:border-stone-200"}`}
+                      >
+                        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${watchedCategory === "billing" ? "bg-teal-600 text-white" : "bg-stone-50 text-stone-400"}`}>
+                          <Receipt size={24} />
+                        </div>
+                        <div className="overflow-hidden">
+                          <span className={`block text-[10px] font-black uppercase tracking-[0.2em] leading-tight ${watchedCategory === "billing" ? "text-teal-900" : "text-stone-600"}`}>Rent / Utilities</span>
+                          <span className="block text-[9px] text-stone-500 font-medium mt-2">Monthly collection</span>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setValue("payment_category", "deposit");
+                          setIsRefundMode(false);
+                        }}
+                        className={`flex flex-col items-center text-center gap-3 p-6 rounded-2xl border-2 transition-all ${watchedCategory === "deposit" ? "border-amber-600 bg-amber-50/30" : "border-stone-100 bg-white hover:border-stone-200"}`}
+                      >
+                        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${watchedCategory === "deposit" ? "bg-amber-600 text-white" : "bg-stone-50 text-stone-400"}`}>
+                          <ShieldCheck size={24} />
+                        </div>
+                        <div className="overflow-hidden">
+                          <span className={`block text-[10px] font-black uppercase tracking-[0.2em] leading-tight ${watchedCategory === "deposit" ? "text-amber-900" : "text-stone-600"}`}>Security Deposit</span>
+                          <span className="block text-[9px] text-stone-500 font-medium mt-2">Lease collateral</span>
+                        </div>
+                      </button>
+                    </div>
+                  </Field>
+                ) : (
+                  <div className="flex flex-col items-center text-center p-4 bg-teal-50/50 rounded-2xl border border-teal-100">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-600 text-white mb-4 shadow-lg shadow-teal-900/10">
+                      <Wallet size={28} />
+                    </div>
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-teal-900 mb-1">Full Onboarding Settlement</span>
+                    <span className="text-[10px] text-teal-700 font-medium italic">Combining Security Deposit & First Month Rent</span>
+                  </div>
+                )}
+              </FormSection>
+
+              <FormSection
+                title={isRefundMode ? "Refund Authorization" : isDepositMode ? "Deposit Registration" : "Payment Information"}
+                icon={isRefundMode || isDepositMode ? ShieldCheck : Receipt}
+                bodyClassName="space-y-6 p-8"
+                className="hs-glass-effect"
+              >
+                <Field label={isInitialSettlement ? "Onboarding Target" : isRefundMode || isDepositMode ? "Target Contract" : "Target Bill"} required error={errors.billing_id?.message || errors.contract_id?.message}>
+                  {/* Standard Registration Layer (Hidden from UI, but active for validation) */}
+                  <div className="sr-only" aria-hidden="true">
+                    <Select {...register("billing_id", { required: isInitialSettlement ? "Billing target missing." : false })} defaultValue={initialValues?.billing_id || ""}>
+                      <option value={initialValues?.billing_id || ""}>{initialValues?.billing_id}</option>
+                    </Select>
+                    <input {...register("contract_id", { required: "Contract target missing." })} defaultValue={initialValues?.contract_id || ""} />
+                  </div>
+
+                  {isInitialSettlement || isRefundMode || isDepositMode ? (
+                    <div className={`rounded-xl border p-4 flex flex-col gap-3 ${isInitialSettlement ? 'border-teal-200 bg-teal-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${isInitialSettlement ? 'text-teal-600' : 'text-amber-600'}`}>
+                          {isInitialSettlement ? 'Lease Agreement' : isDepositMode ? 'Deposit Target' : 'Refund Target'}
+                        </span>
+                        <ShieldCheck className={isInitialSettlement ? 'text-teal-600' : 'text-amber-600'} size={20} />
+                      </div>
+
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-stone-900 leading-tight">
+                          {residentName || "Agreement Record"}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-stone-400 mt-1 uppercase tracking-tighter">
+                          {isInitialSettlement ? `Full Settlement for #CONTRACT-${String(initialValues?.contract_id || 0).padStart(6, '0')}` : `#CONTRACT-${String(initialValues?.contract_id || 0).padStart(6, '0')}`}
+                        </span>
+                      </div>
                     </div>
                   ) : (
-                    <Select hasError={Boolean(errors.billing_id)} className="!h-11 border-stone-200 font-bold" {...register("billing_id", { required: "Select an active ledger item." })}>
+                    <Select hasError={Boolean(errors.billing_id)} className="!h-12 border-stone-200 font-bold" {...register("billing_id", { required: "Select an active ledger item." })}>
                       <option value="">Select ledger record</option>
                       {billingOptions.map((bill) => (
                         <option key={bill.billing_id} value={bill.billing_id}>
@@ -432,8 +521,21 @@ export default function PaymentWizard() {
                     </Select>
                   )}
                 </Field>
-                <Field label={isRefundMode ? "Refund Amount" : isDepositMode ? "Deposit Amount" : "Amount Paid"} required error={errors.amount_paid?.message}>
-                  <Input type="number" step="0.01" prefix="₱" hasError={Boolean(errors.amount_paid)} className={`!h-12 border-stone-200 font-mono text-lg font-black tabular-nums ${isRefundMode || isDepositMode ? 'text-amber-700' : 'text-teal-700'}`} {...register("amount_paid", { required: "Required.", min: { value: 0.01, message: "Must be positive." } })} />
+                <Field label="Settlement Total" required error={errors.amount_paid?.message}>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    prefix="₱"
+                    readOnly={isInitialSettlement}
+                    hasError={Boolean(errors.amount_paid)}
+                    className={`!h-12 border-stone-200 font-mono text-lg font-black tabular-nums ${isRefundMode || isDepositMode ? 'text-amber-700' : isInitialSettlement ? 'text-stone-900 bg-stone-50' : 'text-teal-700'}`}
+                    {...register("amount_paid", { required: "Required.", min: { value: 0.01, message: "Must be positive." } })}
+                  />
+                  {isInitialSettlement && (
+                    <p className="mt-2 text-[10px] font-black text-teal-600 uppercase tracking-[0.15em]">
+                      {formatPHP(initialValues.rent_amount)} Rent + {formatPHP(initialValues.deposit_amount)} Deposit
+                    </p>
+                  )}
                 </Field>
               </FormSection>
 
@@ -448,9 +550,9 @@ export default function PaymentWizard() {
                     </Select>
                   </Field>
                 </div>
-                <Field 
-                  label="Reference No." 
-                  required={!isPaymentMethodCash(watchedMethod)} 
+                <Field
+                  label="Reference No."
+                  required={!isPaymentMethodCash(watchedMethod)}
                   error={errors.reference_number?.message}
                   warning={scannedDuplicateRef ? "This reference number has already been recorded in a previous transaction." : null}
                 >
@@ -478,13 +580,18 @@ export default function PaymentWizard() {
               </FormSection>
             </div>
 
-            <div className="lg:col-span-2 space-y-6">
-              <BillingSummaryPanel selectedBilling={selectedBilling} paymentAmount={watchedAmount} />
+            <div className="space-y-6">
+              <BillingSummaryPanel
+                selectedBilling={selectedBilling}
+                paymentAmount={watchedAmount}
+                isInitialSettlement={isInitialSettlement}
+                initialValues={initialValues}
+              />
 
               <div className="rounded-2xl border border-stone-100 bg-stone-50 p-6 space-y-3">
                 <div className="flex items-center gap-3 text-stone-400">
                   <ShieldCheck size={18} />
-                  <p className="text-[10px] font-black uppercase tracking-widest">Policy Verification</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">Policy Verification</p>
                 </div>
                 <p className="text-xs font-medium text-stone-500 leading-relaxed">
                   Collections are final and legally binding once recorded. Audit trails are maintained for all ledger mutations.
@@ -504,7 +611,7 @@ export default function PaymentWizard() {
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => router.push("/payments")}
+                  onClick={() => onCancel ? onCancel() : router.push("/payments")}
                   className="w-full !h-12 rounded-xl text-xs font-black uppercase tracking-widest text-stone-400 hover:text-stone-600 transition-all active:scale-95"
                 >
                   Cancel Transaction

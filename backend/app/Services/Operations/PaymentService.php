@@ -129,6 +129,52 @@ class PaymentService
     }
 
     /**
+     * FR-024c: Record a composite onboarding payment (Rent + Deposit).
+     * Creates two distinct payment records in a single atomic transaction.
+     */
+    public static function recordCompositeInitial(User $actor, array $data): array
+    {
+        return self::runWriteWorkflow(
+            actorId: $actor->user_id,
+            action: 'POST_COMPOSITE_PAYMENT',
+            payload: [
+                'billing_id' => $data['billing_id'],
+                'contract_id' => $data['contract_id'],
+                'rent_amount' => $data['rent_amount'],
+                'deposit_amount' => $data['deposit_amount'],
+            ],
+            operation: function () use ($actor, $data): array {
+                $rentPayment = self::record($actor, [
+                    'payment_category' => 'billing',
+                    'billing_id' => $data['billing_id'],
+                    'amount_paid' => $data['rent_amount'],
+                    'payment_date' => $data['payment_date'],
+                    'payment_method' => $data['payment_method'],
+                    'reference_number' => $data['reference_number'] ?? null,
+                    'remarks' => ($data['remarks'] ?? '') . ' (Part of composite initial settlement)',
+                    'idempotency_key' => ($data['idempotency_key'] ?? '') ? $data['idempotency_key'] . '-rent' : null,
+                ]);
+
+                $depositPayment = self::record($actor, [
+                    'payment_category' => 'deposit',
+                    'contract_id' => $data['contract_id'],
+                    'amount_paid' => $data['deposit_amount'],
+                    'payment_date' => $data['payment_date'],
+                    'payment_method' => $data['payment_method'],
+                    'reference_number' => $data['reference_number'] ?? null,
+                    'remarks' => ($data['remarks'] ?? '') . ' (Part of composite initial settlement)',
+                    'idempotency_key' => ($data['idempotency_key'] ?? '') ? $data['idempotency_key'] . '-deposit' : null,
+                ]);
+
+                return [
+                    'rent' => $rentPayment,
+                    'deposit' => $depositPayment
+                ];
+            }
+        );
+    }
+
+    /**
      * Void a payment and reverse financial impacts.
      *
      * @param  User  $actor  The staff member voiding the payment.
@@ -172,31 +218,26 @@ class PaymentService
     {
         $query = self::listHistoryQuery($filters);
         
-        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortBy = $filters['sort_by'] ?? 'date';
         $sortDir = $filters['sort_dir'] ?? 'desc';
         
-        if ($sortByRaw === 'id') {
-            $query->orderBy('payment_id', $sortDir);
-        } elseif ($sortByRaw === 'date') {
-            $query->orderBy('payment_date', $sortDir)->orderBy('payment_id', $sortDir);
-        } elseif ($sortByRaw === 'amount') {
-            $query->orderBy('amount_paid', $sortDir)->orderBy('payment_id', $sortDir);
-        } elseif ($sortByRaw === 'method') {
-            $query->orderBy('payment_method', $sortDir)->orderBy('payment_id', $sortDir);
-        } elseif ($sortByRaw === 'tenant') {
-            $query->leftJoin('billings', 'payments.billing_id', '=', 'billings.billing_id')
-                  ->leftJoin('contracts', function($join) {
-                      $join->on('payments.contract_id', '=', 'contracts.contract_id')
-                           ->orOn('billings.contract_id', '=', 'contracts.contract_id');
-                  })
-                  ->leftJoin('tenants', 'contracts.tenant_id', '=', 'tenants.tenant_id')
-                  ->orderBy('tenants.last_name', $sortDir)
-                  ->orderBy('tenants.first_name', $sortDir)
-                  ->orderBy('payments.payment_id', $sortDir)
-                  ->select('payments.*');
+        $sortMap = [
+            'id'     => 'payment_id',
+            'date'   => 'payment_date',
+            'amount' => 'amount_paid',
+            'method' => 'payment_method',
+        ];
+
+        if (isset($sortMap[$sortBy])) {
+            $query->orderBy($sortMap[$sortBy], $sortDir);
+        } elseif ($sortBy === 'tenant') {
+            $query->withTenantContext()->orderBy('tenant_name', $sortDir);
         } else {
-            $query->orderByDesc('payment_date')->orderByDesc('payment_id');
+            $query->orderByDesc('payment_date');
         }
+        
+        // Secondary tie-breaker
+        $query->orderByDesc('payment_id');
         
         return $query->paginate($perPage, ['*'], 'page', $page);
     }

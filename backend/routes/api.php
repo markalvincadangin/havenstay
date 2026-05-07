@@ -52,6 +52,7 @@ Route::middleware(['auth:sanctum', 'auth.check', 'audit.context'])->prefix('tena
     Route::get('summary', [TenantController::class, 'summary']);
     Route::post('/', [TenantController::class, 'store']);
     Route::get('search', [TenantController::class, 'search']);
+    Route::post('existence-check', [TenantController::class, 'existenceCheck']);
     Route::get('{tenant}', [TenantController::class, 'show'])->withTrashed();
     Route::put('{tenant}', [TenantController::class, 'update'])->withTrashed();
     Route::post('{tenant}/reactivate', [TenantController::class, 'reactivate'])->withTrashed();
@@ -104,6 +105,7 @@ Route::middleware(['auth:sanctum', 'auth.check', 'audit.context'])->prefix('bill
 Route::middleware(['auth:sanctum', 'auth.check', 'audit.context'])->prefix('payments')->group(function (): void {
     Route::get('/', [PaymentController::class, 'index']);
     Route::post('/', [PaymentController::class, 'store']);
+    Route::post('composite', [PaymentController::class, 'storeComposite']);
     Route::get('{payment}', [PaymentController::class, 'show']);
     Route::post('{payment}/void', [PaymentController::class, 'void']);
 });

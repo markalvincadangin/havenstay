@@ -1,3 +1,4 @@
+import React from "react";
 import {
   TENANT_STATUS_LABELS,
   ROOM_STATUS_LABELS,
@@ -53,7 +54,7 @@ import {
  * - voided → badge-neutral (stone)
  */
 
-export function StatusBadge({ children }) {
+function StatusBadgeComponent({ children }) {
   const rawValue = String(children || "").toLowerCase().trim();
 
   // Normalize value (handle spaces and underscores)
@@ -108,6 +109,9 @@ export function StatusBadge({ children }) {
     failed_login: "badge-danger",
     login: "badge-success",
     logout: "badge-neutral",
+    restore: "badge-success",
+    soft_delete: "badge-neutral",
+    archive: "badge-neutral",
     started: "badge-info",
     superseded: "badge-neutral",
   };
@@ -145,6 +149,9 @@ export function StatusBadge({ children }) {
     billing: CreditCard,
     void: XCircle,
     onboarded: Clock,
+    restore: History,
+    soft_delete: Archive,
+    archive: Archive,
   };
 
   const variant = variantMap[normalizedValue] || "badge-neutral";
@@ -250,5 +257,8 @@ export function StatusBadge({ children }) {
     </span>
   );
 }
+
+// Industry Pattern: Memoize repeating list components to prevent CPU jank during dashboard updates.
+export const StatusBadge = React.memo(StatusBadgeComponent);
 
 export default StatusBadge;

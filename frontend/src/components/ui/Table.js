@@ -34,15 +34,17 @@ export function Table({
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: { 
-        staggerChildren: shouldReduceMotion ? 0 : 0.04 
+      transition: {
+        // Faster stagger for a snappier feel. 
+        // Disable stagger if there are too many rows (>25) or if it's just a data update.
+        staggerChildren: (shouldReduceMotion || rows.length > 25) ? 0 : 0.01
       }
     }
   };
 
   const trVariants = {
-    hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 8 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } }
+    hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 4 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } }
   };
 
   const headerRowClass = [
@@ -70,8 +72,8 @@ export function Table({
                   className={[
                     "px-6 text-[10px] font-black tracking-widest text-stone-400 uppercase",
                     thPadding,
-                    col.className?.includes("text-right") ? "text-right" : 
-                    col.className?.includes("text-center") ? "text-center" : "text-left",
+                    col.className?.includes("text-right") ? "text-right" :
+                      col.className?.includes("text-center") ? "text-center" : "text-left",
                     col.headerClassName,
                   ]
                     .filter(Boolean)
@@ -91,8 +93,8 @@ export function Table({
                       type="button"
                       className={[
                         "max-w-full items-center gap-1.5 rounded-md py-0.5 font-inherit tracking-widest text-stone-400 transition-colors hover:text-stone-700",
-                        col.className?.includes("text-right") ? "flex w-full justify-end" : 
-                        col.className?.includes("text-center") ? "flex w-full justify-center" : "inline-flex",
+                        col.className?.includes("text-right") ? "flex w-full justify-end" :
+                          col.className?.includes("text-center") ? "flex w-full justify-center" : "inline-flex",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -119,21 +121,25 @@ export function Table({
             })}
           </tr>
         </thead>
-        <motion.tbody initial="hidden" animate="visible" variants={tbodyVariants}>
+        <motion.tbody
+          initial="hidden"
+          animate="visible"
+          variants={tbodyVariants}
+        >
           {rows.length > 0 ? (
             React.Children.map(rows, (child, index) => {
               if (React.isValidElement(child)) {
                 // Destructure custom props that shouldn't reach the DOM
-                const { 
-                  children, 
-                  className: childClass, 
-                  expandableContent: _expandableContent, 
-                  defaultExpanded: _defaultExpanded, 
+                const {
+                  children,
+                  className: childClass,
+                  expandableContent: _expandableContent,
+                  defaultExpanded: _defaultExpanded,
                   colSpan: _colSpan,
                   asChild = false,
-                  ...otherProps 
+                  ...otherProps
                 } = child.props;
-                
+
                 // If it's an ExpandableTableRow or marked as a custom component, 
                 // we render it directly to preserve its internal logic.
                 if (_expandableContent || asChild) {
@@ -152,10 +158,10 @@ export function Table({
                 const rowKey = child.key ?? `hs-row-${index}`;
 
                 return (
-                  <motion.tr 
-                    key={rowKey} 
-                    {...otherProps} 
-                    className={finalRowClass} 
+                  <motion.tr
+                    key={rowKey}
+                    {...otherProps}
+                    className={finalRowClass}
                     variants={trVariants}
                   >
                     {children}
@@ -167,8 +173,8 @@ export function Table({
           ) : (
             <motion.tr key="empty-state" variants={trVariants}>
               <td colSpan={columns.length} className="p-0">
-                <EmptyState 
-                  title={emptyTitle} 
+                <EmptyState
+                  title={emptyTitle}
                   description={emptyDescription}
                   className="border-0 shadow-none rounded-none py-20"
                 />

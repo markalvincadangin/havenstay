@@ -214,18 +214,18 @@ class RoomService
      * @param  int  $perPage  Records per page.
      * @return LengthAwarePaginator
      */
-    public static function listPaginated(array $filters, int $page = 1, int $perPage = 25)
+    public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
     {
-        $query = Room::query()->with(['bedSpaces']);
+        $query = Room::query()->withOccupancyStats();
 
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         } else {
             $query->where('status', '!=', RoomStatus::DECOMMISSIONED->value);
         }
 
         $type = $filters['type'] ?? $filters['room_type'] ?? null;
-        if (!empty($type)) {
+        if (! empty($type)) {
             $query->where('room_type', $type);
         }
 
@@ -249,19 +249,20 @@ class RoomService
             });
         }
 
-        $sortByRaw = $filters['sort_by'] ?? null;
+        $sortBy = $filters['sort_by'] ?? 'code';
         $sortDir = $filters['sort_dir'] ?? 'asc';
 
-        if ($sortByRaw === 'id') {
-            $query->orderBy('room_id', $sortDir);
-        } elseif ($sortByRaw === 'type') {
-            $query->orderBy('room_type', $sortDir)->orderBy('room_code', 'asc');
-        } elseif ($sortByRaw === 'status') {
-            $query->orderBy('status', $sortDir)->orderBy('room_code', 'asc');
-        } elseif ($sortByRaw === 'monthly_rate') {
-            $query->orderBy('monthly_rate', $sortDir)->orderBy('room_code', 'asc');
-        } elseif ($sortByRaw === 'capacity') {
-            $query->orderBy('capacity', $sortDir)->orderBy('room_code', 'asc');
+        $sortMap = [
+            'id'           => 'room_id',
+            'type'         => 'room_type',
+            'status'       => 'status',
+            'monthly_rate' => 'monthly_rate',
+            'capacity'     => 'capacity',
+            'code'         => 'room_code',
+        ];
+
+        if (isset($sortMap[$sortBy])) {
+            $query->orderBy($sortMap[$sortBy], $sortDir);
         } else {
             $query->orderBy('room_code', $sortDir);
         }
