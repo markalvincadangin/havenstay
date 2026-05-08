@@ -77,7 +77,7 @@ return new class extends Migration
             $table->string('emergency_contact_name', 200);
             $table->string('emergency_contact_number', 20);
             $table->text('address');
-            $table->enum('status', ['active', 'moved_out', 'archived'])->default('active');
+            $table->enum('status', ['onboarded', 'active', 'moved_out', 'archived'])->default('onboarded');
             $table->string('active_email', 150)->nullable()->unique();
             $table->timestamps();
             $table->softDeletes();
