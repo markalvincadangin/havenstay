@@ -203,6 +203,7 @@ CREATE TABLE meter_readings (
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_meter_reading_forensic (meter_id, reading_date, reading_value),
+    INDEX idx_reading_forensic (meter_id, reading_date DESC),
     CONSTRAINT fk_mr_meter FOREIGN KEY (meter_id) REFERENCES meters (meter_id),
     CONSTRAINT fk_mr_actor FOREIGN KEY (recorded_by) REFERENCES users (user_id)
 ) ENGINE=InnoDB;
@@ -230,9 +231,9 @@ CREATE TABLE billing (
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_billing_cycle (contract_id, billing_period_from, billing_period_to),
     UNIQUE KEY uq_billing_idempotency (idempotency_key),
-    CONSTRAINT fk_billing_contract FOREIGN KEY (contract_id) REFERENCES contracts (contract_id),
-    INDEX idx_billing_status (status),
-    INDEX idx_billing_due (due_date)
+    INDEX idx_billing_status_due (status, due_date),
+    INDEX idx_billing_due (due_date),
+    CONSTRAINT fk_billing_contract FOREIGN KEY (contract_id) REFERENCES contracts (contract_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE billing_line_items (
@@ -269,6 +270,9 @@ CREATE TABLE payments (
     idempotency_key  VARCHAR(255)  NULL,
     created_at       DATETIME      DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_payments_idempotency (idempotency_key),
+    INDEX idx_payment_date (payment_date),
+    INDEX idx_payment_category (payment_category),
+    INDEX idx_payment_method (payment_method),
     CONSTRAINT fk_pay_billing  FOREIGN KEY (billing_id)   REFERENCES billing (billing_id),
     CONSTRAINT fk_pay_contract FOREIGN KEY (contract_id)  REFERENCES contracts (contract_id),
     CONSTRAINT fk_pay_actor    FOREIGN KEY (processed_by) REFERENCES users   (user_id),
@@ -280,9 +284,7 @@ CREATE TABLE payments (
     ),
     CONSTRAINT chk_pay_ref_required CHECK (
         payment_method NOT IN ('gcash', 'bank_transfer') OR reference_number IS NOT NULL
-    ),
-    INDEX idx_payment_date (payment_date),
-    INDEX idx_payment_category (payment_category)
+    )
 ) ENGINE=InnoDB;
 
 -- AUDIT LOGS TABLE
@@ -309,6 +311,7 @@ CREATE TABLE audit_logs (
     execution_time_ms INT          NULL,
     metadata          JSON         NULL,
     changed_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_resource_history (target_table, record_id, changed_at),
     INDEX idx_audit_timestamp (changed_at),
     INDEX idx_audit_resource  (target_table, record_id),
     INDEX idx_audit_action    (action),
@@ -323,9 +326,6 @@ INSERT INTO roles (role_id, role_name, description) VALUES
 (1, 'admin',  'System Administrator'),
 (2, 'staff',  'Operator'),
 (3, 'viewer', 'Read-Only');
-
-INSERT INTO users (role_id, first_name, last_name, username, email, password_hash) VALUES
-(1, 'System', 'Administrator', 'admin', 'admin@havenstay.com', '$2y$12$V.vR9pW5zEq.6vD.JvR7v.XvXvXvXvXvXvXvXvXvXvXvXvXvXvXvX');
 
 INSERT INTO utilities (utility_id, name, unit_of_measurement) VALUES
 (1, 'Electricity', 'kWh'),

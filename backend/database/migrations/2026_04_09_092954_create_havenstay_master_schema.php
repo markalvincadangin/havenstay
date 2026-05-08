@@ -180,7 +180,7 @@ return new class extends Migration
             $table->boolean('is_rollover')->default(false);
             $table->unsignedInteger('recorded_by');
             $table->timestamps();
-            $table->unique(['meter_id', 'reading_date', 'reading_value'], 'uk_meter_reading_forensic');
+            $table->index(['meter_id', 'reading_date'], 'idx_reading_forensic');
             $table->foreign('meter_id')->references('meter_id')->on('meters');
             $table->foreign('recorded_by')->references('user_id')->on('users');
         });
@@ -207,7 +207,7 @@ return new class extends Migration
             $table->unique(['contract_id', 'billing_period_from', 'billing_period_to'], 'uq_billing_cycle');
 
             // Performance Hardening
-            $table->index('status', 'idx_billing_status');
+            $table->index(['status', 'due_date'], 'idx_billing_status_due');
             $table->index('due_date', 'idx_billing_due');
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
         });
@@ -245,6 +245,7 @@ return new class extends Migration
             // Performance Hardening
             $table->index('payment_date', 'idx_payment_date');
             $table->index('payment_category', 'idx_payment_category');
+            $table->index('payment_method', 'idx_payment_method');
             $table->foreign('billing_id')->references('billing_id')->on('billing');
             $table->foreign('contract_id')->references('contract_id')->on('contracts');
             $table->foreign('processed_by')->references('user_id')->on('users');
@@ -276,7 +277,7 @@ return new class extends Migration
             $table->json('metadata')->nullable();
             $table->timestamp('changed_at')->useCurrent();
 
-            // Performance Hardening
+            $table->index(['target_table', 'record_id', 'changed_at'], 'idx_audit_resource_history');
             $table->index('changed_at', 'idx_audit_timestamp');
             $table->index(['target_table', 'record_id'], 'idx_audit_resource');
             $table->index('action', 'idx_audit_action');
