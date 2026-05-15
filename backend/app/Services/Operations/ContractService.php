@@ -77,18 +77,77 @@ class ContractService
                 'deposit_fact' => $data['deposit_amount'] ?? 0,
             ],
             operation: function () use ($actor, $data): Contract {
-                Inventory::guardOverlaps((int) $data['tenant_id'], $data['bed_space_id'] ?? null, $data['move_in_date'] ?? null);
+                $roomId = $data['room_id'] ?? null;
+                $bedSpaceId = $data['bed_space_id'] ?? null;
+                $moveInDate = $data['move_in_date'] ?? null;
 
-                // Fetch room rate if not overridden
-                $bedSpace = BedSpace::with('room')->find((int) $data['bed_space_id']);
+                // Idempotency: Return existing if key matches (prevents 500 errors on client retry)
+                if (!empty($data['idempotency_key'])) {
+                    $existing = Contract::where('idempotency_key', $data['idempotency_key'])->first();
+                    if ($existing) {
+                        return $existing->load(['tenant', 'bedSpace.room', 'latestBilling.lineItems']);
+                    }
+                }
+
+                // Auto-assignment logic for private rooms
+                if (!$bedSpaceId && $roomId) {
+                    $room = Room::findOrFail((int) $roomId);
+                    if ($room->room_type === RoomType::PRIVATE) {
+                        $bedSpace = $room->bedSpaces()->first();
+                        if (!$bedSpace) {
+                            throw ValidationException::withMessages([
+                                'room_id' => ['This private room has no bed space configuration. Please contact admin.'],
+                            ]);
+                        }
+                        $bedSpaceId = $bedSpace->bed_space_id;
+                    } else {
+                        throw ValidationException::withMessages([
+                            'bed_space_id' => ['A specific bed space must be selected for shared rooms.'],
+                        ]);
+                    }
+                }
+
+                if (!$bedSpaceId) {
+                    throw ValidationException::withMessages([
+                        'bed_space_id' => ['Bed space selection is mandatory.'],
+                    ]);
+                }
+
+                Inventory::guardOverlaps((int) $data['tenant_id'], (int) $bedSpaceId, $moveInDate);
+
+                // Fetch bedSpace with room context for rate and metered checks
+                $bedSpace = BedSpace::with('room')->findOrFail((int) $bedSpaceId);
+
+                // Security: Ensure bed space belongs to the intended room
+                if ($roomId && (int) $bedSpace->room_id !== (int) $roomId) {
+                    throw ValidationException::withMessages([
+                        'bed_space_id' => ['The selected bed space does not belong to the selected room.'],
+                    ]);
+                }
+
+                // BR-MET-002: Metered rooms MUST have active meters assigned.
+                if ($bedSpace->room->is_metered) {
+                    $meterCount = \App\Models\MeterAssignment::where('room_id', $bedSpace->room_id)
+                        ->where(function ($q) use ($moveInDate) {
+                            $q->whereNull('valid_to')
+                              ->orWhere('valid_to', '>=', $moveInDate);
+                        })->count();
+
+                    if ($meterCount === 0) {
+                        throw ValidationException::withMessages([
+                            'room_id' => ["Room {$bedSpace->room->room_code} is metered but has no active meters assigned (BR-MET-002). Assign a meter before creating a contract."],
+                        ]);
+                    }
+                }
+
                 $monthlyRate = $data['monthly_rate'] ?? $bedSpace->room->monthly_rate;
 
                 $contract = Contract::create([
                     'tenant_id' => $data['tenant_id'],
-                    'bed_space_id' => $data['bed_space_id'],
+                    'bed_space_id' => $bedSpaceId,
                     'created_by' => $actor->user_id,
                     'contract_type' => $data['contract_type'] ?? ContractType::FIXED_TERM,
-                    'move_in_date' => $data['move_in_date'],
+                    'move_in_date' => $moveInDate,
                     'expected_move_out_date' => $data['expected_move_out'] ?? null,
                     'deposit_amount' => $data['deposit_amount'] ?? 0,
                     'monthly_rate' => $monthlyRate,

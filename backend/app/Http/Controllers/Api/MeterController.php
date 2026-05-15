@@ -54,6 +54,11 @@ class MeterController extends Controller
     {
         $meters = MeterService::getMetersForRoom((int) $room->room_id);
 
+        // Eager load utility and recent readings for the frontend
+        $meters->load(['utility', 'readings' => function ($query) {
+            $query->latest('reading_date')->limit(10);
+        }]);
+
         return $this->success('Room meters retrieved successfully.', MeterResource::collection($meters));
     }
 

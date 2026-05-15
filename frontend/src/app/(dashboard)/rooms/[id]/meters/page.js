@@ -39,43 +39,57 @@ export default function RoomMetersPage() {
   const { user: currentUser } = useAuth();
   const { showToast } = useToasts();
   const { data: room } = useSWR(currentUser && roomId ? `/api/rooms/${roomId}` : null, fetcher);
-  const { data: readings, error, mutate } = useSWR(
+  const { data: metersResponse, error, mutate } = useSWR(
     currentUser && roomId ? `/api/rooms/${roomId}/meters` : null,
     fetcher
   );
   const [activeTab, setActiveTab] = useState("electric");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+
   // Form State
   const [formData, setFormData] = useState({
     reading_date: new Date().toISOString().split('T')[0],
-    reading_value: ""
+    reading_value: "",
+    is_rollover: false
   });
-  const electricReadings = readings?.filter(r => r.utility_type === 'electric') || [];
-  const waterReadings = readings?.filter(r => r.utility_type === 'water') || [];
-  const currentReadings = activeTab === 'electric' ? electricReadings : waterReadings;
+
+  // Extract meters and their readings based on utility type
+  const meters = metersResponse?.data || [];
+  const currentMeter = meters.find(m => m.utility?.name?.toLowerCase().includes(activeTab));
+  const currentReadings = currentMeter?.readings || [];
+  
   const latestR = currentReadings[0];
-  const latestReadingValue = latestR?.reading_value ? Number(latestR.reading_value).toString() : "0";
+  const latestReadingValue = latestR?.reading_value ? Number(latestR.reading_value) : 0;
   const latestDateStr = latestR ? formatDateString(latestR.reading_date) : "N/A";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!currentMeter) {
+      showToast(`No ${activeTab} meter found for this room.`, "error");
+      return;
+    }
+
     const val = parseFloat(formData.reading_value);
-    if (isNaN(val) || val < latestReadingValue) {
-        showToast(`Validation failed: The new reading must be ≥ the last record (${latestReadingValue} on ${latestDateStr}).`, "error");
+    if (isNaN(val) || (!formData.is_rollover && val < latestReadingValue)) {
+        showToast(`Validation failed: The new reading must be ≥ the last record (${latestReadingValue} on ${latestDateStr}), unless it's a rollover.`, "error");
         return;
     }
+
     setIsSubmitting(true);
     try {
-      await apiRequest(`/api/rooms/${roomId}/meters`, {
+      // Correct endpoint: POST /api/meters/{meter_id}/readings
+      await apiRequest(`/api/meters/${currentMeter.meter_id}/readings`, {
         method: "POST",
         body: JSON.stringify({
           ...formData,
-          utility_type: activeTab,
           reading_value: val
         })
       });
+
       setShowAddModal(false);
-      setFormData({ reading_date: new Date().toISOString().split('T')[0], reading_value: "" });
+      setFormData({ reading_date: new Date().toISOString().split('T')[0], reading_value: "", is_rollover: false });
       showToast("Reading recorded successfully.", "success");
       mutate();
     } catch (err) {
@@ -96,7 +110,7 @@ export default function RoomMetersPage() {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-mono font-bold text-stone-500 uppercase tracking-widest leading-none">
-              Last Reading: {latestReadingValue} {activeTab === 'electric' ? 'kWh' : 'm³'}
+              Meter: {currentMeter?.serial_number || 'N/A'} • Last Reading: {latestReadingValue} {activeTab === 'electric' ? 'kWh' : 'm³'}
             </span>
           </div>
           <p className="hs-page-subtitle text-sm font-medium leading-relaxed text-stone-500">
@@ -104,7 +118,7 @@ export default function RoomMetersPage() {
           </p>
         </div>
       }
-      loading={!room && !error}
+      loading={!metersResponse && !error}
       error={error}
       breadcrumbs={
         <Breadcrumbs 
@@ -158,6 +172,7 @@ export default function RoomMetersPage() {
                  fullWidth 
                  className="!h-14 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-teal-500/20 bg-teal-600 hover:bg-teal-700 border-0"
                  onClick={() => setShowAddModal(true)}
+                 disabled={!currentMeter}
                >
                  <Plus size={18} strokeWidth={3} className="mr-2" />
                  Record Reading
@@ -169,7 +184,7 @@ export default function RoomMetersPage() {
               bodyClassName="p-8"
             >
                <p className="text-xs font-medium text-stone-500 leading-relaxed">
-                 Meter readings must be greater than or equal to the last recorded value of <strong className="text-stone-900">{latestReadingValue} {activeTab === 'electric' ? 'kWh' : 'm³'}</strong> to maintain billing accuracy. Lower entries will be rejected.
+                 Meter readings must be greater than or equal to the last recorded value of <strong className="text-stone-900">{latestReadingValue} {activeTab === 'electric' ? 'kWh' : 'm³'}</strong> to maintain billing accuracy. Lower entries will be rejected unless marked as a hardware rollover.
                </p>
             </FormSection>
           </aside>
@@ -308,6 +323,19 @@ export default function RoomMetersPage() {
                 </div>
               </div>
             </Field>
+            <div className="flex items-center gap-3 mt-4 mb-2 p-4 bg-stone-50 rounded-xl border border-stone-100">
+              <input
+                type="checkbox"
+                id="is_rollover"
+                checked={formData.is_rollover}
+                onChange={(e) => setFormData({ ...formData, is_rollover: e.target.checked })}
+                className="w-4 h-4 text-teal-600 rounded border-stone-300 focus:ring-teal-500"
+              />
+              <label htmlFor="is_rollover" className="text-xs font-bold text-stone-700 cursor-pointer">
+                Hardware Rollover
+                <span className="block text-[10px] font-medium text-stone-400 normal-case mt-0.5">Check this if the meter has rolled over its maximum digits back to zero.</span>
+              </label>
+            </div>
             <div className="pt-4 flex flex-col gap-3">
               <Button
                 type="submit"
@@ -331,7 +359,7 @@ export default function RoomMetersPage() {
           <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-100 flex gap-3">
             <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-[10px] font-medium text-amber-800 leading-relaxed uppercase">
-              Meter readings must be greater than or equal to the last record to maintain forensic billing integrity.
+              Meter readings must be greater than or equal to the last record to maintain forensic billing integrity, unless a hardware rollover occurred.
             </p>
           </div>
         </div>

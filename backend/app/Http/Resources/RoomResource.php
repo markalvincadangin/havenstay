@@ -30,6 +30,14 @@ class RoomResource extends JsonResource
             'amenities' => $this->amenities,
             'description' => $this->description,
             'is_metered' => (bool) $this->is_metered,
+            'active_meters_count' => (int) ($this->active_meters_count ?? 0),
+            'meter_serials' => $this->whenLoaded('meterAssignments', function() {
+                return $this->meterAssignments
+                    ->filter(fn($ma) => is_null($ma->valid_to))
+                    ->map(fn($ma) => $ma->meter?->serial_number)
+                    ->filter()
+                    ->values();
+            }),
 
             // Relationships
             'bed_spaces' => BedSpaceResource::collection($this->whenLoaded('bedSpaces')),

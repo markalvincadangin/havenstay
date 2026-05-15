@@ -91,7 +91,7 @@ class BillingService
                     if (! empty($data['reading_ids'])) {
                         $contract = Contract::with(['bedSpace.room'])->findOrFail((int) $data['contract_id']);
                         $activeContracts = Contract::whereHas('bedSpace', function ($q) use ($contract) {
-                            $q->where('room_id', $contract->room->room_id);
+                            $q->where('room_id', $contract->bedSpace->room_id);
                         })
                             ->whereIn('status', [ContractStatus::ACTIVE, ContractStatus::PENDING_PAYMENT])
                             ->orderBy('move_in_date', 'asc')

@@ -326,8 +326,8 @@ export default function PlatformDashboardPage() {
                       </td>
                       <td className="py-4">
                         <div className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors leading-none">
-                          {p.billing?.contract?.tenant 
-                            ? formatTenantDirectoryName(p.billing.contract.tenant) 
+                          {p.billing?.contract?.tenant
+                            ? formatTenantDirectoryName(p.billing.contract.tenant)
                             : (p.contract?.tenant ? formatTenantDirectoryName(p.contract.tenant) : "—")}
                         </div>
                         <div className="text-[10px] font-mono tabular-nums tracking-tighter text-stone-400 mt-1.5 uppercase font-bold">

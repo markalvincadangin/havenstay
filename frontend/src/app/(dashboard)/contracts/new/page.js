@@ -57,7 +57,7 @@ export default function NewContractPage() {
          move_in_date: new Date().toISOString().split("T")[0],
          expected_move_out: "",
          deposit_amount: "",
-         monthly_rent: "",
+         monthly_rate: "",
          monthly_rate_override: "",
          notes: "",
       },
@@ -73,6 +73,25 @@ export default function NewContractPage() {
       },
       onError: (err) => {
          applyServerFieldErrors(err, setError, { showToast });
+
+         // Logic to jump to the step with the first error
+         const errors = err.info?.errors || err.errors;
+         if (errors) {
+            const firstErrorField = Object.keys(errors)[0];
+            if (["room_id", "bed_space_id", "tenant_id"].includes(firstErrorField)) {
+               setCurrentStepIndex(0);
+            } else if (
+               [
+                  "monthly_rate",
+                  "deposit_amount",
+                  "contract_type",
+                  "move_in_date",
+                  "expected_move_out",
+               ].includes(firstErrorField)
+            ) {
+               setCurrentStepIndex(1);
+            }
+         }
       },
    });
 
@@ -117,7 +136,7 @@ export default function NewContractPage() {
       );
       return tenants.filter(
          (t) =>
-            t.status !== "archived" && 
+            t.status !== "archived" &&
             (!activeContractTenantIds.has(Number(t.tenant_id)) || (renewContractId && Number(t.tenant_id) === Number(watchedTenantId))),
       );
    }, [tenants, contracts, renewContractId, watchedTenantId]);
@@ -133,23 +152,23 @@ export default function NewContractPage() {
          try {
             const res = await apiRequest(`/api/contracts/${renewContractId}`);
             const source = res.data || res;
-            
+
             if (source) {
                // Pre-fill values for renewal
                setValue("tenant_id", source.tenant_id);
                setValue("room_id", source.room_id);
                setValue("bed_space_id", source.bed_space_id);
                setValue("contract_type", source.contract_type);
-               setValue("monthly_rent", source.monthly_rate_override || source.monthly_rate);
+               setValue("monthly_rate", source.monthly_rate_override || source.monthly_rate);
                setValue("deposit_amount", source.deposit_amount);
-               
+
                // BR-CON-011: New move-in is expected_move_out + 1 day
                if (source.expected_move_out_date) {
                   const nextDate = new Date(source.expected_move_out_date);
                   nextDate.setDate(nextDate.getDate() + 1);
                   setValue("move_in_date", nextDate.toISOString().split("T")[0]);
                }
-               
+
                showToast("Previous contract terms pre-filled. Please review before submitting.", "info");
             }
          } catch (err) {
@@ -183,7 +202,7 @@ export default function NewContractPage() {
    useEffect(() => {
       if (!selectedRoomId) {
          lastRoomIdForRentRef.current = null;
-         setValue("monthly_rent", "");
+         setValue("monthly_rate", "");
          setValue("deposit_amount", "");
          return;
       }
@@ -191,26 +210,57 @@ export default function NewContractPage() {
       if (lastRoomIdForRentRef.current === id) return;
       const roomData = rooms.find((r) => String(r.room_id) === id);
       if (!roomData) {
-         setValue("monthly_rent", "");
+         setValue("monthly_rate", "");
          setValue("deposit_amount", "");
          return;
       }
       lastRoomIdForRentRef.current = id;
       const roomRate = parseMoneyInput(roomData.monthly_rate ?? 0);
       const suggestedRate = roomRate.toFixed(2);
-      setValue("monthly_rent", suggestedRate, { shouldDirty: true });
+      setValue("monthly_rate", suggestedRate, { shouldDirty: true });
       // Default deposit to 1 month rent (Standard 1+1 rule)
       setValue("deposit_amount", suggestedRate, { shouldDirty: true });
    }, [selectedRoomId, rooms, setValue]);
    const validateStep = async (stepIndex) => {
       if (stepIndex === 0) {
-         return await trigger(["tenant_id", "room_id", "bed_space_id"]);
+         const isBaseValid = await trigger(["tenant_id", "room_id", "bed_space_id"]);
+         if (!isBaseValid) return false;
+
+         // BR-MET-002: Check for active meter assignments if room is metered
+         if (selectedRoom?.is_metered && (selectedRoom?.active_meters_count ?? 0) === 0) {
+            setError("room_id", {
+               type: "manual",
+               message: "NO ACTIVE METERS: This room is metered but lacks an active meter assignment."
+            });
+            return false;
+         }
+         return true;
       }
+
       if (stepIndex === 1) {
-         const fieldsToValidate = ["contract_type", "move_in_date", "deposit_amount", "monthly_rent"];
+         const fieldsToValidate = ["contract_type", "move_in_date", "deposit_amount", "monthly_rate"];
          // BR-CON-004: only validate expected_move_out as required when fixed_term
          if (isFixedTerm) fieldsToValidate.push("expected_move_out");
-         return await trigger(fieldsToValidate);
+
+         const isBaseValid = await trigger(fieldsToValidate);
+         if (!isBaseValid) return false;
+
+         // Extra safety check for empty numeric strings or invalid numbers that might bypass trigger
+         const rate = getValues("monthly_rate");
+         const parsedRate = parseMoneyInput(rate);
+         if (!rate || isNaN(parsedRate) || parsedRate <= 0) {
+            setError("monthly_rate", { type: "manual", message: "Valid monthly rent is required." });
+            return false;
+         }
+
+         const deposit = getValues("deposit_amount");
+         const parsedDeposit = parseMoneyInput(deposit);
+         if (deposit === "" || isNaN(parsedDeposit) || parsedDeposit < 0) {
+            setError("deposit_amount", { type: "manual", message: "Valid security deposit is required." });
+            return false;
+         }
+
+         return true;
       }
       return true;
    };
@@ -221,44 +271,37 @@ export default function NewContractPage() {
    const onBack = () => setCurrentStepIndex((prev) => Math.max(prev - 1, 0));
    const onSubmit = async () => {
       if (isActionPending) return;
-      // Final check before massive submission
-      const isValid = await trigger();
-      if (!isValid) return;
+
+      const isStep0Valid = await validateStep(0);
+      if (!isStep0Valid) {
+         setCurrentStepIndex(0);
+         return;
+      }
+
+      const isStep1Valid = await validateStep(1);
+      if (!isStep1Valid) {
+         setCurrentStepIndex(1);
+         return;
+      }
+
       if (!canManageContracts(currentUser)) {
          showToast("Permission denied: only Admins and Staff can create contracts.", "error");
          return;
       }
+
       const values = getValues();
-      let bedSpaceId = values.bed_space_id;
-      if (!isSharedRoom && selectedRoom) {
-         try {
-            const room = await apiRequest(`/api/rooms/${selectedRoomId}`, { method: "GET" });
-            const bedSpaces = Array.isArray(room?.bed_spaces) ? room.bed_spaces : (room?.bedSpaces || []);
-            if (bedSpaces.length > 0) bedSpaceId = bedSpaces[0].bed_space_id;
-            else {
-               showToast("This room has no bed spaces set up. Please configure the room inventory first.", "error");
-               return;
-            }
-         } catch {
-            showToast("Unable to load room inventory. Please try again.", "error");
-            return;
-         }
-      }
-      if (!bedSpaceId) {
-         setError("bed_space_id", { type: "manual", message: "Bed space is required." });
-         return;
-      }
       const payload = {
          tenant_id: Number(values.tenant_id),
-         bed_space_id: Number(bedSpaceId),
+         room_id: Number(values.room_id),
+         bed_space_id: values.bed_space_id ? Number(values.bed_space_id) : null,
          contract_type: values.contract_type || "month_to_month",
          move_in_date: values.move_in_date,
          expected_move_out: values.expected_move_out || null,
          deposit_amount: parseMoneyInput(values.deposit_amount),
-         monthly_rate: parseMoneyInput(values.monthly_rent),
-         monthly_rate_override: values.monthly_rate_override ? parseMoneyInput(values.monthly_rate_override) : null,
+         monthly_rate: parseMoneyInput(values.monthly_rate),
          notes: values.notes || null,
       };
+
       try {
          await submitContract(payload);
       } catch (error) {
@@ -367,7 +410,7 @@ export default function NewContractPage() {
                                     value={room.room_id}
                                     disabled={room.status === "unavailable" || room.status === "maintenance" || room.status === "archived"}
                                  >
-                                    {room.room_code} (#ROOM-{String(room.room_id).padStart(3, "0")})
+                                    {room.room_code} (#ROOM-{String(room.room_id).padStart(3, "0")}){room.is_metered ? ` (METERED)${room.meter_serials?.length > 0 ? ` (SN: ${room.meter_serials.join(", ")})` : ""}` : ""}
                                  </option>
                               ))}
                            </Select>
@@ -394,7 +437,7 @@ export default function NewContractPage() {
                                  const isReserved = !!bed.active_contract;
                                  const isRenewalTarget = isReserved && String(bed.active_contract.contract_id) === String(renewContractId);
                                  const isAvailable = (bed.status === "vacant" && !isReserved) || isRenewalTarget;
-                                 
+
                                  return (
                                     <option key={bed.bed_space_id} value={bed.bed_space_id} disabled={!isAvailable}>
                                        {bed.bed_label || `Bed #${bed.bed_space_id}`} {isRenewalTarget ? "(CURRENT)" : isReserved ? "(RESERVED)" : ""}
@@ -458,26 +501,32 @@ export default function NewContractPage() {
                         </Field>
                      </div>
                      <div className="grid gap-6 md:grid-cols-2 mt-6">
-                        <Field label="Monthly Rent" required error={errors.monthly_rent?.message}>
+                        <Field label="Monthly Rent" required error={errors.monthly_rate?.message}>
                            <Input
                               type="number"
                               step="0.01"
                               prefix="₱"
-                              hasError={Boolean(errors.monthly_rent)}
+                              hasError={Boolean(errors.monthly_rate)}
                               disabled={readOnly}
-                              className="!h-12 border-stone-200 font-mono font-black tabular-nums"
-                              {...register("monthly_rent", { required: "Monthly rate required." })}
+                              className="!h-12 border-stone-200 font-mono text-lg font-bold"
+                              {...register("monthly_rate", {
+                                 required: "Monthly rent is required.",
+                                 min: { value: 0.01, message: "Rent must be a positive amount." },
+                              })}
                            />
                         </Field>
-                        <Field label="Security Deposit" required error={errors.deposit_amount?.message} helpText="Recommendation: Equal to 1 month rent.">
+                        <Field label="Security Deposit" required error={errors.deposit_amount?.message}>
                            <Input
                               type="number"
                               step="0.01"
                               prefix="₱"
                               hasError={Boolean(errors.deposit_amount)}
                               disabled={readOnly}
-                              className="!h-12 border-stone-200 font-mono font-black tabular-nums"
-                              {...register("deposit_amount", { required: "Deposit required." })}
+                              className="!h-12 border-stone-200 font-mono text-lg font-bold"
+                              {...register("deposit_amount", {
+                                 required: "Security deposit is required.",
+                                 min: { value: 0, message: "Deposit cannot be negative." },
+                              })}
                            />
                         </Field>
                      </div>
@@ -522,11 +571,11 @@ export default function NewContractPage() {
                               </div>
                               <div className="flex justify-between items-center">
                                  <span className="text-xs font-medium text-teal-800/80">First Month Advance</span>
-                                 <CurrencyDisplay amount={getValues("monthly_rent") || 0} className="text-sm font-bold text-teal-900" />
+                                 <CurrencyDisplay amount={getValues("monthly_rate") || 0} className="text-sm font-bold text-teal-900" />
                               </div>
                               <div className="pt-3 border-t border-teal-200/50 flex justify-between items-center">
                                  <span className="hs-strip-title text-teal-800">Total Initial Payment</span>
-                                 <CurrencyDisplay amount={Number(getValues("monthly_rent") || 0) + Number(getValues("deposit_amount") || 0)} className="text-lg font-bold text-teal-700" />
+                                 <CurrencyDisplay amount={Number(getValues("monthly_rate") || 0) + Number(getValues("deposit_amount") || 0)} className="text-lg font-bold text-teal-700" />
                               </div>
                            </div>
                         </div>
@@ -551,96 +600,96 @@ export default function NewContractPage() {
                )}
 
                {currentStepIndex === 3 && (
-                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                   {!createdContract ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-stone-400">
-                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-300 mb-4" />
-                         <p className="text-[10px] font-black uppercase tracking-[0.2em]">Finalizing Agreement...</p>
-                      </div>
-                   ) : (
-                    <>
-                    <div className="flex flex-col items-center text-center space-y-4 py-4">
-                      <div className="flex size-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-500 shadow-sm border border-emerald-100">
-                        <CheckCircle2 size={32} strokeWidth={2.5} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-black text-stone-900">Registration Complete</h3>
-                        <p className="text-xs font-medium text-stone-500 mt-1 uppercase tracking-widest">Contract #{String(createdContract.contract_id).padStart(6, '0')}</p>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <div className="rounded-2xl border border-stone-100 bg-stone-50/50 p-6 space-y-4">
-                        <div className="flex items-center gap-2 text-stone-400">
-                          <ReceiptText size={16} />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Ledger Balance</span>
+                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                     {!createdContract ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-stone-400">
+                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-stone-300 mb-4" />
+                           <p className="text-[10px] font-black uppercase tracking-[0.2em]">Finalizing Agreement...</p>
                         </div>
-                        <div className="space-y-3">
-                           <div className="flex justify-between items-center text-xs">
-                             <span className="font-medium text-stone-500">Security Deposit</span>
-                             <div className="flex items-center gap-2">
-                               <CurrencyDisplay amount={createdContract?.deposit_amount || 0} className="font-bold text-stone-600" />
-                               {isFullySettled ? <CheckCircle2 size={12} className="text-emerald-500" /> : <div className="size-2 rounded-full bg-amber-400 animate-pulse" />}
-                             </div>
+                     ) : (
+                        <>
+                           <div className="flex flex-col items-center text-center space-y-4 py-4">
+                              <div className="flex size-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-500 shadow-sm border border-emerald-100">
+                                 <CheckCircle2 size={32} strokeWidth={2.5} />
+                              </div>
+                              <div>
+                                 <h3 className="text-xl font-black text-stone-900">Registration Complete</h3>
+                                 <p className="text-xs font-medium text-stone-500 mt-1 uppercase tracking-widest">Contract #{String(createdContract.contract_id).padStart(6, '0')}</p>
+                              </div>
                            </div>
-                           <div className="flex justify-between items-center text-xs">
-                             <span className="font-medium text-stone-500">First Month Rent</span>
-                             <div className="flex items-center gap-2">
-                               <CurrencyDisplay amount={createdContract?.monthly_rate || 0} className="font-bold text-stone-600" />
-                               {isFullySettled ? <CheckCircle2 size={12} className="text-emerald-500" /> : <div className="size-2 rounded-full bg-amber-400 animate-pulse" />}
-                             </div>
-                           </div>
-                           <div className="pt-3 border-t border-stone-200/50 flex justify-between items-baseline">
-                             <span className="text-[10px] font-black uppercase text-rose-500">Total Settlement Required</span>
-                             <CurrencyDisplay 
-                               amount={isFullySettled ? 0 : Number(createdContract?.monthly_rate || 0) + Number(createdContract?.deposit_amount || 0)} 
-                               className="text-2xl font-black text-stone-900" 
-                             />
-                           </div>
-                        </div>
-                      </div>
 
-                      <div className="flex flex-col justify-center space-y-3">
-                         {!isFullySettled ? (
-                           <Button
-                             variant="primary"
-                             className="!h-14 w-full rounded-xl text-xs font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/10 active:scale-95 transition-all"
-                             onClick={() => setShowPaymentSheet(true)}
-                           >
-                             <Wallet className="mr-2" size={16} />
-                             Settle Full Amount
-                           </Button>
-                         ) : (
-                           <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700">
-                             <CheckCircle2 size={20} />
-                             <span className="text-xs font-black uppercase tracking-widest">Onboarding Fully Settled</span>
-                           </div>
-                         )}
-                         
-                         <Button
-                           variant="secondary"
-                           className="!h-14 w-full rounded-xl text-xs font-black uppercase tracking-widest border-stone-200 text-stone-600 hover:bg-stone-100 active:scale-95 transition-all"
-                           onClick={() => router.push(`/contracts/${createdContract.contract_id}`)}
-                           disabled={!createdContract?.contract_id}
-                         >
-                           View Contract Details
-                           <ArrowRight className="ml-2" size={16} />
-                         </Button>
-                      </div>
-                    </div>
+                           <div className="grid gap-6 md:grid-cols-2">
+                              <div className="rounded-2xl border border-stone-100 bg-stone-50/50 p-6 space-y-4">
+                                 <div className="flex items-center gap-2 text-stone-400">
+                                    <ReceiptText size={16} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Ledger Balance</span>
+                                 </div>
+                                 <div className="space-y-3">
+                                    <div className="flex justify-between items-center text-xs">
+                                       <span className="font-medium text-stone-500">Security Deposit</span>
+                                       <div className="flex items-center gap-2">
+                                          <CurrencyDisplay amount={createdContract?.deposit_amount || 0} className="font-bold text-stone-600" />
+                                          {isFullySettled ? <CheckCircle2 size={12} className="text-emerald-500" /> : <div className="size-2 rounded-full bg-amber-400 animate-pulse" />}
+                                       </div>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs">
+                                       <span className="font-medium text-stone-500">First Month Rent</span>
+                                       <div className="flex items-center gap-2">
+                                          <CurrencyDisplay amount={createdContract?.monthly_rate || 0} className="font-bold text-stone-600" />
+                                          {isFullySettled ? <CheckCircle2 size={12} className="text-emerald-500" /> : <div className="size-2 rounded-full bg-amber-400 animate-pulse" />}
+                                       </div>
+                                    </div>
+                                    <div className="pt-3 border-t border-stone-200/50 flex justify-between items-baseline">
+                                       <span className="text-[10px] font-black uppercase text-rose-500">Total Settlement Required</span>
+                                       <CurrencyDisplay
+                                          amount={isFullySettled ? 0 : Number(createdContract?.monthly_rate || 0) + Number(createdContract?.deposit_amount || 0)}
+                                          className="text-2xl font-black text-stone-900"
+                                       />
+                                    </div>
+                                 </div>
+                              </div>
 
-                    <div className="rounded-2xl border border-teal-600/10 bg-teal-50/30 p-6 flex items-start gap-4 hs-glass-effect">
-                       <ShieldCheck className="text-teal-600 mt-1" size={20} />
-                       <div className="space-y-1">
-                          <p className="text-xs font-bold text-teal-900">Professional Onboarding Tip</p>
-                          <p className="text-[10px] font-medium text-teal-700 leading-relaxed">
-                            Collecting the security deposit and first month's rent upfront ensures the lease is legally enforceable and protects the property from occupancy risks.
-                          </p>
-                       </div>
-                    </div>
-                    </>
-                   )}
-                 </div>
+                              <div className="flex flex-col justify-center space-y-3">
+                                 {!isFullySettled ? (
+                                    <Button
+                                       variant="primary"
+                                       className="!h-14 w-full rounded-xl text-xs font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/10 active:scale-95 transition-all"
+                                       onClick={() => setShowPaymentSheet(true)}
+                                    >
+                                       <Wallet className="mr-2" size={16} />
+                                       Settle Full Amount
+                                    </Button>
+                                 ) : (
+                                    <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700">
+                                       <CheckCircle2 size={20} />
+                                       <span className="text-xs font-black uppercase tracking-widest">Onboarding Fully Settled</span>
+                                    </div>
+                                 )}
+
+                                 <Button
+                                    variant="secondary"
+                                    className="!h-14 w-full rounded-xl text-xs font-black uppercase tracking-widest border-stone-200 text-stone-600 hover:bg-stone-100 active:scale-95 transition-all"
+                                    onClick={() => router.push(`/contracts/${createdContract.contract_id}`)}
+                                    disabled={!createdContract?.contract_id}
+                                 >
+                                    View Contract Details
+                                    <ArrowRight className="ml-2" size={16} />
+                                 </Button>
+                              </div>
+                           </div>
+
+                           <div className="rounded-2xl border border-teal-600/10 bg-teal-50/30 p-6 flex items-start gap-4 hs-glass-effect">
+                              <ShieldCheck className="text-teal-600 mt-1" size={20} />
+                              <div className="space-y-1">
+                                 <p className="text-xs font-bold text-teal-900">Professional Onboarding Tip</p>
+                                 <p className="text-[10px] font-medium text-teal-700 leading-relaxed">
+                                    Collecting the security deposit and first month's rent upfront ensures the lease is legally enforceable and protects the property from occupancy risks.
+                                 </p>
+                              </div>
+                           </div>
+                        </>
+                     )}
+                  </div>
                )}
             </div>
          </WizardFrame>
@@ -652,22 +701,22 @@ export default function NewContractPage() {
             size="lg"
          >
             <div className="p-6 pt-0">
-              <PaymentWizard 
-                isInitialSettlement={true}
-                initialValues={{
-                  contract_id: createdContract?.contract_id,
-                  billing_id: createdContract?.latest_billing?.billing_id,
-                  rent_amount: createdContract?.monthly_rate,
-                  deposit_amount: createdContract?.deposit_amount,
-                  amount_paid: Number(createdContract?.deposit_amount || 0) + Number(createdContract?.monthly_rate || 0),
-                }}
-                onSuccess={() => {
-                  setIsFullySettled(true);
-                  setShowPaymentSheet(false);
-                  showToast("Full onboarding settlement recorded successfully.", "success");
-                }}
-                onCancel={() => setShowPaymentSheet(false)}
-              />
+               <PaymentWizard
+                  isInitialSettlement={true}
+                  initialValues={{
+                     contract_id: createdContract?.contract_id,
+                     billing_id: createdContract?.latest_billing?.billing_id,
+                     rent_amount: createdContract?.monthly_rate,
+                     deposit_amount: createdContract?.deposit_amount,
+                     amount_paid: Number(createdContract?.deposit_amount || 0) + Number(createdContract?.monthly_rate || 0),
+                  }}
+                  onSuccess={() => {
+                     setIsFullySettled(true);
+                     setShowPaymentSheet(false);
+                     showToast("Full onboarding settlement recorded successfully.", "success");
+                  }}
+                  onCancel={() => setShowPaymentSheet(false)}
+               />
             </div>
          </SideSheetOverlay>
       </StandardPage>

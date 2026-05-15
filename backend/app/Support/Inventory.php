@@ -51,7 +51,7 @@ class Inventory
         }
 
         if ($currentStatus !== RoomStatus::MAINTENANCE) {
-            $currentStatus = $hasVacant ? RoomStatus::AVAILABLE->value : RoomStatus::UNAVAILABLE->value;
+            $currentStatus = $hasVacant ? RoomStatus::AVAILABLE : RoomStatus::UNAVAILABLE;
         }
 
         return [

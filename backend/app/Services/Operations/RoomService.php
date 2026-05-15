@@ -47,7 +47,12 @@ class RoomService
             payload: ['room_code' => $roomData['room_code'] ?? 'ERR'],
             operation: function () use ($roomData, $data) {
                 // Private room bed management bypass
-                if (($roomData['room_type'] ?? null) === RoomType::PRIVATE ->value) {
+                $roomType = $roomData['room_type'] ?? null;
+                if ($roomType instanceof RoomType) {
+                    if ($roomType === RoomType::PRIVATE) {
+                        $roomData['capacity'] = 1;
+                    }
+                } elseif ($roomType === RoomType::PRIVATE->value) {
                     $roomData['capacity'] = 1;
                 }
 
@@ -216,7 +221,10 @@ class RoomService
      */
     public static function listPaginated(array $filters = [], int $page = 1, int $perPage = 15)
     {
-        $query = Room::query()->withOccupancyStats();
+        $query = Room::query()
+            ->with(['meterAssignments.meter'])
+            ->withOccupancyStats()
+            ->withCount(['meterAssignments as active_meters_count']);
 
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);

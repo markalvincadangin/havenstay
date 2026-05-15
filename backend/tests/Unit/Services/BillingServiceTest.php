@@ -1,3 +1,7 @@
+<?php
+
+namespace Tests\Unit\Services;
+
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -8,6 +12,7 @@ use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Enums\BillingStatus;
+use App\Enums\RoleEnum;
 use App\Services\Operations\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -30,7 +35,7 @@ class BillingServiceTest extends TestCase
             'username' => 'admin',
             'email' => 'admin@example.com',
             'password_hash' => bcrypt('password'),
-            'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+            'role_id' => Role::where('role_name', RoleEnum::ADMIN->value)->first()->role_id,
         ]);
 
         $tenant = Tenant::create($this->tenantAttributes());
@@ -58,7 +63,7 @@ class BillingServiceTest extends TestCase
             'processed_by' => $admin->user_id,
         ]);
         
-        BillingService::syncBillingStatus($billing);
+        BillingService::syncBillingStatus($admin, $billing);
         $this->assertEquals(BillingStatus::PAID->value, $billing->status);
     }
 
@@ -70,7 +75,7 @@ class BillingServiceTest extends TestCase
             'username' => 'admin_overdue',
             'email' => 'admin_overdue@example.com',
             'password_hash' => bcrypt('password'),
-            'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+            'role_id' => Role::where('role_name', RoleEnum::ADMIN->value)->first()->role_id,
         ]);
 
         $tenant = Tenant::create($this->tenantAttributes());
@@ -98,7 +103,7 @@ class BillingServiceTest extends TestCase
             'processed_by' => $admin->user_id,
         ]);
         
-        BillingService::syncBillingStatus($billing);
+        BillingService::syncBillingStatus($admin, $billing);
         $this->assertEquals(BillingStatus::OVERDUE->value, $billing->status);
     }
 
@@ -110,7 +115,7 @@ class BillingServiceTest extends TestCase
             'username' => 'admin_partial',
             'email' => 'admin_partial@example.com',
             'password_hash' => bcrypt('password'),
-            'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+            'role_id' => Role::where('role_name', RoleEnum::ADMIN->value)->first()->role_id,
         ]);
 
         $tenant = Tenant::create($this->tenantAttributes());
@@ -138,7 +143,7 @@ class BillingServiceTest extends TestCase
             'processed_by' => $admin->user_id,
         ]);
         
-        BillingService::syncBillingStatus($billing);
+        BillingService::syncBillingStatus($admin, $billing);
         $this->assertEquals(BillingStatus::PARTIAL->value, $billing->status);
     }
 
@@ -150,7 +155,7 @@ class BillingServiceTest extends TestCase
             'username' => 'admin_unpaid',
             'email' => 'admin_unpaid@example.com',
             'password_hash' => bcrypt('password'),
-            'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+            'role_id' => Role::where('role_name', RoleEnum::ADMIN->value)->first()->role_id,
         ]);
 
         $tenant = Tenant::create($this->tenantAttributes());
@@ -172,7 +177,7 @@ class BillingServiceTest extends TestCase
         
         BillingLineItem::create(['billing_id' => $billing->billing_id, 'amount' => 1000, 'item_description' => 'Rent', 'item_type' => 'base_rent']);
         
-        BillingService::syncBillingStatus($billing);
+        BillingService::syncBillingStatus($admin, $billing);
         $this->assertEquals(BillingStatus::UNPAID->value, $billing->status);
     }
 }
