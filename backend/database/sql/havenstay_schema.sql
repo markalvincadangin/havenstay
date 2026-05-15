@@ -67,7 +67,7 @@ CREATE TABLE users (
     is_active     TINYINT(1)   DEFAULT 1,
     last_login_at DATETIME     NULL,
     google_id     VARCHAR(255) NULL,
-    avatar_url    VARCHAR(255) NULL,
+    avatar_url    TEXT NULL,
     oauth_provider VARCHAR(50) NULL,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
