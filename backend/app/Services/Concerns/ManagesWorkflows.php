@@ -40,14 +40,29 @@ trait ManagesWorkflows
     ): mixed {
         $correlationId = request()->attributes->get('correlation_id') ?? (string) Str::uuid();
 
-        // Set context for DB triggers (Forensic Integrity)
-        AuditService::setAuditUserContext($actorId);
-        AuditService::setCorrelationContext($correlationId);
-        
-        // IP Context is already handled by SetAuditContext middleware. 
-        // We only re-set it if we are in console mode (where middleware is bypassed).
+        // Optimized Context Check: Only re-inject if we are running in Console
+        // Web requests are already hardened by the SetAuditContext middleware.
         if (app()->runningInConsole()) {
-            AuditService::setRequestContext(null, null, null, '127.0.0.1');
+            $requestId = 'cli_' . bin2hex(random_bytes(8));
+            AuditService::setFullForensicContext(
+                $actorId,
+                $correlationId,
+                $requestId,
+                'cli_workflow::' . $action,
+                'CLI',
+                '127.0.0.1'
+            );
+        } else {
+            // High-Performance Sync: Propagate specific actorId into the existing forensic JSON context.
+            // This ensures that service-level overrides are captured by the DB triggers.
+            AuditService::setFullForensicContext(
+                $actorId,
+                request()->attributes->get('correlation_id') ?? (string) Str::uuid(),
+                request()->attributes->get('request_id') ?? 'req_' . bin2hex(random_bytes(8)),
+                request()->path(),
+                request()->method(),
+                request()->ip() ?? '127.0.0.1'
+            );
         }
 
         try {

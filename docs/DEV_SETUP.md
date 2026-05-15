@@ -38,10 +38,10 @@ docker compose up --build -d
 
 | Container | Internal port | External port | Role |
 |---|---|---|---|
-| `havenstay-db-primary` | 3306 | 3306 | Write DB |
-| `havenstay-db-replica` | 3306 | 3307 | Read-only replica |
-| `havenstay-backend` | 80 | 8000 | Laravel API |
-| `havenstay-frontend` | 3000 | 3000 | Next.js app |
+| `havenstay-db-primary` | 3306 | 3306 | Authoritative Write DB |
+| `havenstay-db-replica` | 3306 | 3307 | Read-only Replica |
+| `havenstay-backend` | 80 | 8000 | Laravel 13 API |
+| `havenstay-frontend` | 3000 | 3000 | Next.js 16 App |
 
 ### First-time DB init
 
@@ -56,9 +56,9 @@ docker compose exec backend php artisan migrate:fresh --seed
 
 ### Access
 
-| Service | URL | Credentials |
+| Service | URL | Default Credentials |
 |---|---|---|
-| Frontend | http://localhost:3000 | admin@havenstay.ph / HavenStay123! |
+| Frontend | http://localhost:3000 | havenstay.admin@havenstay.com / HavenStay123! |
 | Backend health | http://localhost:8000/api/health | — |
 | Primary DB | localhost:3306 | root / root |
 | Replica DB | localhost:3307 | root / root (read-only) |
@@ -127,9 +127,9 @@ npm run dev              # runs on http://localhost:3000
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | admin@havenstay.ph | HavenStay123! |
-| Staff | staff@havenstay.local | HavenStay123! |
-| Viewer | viewer@havenstay.local | HavenStay123! |
+| Admin | havenstay.admin@havenstay.com | HavenStay123! |
+| Staff | havenstay.staff@havenstay.com | HavenStay123! |
+| Viewer | viewer@havenstay.com | HavenStay123! |
 
 ---
 

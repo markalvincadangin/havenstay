@@ -216,7 +216,7 @@ Follow this order exactly on initial deployment.
 3. Deploy frontend on Vercel:
    a. Import repo, set BACKEND_INTERNAL_URL to Render URL
    b. Deploy → Vercel builds Next.js standalone
-   c. Visit production URL → login with admin@havenstay.ph
+   c. Visit production URL → login with havenstay.admin@havenstay.com
 4. Verify smoke tests (see below)
 ```
 

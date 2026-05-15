@@ -18,6 +18,10 @@ services:
       - --log-replica-updates=ON
       - --binlog-expire-logs-seconds=604800
       - --mysql-native-password=ON
+      # PERFORMANCE: Development tuning for Windows/Docker overhead
+      - --innodb_flush_log_at_trx_commit=2
+      - --innodb_doublewrite=0
+      - --innodb_buffer_pool_size=512M
     ports:
       - "3306:3306"
     volumes:
@@ -91,6 +95,7 @@ services:
       - DB_READ_HOST=db-replica
       - DB_READ_PORT=3306
       - DB_STICKY=true
+      - DB_SEED=true
     depends_on:
       db-primary:
         condition: service_healthy
@@ -112,6 +117,9 @@ services:
     environment:
       - BACKEND_INTERNAL_URL=http://backend:80
       - NEXT_PUBLIC_API_BASE_URL=
+      # PERFORMANCE NOTE: Polling is required for hot-reload on Windows-to-Linux bind mounts (C:\...)
+      # but causes high CPU/lag. To FIX this, move the project to the native WSL2 filesystem
+      # (e.g. \\wsl$\Ubuntu\...) and set these to 'false'.
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
     volumes:

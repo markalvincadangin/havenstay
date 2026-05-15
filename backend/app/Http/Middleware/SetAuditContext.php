@@ -31,12 +31,13 @@ class SetAuditContext
         $request->attributes->set('request_id', $requestId);
         $request->attributes->set('start_time', $startTime);
 
-        AuditService::setCorrelationContext($correlationId);
-        AuditService::setRequestContext($requestId, $endpoint, $method, $ip);
-
+        $userId = 0;
         if ($user = $request->user()) {
-            AuditService::setAuditUserContext((int) $user->user_id);
+            $userId = (int) $user->user_id;
         }
+
+        // Optimized Batch Context Injection (SOC 2 Forensic Standard)
+        AuditService::setFullForensicContext($userId, $correlationId, $requestId, $endpoint, $method, $ip);
 
         $response = $next($request);
 

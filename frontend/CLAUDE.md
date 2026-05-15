@@ -2,7 +2,6 @@
 
 > **See the root-level documentation for complete guidance:**
 > - `../CLAUDE.md` — Project rules, tech stack, architecture, and standards
-> - `../KIRO.md` — Kiro IDE-specific workflows and automation patterns
 > 
 > This frontend workspace inherits all rules from the root documentation.
 
@@ -27,7 +26,7 @@
 - Always handle errors with `flattenApiErrors()` from `@/lib/errors`
 
 ### Design System Rules
-Follow **`../design-system/havenstay/MASTER.md` (v4.1)** — BHMS-first naming, **registry cards**, SRS/SDD-aligned goals. Root **`../CLAUDE.md`** remains the full-project authority.
+Follow **`../design-system/havenstay/MASTER.md` (v8.0)** — BHMS-first naming, **registry cards**, SRS/SDD-aligned goals. Root **`../CLAUDE.md`** remains the full-project authority.
 
 - Maximum one primary button per page (per MASTER + root rules)
 - Destructive actions require confirmation modals
@@ -45,4 +44,4 @@ npm run build   # Must succeed
 
 ---
 
-*For complete documentation, see `../CLAUDE.md` and `../KIRO.md`*
+*For complete documentation, see `../CLAUDE.md`*

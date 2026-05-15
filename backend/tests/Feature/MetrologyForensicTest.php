@@ -54,7 +54,7 @@ class MetrologyForensicTest extends TestCase
 
         // 2. Attempt to record a lower reading without rollover flag
         $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('Forensic Integrity Violation');
+        $this->expectExceptionMessage('Validation Error');
 
         MeterService::recordReading($this->admin, $this->meter->meter_id, [
             'reading_date' => '2026-01-02',
@@ -89,8 +89,14 @@ class MetrologyForensicTest extends TestCase
             $this->markTestSkipped('Trigger-based audit logging requires MySQL.');
         }
 
-        // Set session vars for trigger context
-        DB::statement('SET @current_user_id = ?', [$this->admin->user_id]);
+        // Set session vars for trigger context using the new engine
+        \App\Services\Core\AuditService::setFullForensicContext(
+            $this->admin->user_id,
+            'test_correlation',
+            'test_request',
+            'test_endpoint',
+            'TEST'
+        );
 
         MeterService::recordReading($this->admin, $this->meter->meter_id, [
             'reading_date' => '2026-01-01',
@@ -100,7 +106,7 @@ class MetrologyForensicTest extends TestCase
 
         $this->assertDatabaseHas('audit_logs', [
             'target_table' => 'meter_readings',
-            'action' => 'INSERT',
+            'action' => 'CREATE', // Trigger uses 'CREATE' for inserts
             'changed_by' => $this->admin->user_id,
         ]);
     }

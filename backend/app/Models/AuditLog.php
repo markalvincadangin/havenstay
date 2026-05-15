@@ -80,10 +80,19 @@ class AuditLog extends Model
             // Snapshot the actor for forensic independence (SOC 2 Standard)
             if (auth()->check()) {
                 $user = auth()->user();
+                // Performance Optimization: Avoid N+1 lazy load of 'role' relation
+                // We use the ID to infer name or check if already loaded.
+                $roleName = 'staff';
+                if ($user->relationLoaded('role')) {
+                    $roleName = $user->role->role_name;
+                } elseif ($user->role_id === 1) {
+                    $roleName = 'admin';
+                }
+
                 $log->actor_snapshot = [
                     'user_id' => $user->user_id,
                     'name' => "{$user->first_name} {$user->last_name}",
-                    'role' => $user->role->role_name ?? 'staff',
+                    'role' => $roleName,
                 ];
                 $log->changed_by ??= $user->user_id;
             }
