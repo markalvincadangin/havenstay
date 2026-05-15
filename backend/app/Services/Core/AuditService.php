@@ -16,45 +16,32 @@ use Illuminate\Support\Facades\DB;
  */
 class AuditService
 {
-    /**
-     * Set the current operator ID in the database session.
-     * Required for MySQL triggers to capture the 'changed_by' attribute.
-     */
-    public static function setAuditUserContext(int $userId): void
-    {
-        if (DB::getDriverName() === 'mysql') {
-            DB::statement('SET @current_user_id = ?', [$userId]);
-        }
-    }
-
-    /**
-     * Set the correlation ID for the current thread of execution.
-     * Links high-level business workflows to low-level audit log mutations.
-     */
-    public static function setCorrelationContext(?string $correlationId): void
-    {
-        if (DB::getDriverName() === 'mysql') {
-            DB::statement('SET @current_correlation_id = ?', [$correlationId]);
-        }
-    }
-
 
 
     /**
-     * Set the request-level forensic context.
+     * Optimized Forensic Context Injection:
+     * Sets all session variables in a single database round-trip.
+     * This significantly reduces latency on Windows-hosted Docker environments.
      */
-    public static function setRequestContext(?string $requestId, ?string $endpoint, ?string $method, ?string $ip = null): void
-    {
+    public static function setFullForensicContext(
+        int $userId,
+        string $correlationId,
+        string $requestId,
+        string $endpoint,
+        string $method,
+        ?string $i = null
+    ): void {
         if (DB::getDriverName() === 'mysql') {
-            $sql = 'SET @current_request_id = ?, @current_endpoint = ?, @current_http_method = ?';
-            $params = [$requestId, $endpoint, $method];
+            $context = json_encode([
+                'u' => $userId,
+                'c' => $correlationId,
+                'r' => $requestId,
+                'e' => $endpoint,
+                'm' => $method,
+                'i' => $i
+            ]);
 
-            if ($ip !== null) {
-                $sql .= ', @current_ip_address = ?';
-                $params[] = $ip;
-            }
-
-            DB::statement($sql, $params);
+            DB::statement('SET @forensic_context = ?', [$context]);
         }
     }
 
@@ -67,9 +54,7 @@ class AuditService
         $correlationId = sprintf('sys_%s_%s', $origin, bin2hex(random_bytes(4)));
         $requestId = sprintf('req_sys_%s', bin2hex(random_bytes(4)));
 
-        self::setAuditUserContext(1); // Default to System Administrator
-        self::setCorrelationContext($correlationId);
-        self::setRequestContext($requestId, "system::$origin", "CLI", "127.0.0.1");
+        self::setFullForensicContext(1, $correlationId, $requestId, "system::$origin", "CLI", "127.0.0.1");
     }
 
 
@@ -79,7 +64,7 @@ class AuditService
     public static function clearCorrelationContext(): void
     {
         if (DB::getDriverName() === 'mysql') {
-            DB::statement('SET @current_user_id = NULL, @current_correlation_id = NULL, @current_ip_address = NULL, @current_request_id = NULL, @current_endpoint = NULL, @current_http_method = NULL');
+            DB::statement('SET @forensic_context = NULL');
         }
     }
 
@@ -106,12 +91,15 @@ class AuditService
         $httpMethod = null;
 
         if (DB::getDriverName() === 'mysql') {
-            $context = DB::selectOne('SELECT @current_request_id as rid, @current_ip_address as ip, @current_correlation_id as cid, @current_endpoint as endpoint, @current_http_method as method');
-            $requestId = $context->rid ?? null;
-            $ipAddress = $context->ip ?? null;
-            $correlationId = $context->cid ?? null;
-            $endpoint = $context->endpoint ?? null;
-            $httpMethod = $context->method ?? null;
+            $contextRaw = DB::selectOne('SELECT @forensic_context as ctx')->ctx;
+            if ($contextRaw) {
+                $ctx = json_decode($contextRaw, true);
+                $requestId = $ctx['r'] ?? null;
+                $ipAddress = $ctx['i'] ?? null;
+                $correlationId = $ctx['c'] ?? null;
+                $endpoint = $ctx['e'] ?? null;
+                $httpMethod = $ctx['m'] ?? null;
+            }
         }
 
         // Fallback: Check request attributes (useful for SQLite/Testing)

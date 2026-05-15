@@ -1,6 +1,6 @@
 ## Design System — Master Specification — v8.0.0
 
-> **What this document is:** This is the standard for how HavenStay looks and behaves. It implements the user-facing intent of **[docs/SRS.md](../../docs/SRS.md)** (v4.5) and is synchronized with **havenstay_schema.sql v4.8** (44-trigger forensic engine).
+> **What this document is:** This is the standard for how HavenStay looks and behaves. It implements the user-facing intent of **[docs/SRS.md](../../docs/SRS.md)** (v5.3) and is synchronized with **havenstay_schema.sql v5.0** (45-trigger forensic engine).
 
 ---
 

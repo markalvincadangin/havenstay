@@ -1,44 +1,45 @@
 # HavenStay Backend (Laravel API)
 
-Backend service for HavenStay BHMS.
+The HavenStay backend is a RESTful API built with Laravel 13, following a 5-Tier Extended MVC architecture.
 
-## Stack
+## 🛠️ Stack
+- **Framework:** Laravel 13.x
+- **PHP Version:** 8.3+
+- **Auth:** Laravel Sanctum
+- **Database:** MySQL 8.4 (Primary-Replica) / SQLite (Tests)
 
-- Laravel 13
-- PHP 8.3+
-- Sanctum authentication
-- SQLite (local dev) and MySQL (production-like/evidence)
+## 🚀 Quick Start (Local Development)
 
-## Setup
+1. **Install Dependencies**
+   ```bash
+   composer install
+   ```
 
+2. **Environment Setup**
+   ```bash
+   cp .env.example .env
+   php artisan key:generate
+   ```
+
+3. **Database Initialization**
+   ```bash
+   # Ensure your local MySQL is running or use SQLite
+   php artisan migrate:fresh --seed
+   ```
+
+4. **Serve**
+   ```bash
+   php artisan serve
+   ```
+
+## 🧪 Testing
 ```bash
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate
-php artisan db:seed
+php artisan test       # Unit and Feature tests
+composer test:mysql    # Integration tests against MySQL
 ```
 
-## Run
-
-```bash
-php artisan serve --host=127.0.0.1 --port=8000
-```
-
-## Test
-
-```bash
-php artisan test
-```
-
-## API Highlights
-
-- Health: `/health`, `/api/health`
-- Auth: `/api/auth/*`
-- Core modules: `/api/tenants`, `/api/rooms`, `/api/contracts`, `/api/billing`, `/api/payments`, `/api/reports`
-
-## Documentation
-
-- Project root guide: `../README.md`
-- Deployment: `../docs/DEPLOYMENT.md`
-- Requirements/design/tests: `../docs/SRS.md`, `../docs/SDD.md`, `../docs/TEST_PLAN.md`
+## 📂 Documentation
+- [**Main Project README**](../README.md)
+- [**API Reference**](../docs/API_REFERENCE.md)
+- [**Backend Coding Blueprint**](../docs/BACKEND_CODING_BLUEPRINT.md)
+- [**Database Documentation**](../docs/DATABASE.md)

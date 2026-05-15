@@ -1,0 +1,23 @@
+name: Render Keep-Alive Ping
+
+on:
+  schedule:
+    # Runs every 10 minutes to bypass the 15-minute inactivity spin-down on Render free tier
+    - cron: "*/10 * * * *"
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  ping-services:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Ping Backend API
+        env:
+          RENDER_BACKEND_URL: ${{ secrets.RENDER_BACKEND_URL }}
+        run: |
+          if [ -z "$RENDER_BACKEND_URL" ]; then
+            echo "RENDER_BACKEND_URL secret is not set. Skipping backend ping."
+          else
+            echo "Pinging backend at $RENDER_BACKEND_URL/api/ping"
+            curl -sS -m 30 -o /dev/null -w "%{http_code}" "$RENDER_BACKEND_URL/api/ping" || echo "Ping failed"
+          fi

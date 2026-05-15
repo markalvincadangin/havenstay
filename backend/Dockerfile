@@ -30,9 +30,15 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.
 FROM base AS development
 ENV APP_ENV=local
 ENV APP_DEBUG=true
-# Copy files and install ALL dependencies including dev
+
+# Cache dependencies: Copy only composer files first
+COPY composer.json composer.lock ./
+RUN composer install --no-scripts --no-autoloader
+
+# Copy the rest of the application
 COPY . .
-RUN composer install
+RUN composer dump-autoload
+
 RUN chown -R www-data:www-data storage bootstrap/cache
 # Entrypoint handles migrate vs migrate:fresh based on DB_SEED env var
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
@@ -44,9 +50,15 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 FROM base AS production
 ENV APP_ENV=production
 ENV APP_DEBUG=false
-# Copy files and install ONLY production dependencies
+
+# Cache dependencies: Copy only composer files first
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader --optimize-autoloader
+
+# Copy the rest of the application
 COPY . .
-RUN composer install --no-dev --optimize-autoloader
+RUN composer dump-autoload --optimize
+
 RUN chown -R www-data:www-data storage bootstrap/cache
 # Entrypoint handles migrate vs migrate:fresh based on DB_SEED env var
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

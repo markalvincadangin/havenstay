@@ -1,182 +1,60 @@
-# HavenStay Frontend
+# HavenStay Frontend (Next.js)
 
-Next.js frontend for HavenStay BHMS, aligned to **`../design-system/havenstay/MASTER.md`** (design system) and **`../docs/SRS.md`** / **`../docs/SDD.md`** (requirements and architecture).
+The HavenStay frontend is a modern SPA built with Next.js 16 (App Router), adhering to the Modular Feature-Based App Router architecture.
 
-For project-level setup, deployment, and verification, see:
+## 🛠️ Stack
+- **Framework:** Next.js 16.x (React 19)
+- **Styling:** Tailwind CSS v4 + HS-Utilities
+- **Data Fetching:** SWR (Stale-While-Revalidate)
+- **Forms:** React Hook Form + Zod
 
-- `../README.md`
-- `../docs/DEPLOYMENT.md`
+## 🚀 Quick Start
+1. **Install Dependencies**
+   ```bash
+   npm install
+   ```
+2. **Environment Setup**
+   Ensure `.env.local` is present (it defaults to same-origin proxying).
+3. **Run Development Server**
+   ```bash
+   npm run dev
+   ```
 
-## Stack
+## 📂 Documentation
+- [**Main Project README**](../README.md)
+- [**Frontend Coding Blueprint**](../docs/FRONTEND_CODING_BLUEPRINT.md)
+- [**Design System**](../design-system/havenstay/MASTER.md)
 
-- Next.js App Router
-- React + React Hook Form
-- Tailwind CSS (v4)
+---
 
-## Local Development
-
-1. Install dependencies:
-
-```bash
-npm install
-```
-
-2. Configure environment:
-
-Create `frontend/.env.local` (optional — defaults match same-origin `/api`):
-
-```bash
-# Omit or leave empty: browser → http://localhost:3000/api/* → Next rewrites to Laravel.
-NEXT_PUBLIC_API_BASE_URL=
-# If you omit BACKEND_INTERNAL_URL, Next proxies to http://127.0.0.1:8000 (run Laravel on the host).
-# BACKEND_INTERNAL_URL=http://127.0.0.1:8000
-```
-
-3. Run dev server:
-
-```bash
-npm run dev
-```
-
-4. Open:
-
-- Frontend: `http://localhost:3000`
-- Backend API should be running separately (Laravel).
-
-## Useful Commands
-
-```bash
-npm run dev
-npm run build
-npm run start
-npm run lint
-npm test
-```
-
-## Domain labels, navigation, and keyboard shortcuts
-
-- **ENUM codes and human-readable labels** (statuses, payment methods, audit actions, etc.) are defined in **`src/lib/constants.js`**. Align new UI with those maps; **Vitest** `src/lib/constants.schema.test.js` reads **`../backend/database/sql/havenstay_schema.sql`** (must match the canonical **`../db/havenstay_schema.sql`**).
-- **Primary navigation** (routes + labels) is **`src/lib/navItems.js`**, consumed by **`src/app/_components/Sidebar.js`** and **`MobileNav.js`**.
-- **G + letter** jumps are **`src/lib/keyboardNav.js`**, wired in **`src/hooks/useKeyboardShortcuts.js`**.
-- **Do not use Ctrl+P or Ctrl+R** for in-app actions (browser Print / Reload). Use **Alt+Shift+P** to open **`/payments/new`** and **Alt+Shift+R** for `router.refresh()` — see **`src/lib/appKeyboardShortcuts.js`** and **`KeyboardHelpModal.js`**.
-
-## Authentication and Route Guarding
-
-- Auth token is stored in:
-  - `localStorage` (`havenstay_token`)
-  - cookie (`havenstay_token`) for middleware checks
-- Middleware file: `src/middleware.js`
-- Behavior:
-  - `/` redirects to `/login` (or `/dashboard` when authenticated)
-  - protected routes redirect to `/login` if unauthenticated
-  - authenticated users are redirected away from `/login` and `/signin`
-
-## Implemented Route Map
-
-### Public/Auth
-
-- `/login`
-- `/signin` (alias of login)
+## 🗺️ Implemented Route Map
 
 ### Core
-
-- `/dashboard`
-- `/tenants`
-- `/tenants/new`
-- `/tenants/[id]`
-- `/tenants/[id]/edit`
-- `/rooms`
-- `/rooms/new`
-- `/rooms/[id]`
-- `/rooms/[id]/edit`
-- `/contracts`
-- `/contracts/new`
-- `/contracts/[id]`
-- `/billing`
-- `/billing/new`
-- `/billing/generate` (alias of billing new)
-- `/billing/[id]`
-- `/payments`
-- `/payments/new`
+- `/dashboard` — Main operational metrics.
+- `/tenants` — Tenant lifecycle management (`/new`, `/[id]`, `/[id]/edit`).
+- `/rooms` — Inventory management (`/new`, `/[id]`, `/[id]/edit`).
+- `/contracts` — Lease management (`/new`, `/[id]`).
+- `/billing` — Utility and rent invoicing (`/new`, `/[id]`).
+- `/payments` — Collections and receipting (`/new`).
 
 ### Reports
+- `/reports` — Hub for all operational reporting.
+- `/reports/occupancy` — Real-time room capacity.
+- `/reports/active-contracts` — Current lease agreements.
+- `/reports/outstanding-balances` — AR aging and delinquencies.
+- `/reports/tenant-ledger` — Detailed financial history per tenant.
 
-- `/reports` (hub — eight report links; data sources include the six reporting **views** in `db/havenstay_schema.sql` where noted in `docs/API_REFERENCE.md`)
-- `/reports/occupancy` (`vw_room_occupancy`)
-- `/reports/occupancy-status` (`vw_occupancy_status`)
-- `/reports/active-contracts` (`vw_active_contracts`)
-- `/reports/billing-summary` (`vw_billing_summary`)
-- `/reports/outstanding-balances`
-- `/reports/receivables` (re-export of outstanding-balances page)
-- `/reports/collections` (collections performance; `vw_collections_summary`)
-- `/reports/tenant-ledger`
-- `/reports/tenant-history` (contract history; `GET /api/reports/tenant-history`; `vw_tenant_contract_history`)
+### Administration
+- `/users` — Role-based access control (Admin only).
+- `/audit-logs` — Forensic row-level change tracking (Admin only).
 
-### Admin
+---
 
-- `/users` (Admin only; create/edit where implemented)
-- `/audit-logs` (Admin only; `GET /api/audit-logs`)
-- `/transaction-logs` (Admin only; `GET /api/transaction-logs`)
+## ✅ Quick UAT Checklist
 
-## Role Access (UI)
-
-- **Admin**
-  - Full access to operations + administration modules
-- **Staff**
-  - Operations modules (create/update where allowed)
-  - No administration modules
-- **Viewer**
-  - Read-only experience
-  - Create/edit/post actions are hidden or disabled with read-only guidance
-
-## Current Notes
-
-- Backend API base URL: `NEXT_PUBLIC_API_BASE_URL` (see `../docs/API_REFERENCE.md`).
-- Reporting UIs call the Laravel report endpoints; CSV export uses the matching `/export` routes.
-
-## Quick UAT Checklist
-
-Use this as a fast smoke/UAT pass for the frontend.
-
-### Auth and Guarding
-
-- [ ] Unauthenticated user visiting `/dashboard` is redirected to `/login`
-- [ ] Login succeeds and redirects to `/dashboard`
-- [ ] Authenticated user visiting `/login` is redirected to `/dashboard`
-- [ ] Logout clears session and returns user to `/login`
-
-### Core Navigation
-
-- [ ] Sidebar links load: Dashboard, Tenants, Rooms, Contracts, Billing, Payments, Reports
-- [ ] Admin account additionally sees: Users, Audit Logs, and Transaction Logs (where present in nav)
-- [ ] Root route `/` redirects correctly based on auth state
-
-### Module Pages
-
-- [ ] Tenants list/search/filter render correctly
-- [ ] Tenants create/detail/edit pages submit and navigate correctly
-- [ ] Rooms list/filter and create/detail/edit pages work correctly
-- [ ] Contracts create and detail/move-out flows work
-- [ ] Billing list/create/detail flows work
-- [ ] Payments list and post-payment flow work
-
-### Reports
-
-- [ ] Reports home loads all six report links
-- [ ] Occupancy, billing summary, outstanding/receivables, collections, tenant ledger, and tenant history pages load data
-- [ ] CSV export buttons download files
-- [ ] Print view hides app chrome and prints readable table borders
-
-### Role Behavior
-
-- [ ] Admin can access all modules including `/users` and `/audit-logs`
-- [ ] Staff can access operations but not admin modules
-- [ ] Viewer sees read-only guidance and cannot access create/edit/post actions
-
-### Accessibility and UX
-
-- [ ] First field autofocus works on key forms (login/create/edit flows)
-- [ ] Unsaved-changes warning appears on dirty form refresh/tab close
-- [ ] Tables expose accessible labels/captions
-- [ ] Alerts announce properly (error assertive, info/status polite)
-
+- [ ] **Auth**: Login/Logout and route guarding work.
+- [ ] **Navigation**: Sidebar and keyboard shortcuts (G+letter) work.
+- [ ] **Forms**: Validation and submission (Tenants/Rooms/Contracts) work.
+- [ ] **Audit**: Actions are correctly attributed in the Audit Log.
+- [ ] **UI**: All status badges use the correct semantic colors.
+- [ ] **UX**: Loading states use Skeletons (no spinners).

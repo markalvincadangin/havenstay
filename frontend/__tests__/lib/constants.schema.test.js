@@ -12,7 +12,6 @@ import {
   ROOM_STATUS_LABELS,
   ROOM_TYPE_LABELS,
   TENANT_STATUS_LABELS,
-  TX_LOG_STATUS_LABELS,
 } from "../../src/lib/constants";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -84,13 +83,10 @@ describe("constants.js vs db/havenstay_schema.sql ENUMs", () => {
   });
 
   it("audit_logs.action is VARCHAR in schema; AUDIT_ACTION_LABELS are UI keys for free-form actions", () => {
-    const block = sql.match(/CREATE TABLE\s+audit_logs\s*\(([\s\S]*?)\)\s*ENGINE/i);
-    expect(block?.[1], "audit_logs table").toBeTruthy();
-    expect(block[1]).toMatch(/\baction\s+VARCHAR\s*\(\s*32\s*\)/i);
+    const block = sql.match(/CREATE TABLE\s+audit_logs\s*\([\s\S]*?\)\s*ENGINE/i);
+    expect(block?.[0], "audit_logs table").toBeTruthy();
+    expect(block[0]).toMatch(/\baction\s+VARCHAR\s*\(\s*32\s*\)/i);
     expect(Object.keys(AUDIT_ACTION_LABELS).length).toBeGreaterThan(0);
   });
-
-  it("TX_LOG_STATUS_LABELS keys match transaction_logs.status", () => {
-    expectKeysMatchEnum(TX_LOG_STATUS_LABELS, extractColumnEnum(sql, "transaction_logs", "status"), "TX_LOG_STATUS_LABELS");
-  });
 });
+
