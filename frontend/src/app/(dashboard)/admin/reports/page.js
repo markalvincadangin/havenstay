@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useMemo } from "react";
+import Link from 'next/link';
+import { useMemo } from 'react';
 import {
   AlertCircle,
   BarChart3,
@@ -13,81 +13,83 @@ import {
   Users,
   ChevronRight,
   ShieldCheck,
-} from "lucide-react";
-import { canViewReports } from "@/lib/auth";
-import Alert from "@/components/ui/Alert";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import StandardPage from "@/components/ui/StandardPage";
-import { SkeletonGridPage } from "@/components/ui/Skeleton";
-import { useAuth } from "@/context/AuthContext";
+} from 'lucide-react';
+import { canViewReports } from '@/lib/auth';
+import Alert from '@/components/ui/Alert';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import StandardPage from '@/components/ui/StandardPage';
+import { SkeletonGridPage } from '@/components/ui/Skeleton';
+import { useAuth } from '@/context/AuthContext';
 
 const REPORT_GROUPS = [
   {
-    section: "Occupancy & Inventory",
+    section: 'Occupancy & Inventory',
     items: [
       {
-        title: "Occupancy Report",
-        description: "Room-level utilization, bed counts, and occupancy rates.",
-        href: "/admin/reports/occupancy",
+        title: 'Occupancy Report',
+        description: 'Room-level utilization, bed counts, and occupancy rates.',
+        href: '/admin/reports/occupancy',
         icon: BarChart3,
-        color: "text-blue-600 bg-blue-50"
+        color: 'text-blue-600 bg-blue-50',
       },
       {
-        title: "Bed Occupancy",
-        description: "Per-bed status with tenant and active contract context.",
-        href: "/admin/reports/occupancy-status",
+        title: 'Bed Occupancy',
+        description: 'Per-bed status with tenant and active contract context.',
+        href: '/admin/reports/occupancy-status',
         icon: BedDouble,
-        color: "text-cyan-600 bg-cyan-50"
+        color: 'text-cyan-600 bg-cyan-50',
       },
       {
-        title: "Active Contracts",
-        description: "Current leases with room, bed, and monthly rate.",
-        href: "/admin/reports/active-contracts",
+        title: 'Active Contracts',
+        description: 'Current leases with room, bed, and monthly rate.',
+        href: '/admin/reports/active-contracts',
         icon: FileText,
-        color: "text-slate-600 bg-slate-50"
+        color: 'text-slate-600 bg-slate-50',
       },
       {
-        title: "Tenant History",
-        description: "View tenant stay history and move-in/move-out records.",
-        href: "/admin/reports/tenant-history",
+        title: 'Tenant History',
+        description: 'View tenant stay history and move-in/move-out records.',
+        href: '/admin/reports/tenant-history',
         icon: Users,
-        color: "text-indigo-600 bg-indigo-50"
-      }
-    ]
+        color: 'text-indigo-600 bg-indigo-50',
+      },
+    ],
   },
   {
-    section: "Financial & Billing",
+    section: 'Financial & Billing',
     items: [
       {
-        title: "Billing Summary",
-        description: "Quick view of billing totals and collection trends over time.",
-        href: "/admin/reports/billing-summary",
+        title: 'Billing Summary',
+        description:
+          'Quick view of billing totals and collection trends over time.',
+        href: '/admin/reports/billing-summary',
         icon: Receipt,
-        color: "text-rose-600 bg-rose-50"
+        color: 'text-rose-600 bg-rose-50',
       },
       {
-        title: "Outstanding Balances",
-        description: "See unpaid and past-due balances by tenant.",
-        href: "/admin/reports/outstanding-balances",
+        title: 'Outstanding Balances',
+        description: 'See unpaid and past-due balances by tenant.',
+        href: '/admin/reports/outstanding-balances',
         icon: AlertCircle,
-        color: "text-amber-600 bg-amber-50"
+        color: 'text-amber-600 bg-amber-50',
       },
       {
-        title: "Tenant Ledger",
-        description: "Detailed payment and billing history for each tenant.",
-        href: "/admin/reports/tenant-ledger",
+        title: 'Tenant Ledger',
+        description: 'Detailed payment and billing history for each tenant.',
+        href: '/admin/reports/tenant-ledger',
         icon: BookMarked,
-        color: "text-teal-600 bg-teal-50"
+        color: 'text-teal-600 bg-teal-50',
       },
       {
-        title: "Collections Performance",
-        description: "Track how much has been collected and what is still unpaid.",
-        href: "/admin/reports/collections",
+        title: 'Collections Performance',
+        description:
+          'Track how much has been collected and what is still unpaid.',
+        href: '/admin/reports/collections',
         icon: CreditCard,
-        color: "text-emerald-600 bg-emerald-50"
-      }
-    ]
-  }
+        color: 'text-emerald-600 bg-emerald-50',
+      },
+    ],
+  },
 ];
 
 export default function ReportsIndexPage() {
@@ -102,7 +104,8 @@ export default function ReportsIndexPage() {
     >
       {!canAccess ? (
         <Alert variant="warning" title="Access Restricted">
-          Your account does not have permission to view financial or operational reports. Please contact management for access.
+          Your account does not have permission to view financial or operational
+          reports. Please contact management for access.
         </Alert>
       ) : (
         <div className="space-y-12">
@@ -121,7 +124,9 @@ export default function ReportsIndexPage() {
                       aria-label={`Open ${item.title} report`}
                       className="group flex flex-col gap-6 rounded-2xl border border-stone-200 bg-white p-8 shadow-sm transition-all duration-300 hover:border-teal-200/80 hover:bg-stone-50 hover:shadow-xl hover:-translate-y-1 hs-glass-effect"
                     >
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/60 shadow-sm transition-shadow group-hover:shadow-md ${item.color}`}>
+                      <div
+                        className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/60 shadow-sm transition-shadow group-hover:shadow-md ${item.color}`}
+                      >
                         <Icon size={22} strokeWidth={2.5} aria-hidden />
                       </div>
 
@@ -135,8 +140,13 @@ export default function ReportsIndexPage() {
                       </div>
 
                       <div className="mt-auto pt-6 border-t border-stone-100 flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 group-hover:text-teal-700 transition-colors">Generate Report</span>
-                        <ChevronRight size={14} className="text-stone-300 group-hover:text-teal-600 transition-transform group-hover:translate-x-1" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 group-hover:text-teal-700 transition-colors">
+                          Generate Report
+                        </span>
+                        <ChevronRight
+                          size={14}
+                          className="text-stone-300 group-hover:text-teal-600 transition-transform group-hover:translate-x-1"
+                        />
                       </div>
                     </Link>
                   );

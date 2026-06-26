@@ -1,25 +1,30 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import useSWR from "swr";
-import { Settings, Info } from "lucide-react";
-import { apiRequest, fetcher } from "@/lib/api";
-import { canManageMeters } from "@/lib/auth";
-import { applyServerFieldErrors } from "@/lib/forms";
-import { useToasts } from "@/context/ToastContext";
-import { Field, Input, Select, Textarea } from "@/components/ui/Fields";
-import { QuickEditFormShell } from "@/components/ui/QuickEditFormShell";
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import useSWR from 'swr';
+import { Settings, Info } from 'lucide-react';
+import { apiRequest, fetcher } from '@/lib/api';
+import { canManageMeters } from '@/lib/auth';
+import { applyServerFieldErrors } from '@/lib/forms';
+import { useToasts } from '@/context/ToastContext';
+import { Field, Input, Select, Textarea } from '@/components/ui/Fields';
+import { QuickEditFormShell } from '@/components/ui/QuickEditFormShell';
 import RecordStateAlert from '@/components/ui/RecordStateAlert';
 
-export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) {
+export function MeterQuickEditForm({
+  meter,
+  currentUser,
+  onSuccess,
+  onCancel,
+}) {
   const { showToast } = useToasts();
   const isEditing = !!meter?.meter_id;
   const readOnly = isEditing && !canManageMeters(currentUser);
 
   const [scannedDuplicate, setScannedDuplicate] = useState(null);
 
-  const { data: utilitiesData } = useSWR("/api/utilities", fetcher);
+  const { data: utilitiesData } = useSWR('/api/utilities', fetcher);
 
   const {
     register,
@@ -28,11 +33,11 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
-      serial_number: meter?.serial_number || "",
-      utility_id: meter?.utility_id ? String(meter.utility_id) : "",
-      status: meter?.status || "active",
-      location: meter?.location || "",
-      remarks: meter?.remarks || "",
+      serial_number: meter?.serial_number || '',
+      utility_id: meter?.utility_id ? String(meter.utility_id) : '',
+      status: meter?.status || 'active',
+      location: meter?.location || '',
+      remarks: meter?.remarks || '',
     },
   });
 
@@ -42,9 +47,14 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
       return;
     }
     try {
-      const results = await apiRequest(`/api/meters?q=${encodeURIComponent(value.trim())}`);
+      const results = await apiRequest(
+        `/api/meters?q=${encodeURIComponent(value.trim())}`
+      );
       const list = results?.data || results || [];
-      const match = list.find(m => m.serial_number?.toLowerCase().trim() === value.trim().toLowerCase());
+      const match = list.find(
+        (m) =>
+          m.serial_number?.toLowerCase().trim() === value.trim().toLowerCase()
+      );
       setScannedDuplicate(match ? match.meter_id : null);
     } catch (e) {
       // Ignore
@@ -56,22 +66,28 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
     try {
       if (isEditing) {
         await apiRequest(`/api/meters/${meter.meter_id}`, {
-          method: "PUT",
+          method: 'PUT',
           body: JSON.stringify({
             ...values,
             utility_id: Number(values.utility_id),
           }),
         });
-        showToast(`Meter ${values.serial_number} updated successfully.`, "success");
+        showToast(
+          `Meter ${values.serial_number} updated successfully.`,
+          'success'
+        );
       } else {
-        await apiRequest("/api/meters", {
-          method: "POST",
+        await apiRequest('/api/meters', {
+          method: 'POST',
           body: JSON.stringify({
             ...values,
             utility_id: Number(values.utility_id),
           }),
         });
-        showToast(`Meter ${values.serial_number} registered successfully.`, "success");
+        showToast(
+          `Meter ${values.serial_number} registered successfully.`,
+          'success'
+        );
       }
 
       onSuccess();
@@ -86,11 +102,12 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
       isSubmitting={isSubmitting}
       isSubmitDisabled={!!scannedDuplicate}
       onCancel={onCancel}
-      submitLabel={isEditing ? "Update Meter" : "Register Hardware"}
+      submitLabel={isEditing ? 'Update Meter' : 'Register Hardware'}
     >
       {isEditing && (
         <RecordStateAlert variant="info" className="mb-6">
-          Serial number and utility type are immutable after registration to preserve reading history integrity (BR-MET-001).
+          Serial number and utility type are immutable after registration to
+          preserve reading history integrity (BR-MET-001).
         </RecordStateAlert>
       )}
       <div>
@@ -98,35 +115,60 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
           <Settings size={12} /> Hardware ID
         </h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field 
-            label="Serial Number" 
-            required 
+          <Field
+            label="Serial Number"
+            required
             error={errors.serial_number?.message}
-            warning={scannedDuplicate ? "This serial number is already registered to another meter." : null}
+            warning={
+              scannedDuplicate
+                ? 'This serial number is already registered to another meter.'
+                : null
+            }
           >
-            <Input 
-              className="!h-10 border-stone-200 font-bold font-mono tracking-wider" 
-              disabled={readOnly || isEditing} 
-              {...register("serial_number", { required: "Required" })} 
+            <Input
+              className="!h-10 border-stone-200 font-bold font-mono tracking-wider"
+              disabled={readOnly || isEditing}
+              {...register('serial_number', { required: 'Required' })}
               onBlur={(e) => checkUniqueness(e.target.value)}
               hasError={Boolean(errors.serial_number || scannedDuplicate)}
             />
           </Field>
-          <Field label="Utility Type" required error={errors.utility_id?.message}>
-            <Select className="!h-10 border-stone-200 font-bold" disabled={readOnly || isEditing} {...register("utility_id", { required: "Required" })}>
+          <Field
+            label="Utility Type"
+            required
+            error={errors.utility_id?.message}
+          >
+            <Select
+              className="!h-10 border-stone-200 font-bold"
+              disabled={readOnly || isEditing}
+              {...register('utility_id', { required: 'Required' })}
+            >
               <option value="">Select utility...</option>
-              {(utilitiesData || []).map(u => <option key={u.utility_id} value={u.utility_id}>{u.name}</option>)}
+              {(utilitiesData || []).map((u) => (
+                <option key={u.utility_id} value={u.utility_id}>
+                  {u.name}
+                </option>
+              ))}
             </Select>
           </Field>
           <Field label="Operational Status" required>
-            <Select className="!h-10 border-stone-200 font-bold" disabled={readOnly} {...register("status")}>
+            <Select
+              className="!h-10 border-stone-200 font-bold"
+              disabled={readOnly}
+              {...register('status')}
+            >
               <option value="active">Active</option>
               <option value="maintenance">Maintenance</option>
               <option value="archived">Archived</option>
             </Select>
           </Field>
           <Field label="Physical Location" error={errors.location?.message}>
-            <Input placeholder="Panel A" className="!h-10 border-stone-200 font-medium" disabled={readOnly} {...register("location")} />
+            <Input
+              placeholder="Panel A"
+              className="!h-10 border-stone-200 font-medium"
+              disabled={readOnly}
+              {...register('location')}
+            />
           </Field>
         </div>
       </div>
@@ -136,7 +178,13 @@ export function MeterQuickEditForm({ meter, currentUser, onSuccess, onCancel }) 
           <Info size={12} /> Notes
         </h3>
         <Field label="Remarks">
-          <Textarea rows={3} placeholder="Internal metrology notes..." className="border-stone-200" disabled={readOnly} {...register("remarks")} />
+          <Textarea
+            rows={3}
+            placeholder="Internal metrology notes..."
+            className="border-stone-200"
+            disabled={readOnly}
+            {...register('remarks')}
+          />
         </Field>
       </div>
     </QuickEditFormShell>

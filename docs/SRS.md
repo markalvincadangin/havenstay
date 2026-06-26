@@ -15,7 +15,6 @@
 4. [Functional Requirements](#4-functional-requirements)
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Data Requirements](#6-data-requirements)
-7. [Course Compliance Requirements (CCR)](#7-course-compliance-requirements-ccr)
 8. [Prioritized Product Backlog](#8-prioritized-product-backlog)
 9. [Acceptance Criteria and Test Readiness](#9-acceptance-criteria-and-test-readiness)
 10. [Risks and Mitigations](#10-risks-and-mitigations)
@@ -26,7 +25,7 @@
 ## 1. Introduction
 
 ### 1.1 Purpose
-This SRS defines the functional and non-functional requirements for the HavenStay Boarding House Management System (BHMS). It is the authoritative reference for system design, development, testing, and academic evaluation.
+This SRS defines the functional and non-functional requirements for the HavenStay Boarding House Management System (BHMS). It is the authoritative reference for system design, development, testing.
 
 ### 1.2 Scope
 HavenStay BHMS is a centralized web-based system for managing boarding house operations. The system covers:
@@ -55,7 +54,6 @@ HavenStay BHMS is a centralized web-based system for managing boarding house ope
 | **BHMS** | Boarding House Management System |
 | **SRS** | Software Requirements Specification |
 | **BR** | Business Rule (see [**BUSINESS_RULES.md**](../BUSINESS_RULES.md)) |
-| **CCR** | Course Compliance Requirement |
 | **FR** | Functional Requirement |
 | **NFR** | Non-Functional Requirement |
 | **Contract** | Rental agreement linking a tenant to a specific bed space |
@@ -155,7 +153,7 @@ Tenant records shall never be hard-deleted. Soft delete (`deleted_at`) is used t
 The system shall maintain the full tenant contract history including all past and terminated contracts.
 
 **FR-011** 
-The system shall support searching tenants by name, contact number, email, or status. (CCR-004: LIKE)
+The system shall support searching tenants by name, contact number, email, or status.
 
 **FR-012** 
 Tenant status shall be automatically derived from contract state per BR-TEN-004. Admin may manually archive a tenant (BR-TEN-005).
@@ -228,7 +226,7 @@ The system shall generate billing cycle records for active contracts per BR-BIL-
 Each billing cycle shall support itemized line items per BR-BIL-004 and BR-BIL-005.
 
 **FR-034**
-There is no stored balance or total amount column on billing records. Both values are computed dynamically per BR-ANL-001. (CCR-003: computed SELECT)
+There is no stored balance or total amount column on billing records. Both values are computed dynamically per BR-ANL-001.
 
 **FR-035**
 Billing status shall be derived automatically per BR-BIL-006. Manual status override is not permitted.
@@ -244,7 +242,7 @@ Billing generation is performed manually by Admin or Staff. Ref: BR-BIL-009.
 
 ### 4.8 Payment Processing
 **FR-039**
-The system shall record payments against a billing record within an atomic database transaction per BR-PAY-001. (CCR-006)
+The system shall record payments against a billing record within an atomic database transaction per BR-PAY-001.
 
 **FR-040**
 The system shall enforce payment method rules and reference number requirements per BR-PAY-002.
@@ -253,45 +251,45 @@ The system shall enforce payment method rules and reference number requirements 
 The system shall allow overpayments and display the resulting credit balance per BR-PAY-003.
 
 **FR-042**
-Billing status shall be recalculated after every payment post and void per BR-BIL-007. (CCR-003: UPDATE)
+Billing status shall be recalculated after every payment post and void per BR-BIL-007.
 
 **FR-043**
-The system shall support soft-voiding a payment per BR-PAY-004 through BR-PAY-007. Voided records are never deleted. (CCR-003: UPDATE, not DELETE)
+The system shall support soft-voiding a payment per BR-PAY-004 through BR-PAY-007. Voided records are never deleted.
 
 **FR-044**
 The system shall maintain a complete payment history including voided records, filterable by tenant, contract, or billing cycle.
 
 ### 4.9 Reporting (Admin Only)
 **FR-045** 
-Admin shall be able to view an occupancy report showing bed counts, occupancy rates, and vacancy per room. (CCR-005: JOIN)
+Admin shall be able to view an occupancy report showing bed counts, occupancy rates, and vacancy per room.
 
 **FR-046**
-The system shall provide a billing summary report with date-range filtering showing total billed, total collected, and outstanding balance. (CCR-004: BETWEEN; CCR-005: JOIN)
+The system shall provide a billing summary report with date-range filtering showing total billed, total collected, and outstanding balance.
 
 **FR-047**
-The system shall provide an outstanding balances report filtered to billing records with a remaining balance. (CCR-005: JOIN)
+The system shall provide an outstanding balances report filtered to billing records with a remaining balance.
 
 **FR-048**
-The system shall provide a collections performance report showing total payments collected in a date range. (CCR-004: BETWEEN)
+The system shall provide a collections performance report showing total payments collected in a date range.
 
 **FR-049**
-The system shall provide an active contracts report listing all current leases with tenant, room, and rate details. (CCR-005: JOIN)
+The system shall provide an active contracts report listing all current leases with tenant, room, and rate details.
 
 **FR-050**
-The system shall provide a tenant history report showing all contracts for a tenant or set of tenants. (CCR-005: JOIN)
+The system shall provide a tenant history report showing all contracts for a tenant or set of tenants.
 
 **FR-051**
 The system shall provide a tenant ledger view showing the full financial history (billings and payments) for a selected tenant.
 
 **FR-052**
-All report data shall be computed via SQL views to demonstrate JOIN compliance. (CCR-005)
+All report data shall be computed via SQL views to demonstrate JOIN compliance.
 
 **FR-053**
 All report types shall support CSV export.
 
 ### 4.10 Audit and Forensics
 **FR-054**
-All INSERT, UPDATE, and DELETE operations on core tables shall be captured in `audit_logs` via database-level triggers per BR-AUD-001 through BR-AUD-003. (CCR-007)
+All INSERT, UPDATE, and DELETE operations on core tables shall be captured in `audit_logs` via database-level triggers per BR-AUD-001 through BR-AUD-003.
 
 **FR-055**
 A correlation ID shall be included in each audit log entry to group mutations produced during the same workflow run. Ref: BR-AUD-004.
@@ -325,10 +323,10 @@ Role-based authorization shall be enforced server-side on every protected endpoi
 
 ### 5.3 Reliability
 **NFR-006**
-All financial write operations shall be atomic. Partial writes are prevented by explicit database transactions. (CCR-006)
+All financial write operations shall be atomic. Partial writes are prevented by explicit database transactions.
 
 **NFR-007**
-A complete audit trail of all data changes shall be maintained via database triggers. (CCR-007)
+A complete audit trail of all data changes shall be maintained via database triggers.
 
 ### 5.4 Maintainability
 **NFR-008**
@@ -361,7 +359,7 @@ A single authorization service shall make all access control decisions.
 | **payments** | Financial settlements against billing cycles |
 | **audit_logs** | Immutable change records (Trigger-based) |
 
-Total core entities: **15** — strictly satisfies CCR-001 (≥ 6).
+Total core entities: **15**.
 
 | Table | Constraint Name | Type | Definition |
 | :--- | :--- | :--- | :--- |
@@ -394,22 +392,6 @@ Total core entities: **15** — strictly satisfies CCR-001 (≥ 6).
 | **meters** | status | active, maintenance, replaced |
 
 † `voided`: Reserved for contracts cancelled on creation error with zero billing or payment history. Admin only. See BR-CON-012.
-
----
-
-## 7. Course Compliance Requirements (CCR)
-
-> These requirements are binding academic constraints with equal priority to functional requirements. All items must be demonstrable with evidence during system evaluation.
-
-| ID | Requirement | Implementation Target |
-| :--- | :--- | :--- |
-| **CCR-001** | ≥ 6 core entities in relational model | 15 tables in schema |
-| **CCR-002** | Distributed DB: Primary-Replica architecture | MySQL primary + replica via Docker |
-| **CCR-003** | SQL CRUD: SELECT, INSERT, UPDATE, DELETE | All service classes |
-| **CCR-004** | SQL operators: AND, OR, BETWEEN, LIKE | Search filters and date-range reports |
-| **CCR-005** | Multi-table JOINs for data retrieval | SQL views for all reporting endpoints |
-| **CCR-006** | Explicit transactions: START TRANSACTION, COMMIT, ROLLBACK | `DB::transaction()` on all write workflows |
-| **CCR-007** | AFTER INSERT/UPDATE/DELETE triggers for change logging | Triggers on all core entity tables |
 
 ---
 
@@ -447,8 +429,6 @@ Critical test coverage required before release:
 | **Meter** | Monotonicity violation rejection, correct utility rate selection |
 | **Payment** | Void idempotency (can't void twice), billing recalc after void, dual-path tenant/room resolution |
 | **Billing** | Duplicate cycle rejection, zero line item rejection, resilient batch generation (non-blocking skip) |
-| **CCR-006** | Rollback leaves no partial writes |
-| **CCR-007** | Triggers capture INSERT, UPDATE, DELETE on all core tables |
 
 ---
 
@@ -460,7 +440,6 @@ Critical test coverage required before release:
 | Utility rate gap (no rate for a billing period) | Low | High | Require at least one utility rate before meter billing enabled |
 | Billing status inconsistency after payment void | Low | High | `autoUpdateStatus()` called after every payment write |
 | Room status staleness after bed space change | Low | Medium | `syncStatusAndCapacity()` always called after any bed space update |
-| CCR evidence not demonstrable | Low | High | All CCR mapped to FRs and test cases; run on MySQL only |
 
 ---
 
@@ -469,7 +448,7 @@ Critical test coverage required before release:
 | Version | Date | Summary |
 | :--- | :--- | :--- |
 | v1.0–v4.4 | Mar–Apr 2026 | Previous iterations (see git history) |
-| v4.5 | Apr 20, 2026 | Retire Transaction Log CCR; Consolidate forensic trail under trigger-based Audit Logs (CCR-007). |
+| v4.5 | Apr 20, 2026 | Consolidate forensic trail under trigger-based Audit Logs. |
 | v4.6 | Apr 20, 2026 | Forensic Normalization Pass. Aligned StatusBadge ENUMs and Resource ID prefixes (§6.3) with MASTER.md v6.6.0. |
 | v4.7 | Apr 21, 2026 | Fixed §3.1 technology stack (Vanilla CSS). Fixed FR-025 wording contradiction with BR-MET-003. Added `voided` footnote to §6.3. Documented `monthly_rate_override` in constraints table. Added BR-CON-012/013, BR-PAY-010 references. |
 | **v5.0** | **Apr 29, 2026** | **Major Stabilization: Added FR-056/057 (KPI & Forensic Context). Updated FR-036 to specify Resilient Batch Billing (Non-blocking). Integrated BR-BIL-011, BR-PAY-011, and BR-PAY-012 references.** |

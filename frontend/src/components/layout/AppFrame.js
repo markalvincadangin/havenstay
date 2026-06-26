@@ -1,15 +1,20 @@
-"use client";
+'use client';
 
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
-import Sidebar from "@/components/layout/Sidebar";
-import MobileNav from "@/components/layout/MobileNav";
-import { useAuth } from "@/context/AuthContext";
-import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import KeyboardHelpModal from "@/components/ui/KeyboardHelpModal";
-import { Loader2 } from "lucide-react";
+import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import Sidebar from '@/components/layout/Sidebar';
+import MobileNav from '@/components/layout/MobileNav';
+import { useAuth } from '@/context/AuthContext';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import KeyboardHelpModal from '@/components/ui/KeyboardHelpModal';
+import { Loader2 } from 'lucide-react';
 
-const AUTH_FREE_PAGES = new Set(["/login", "/signin", "/callback", "/auth/callback"]);
+const AUTH_FREE_PAGES = new Set([
+  '/login',
+  '/signin',
+  '/callback',
+  '/auth/callback',
+]);
 
 export default function AppFrame({ children }) {
   const pathname = usePathname();
@@ -21,9 +26,10 @@ export default function AppFrame({ children }) {
   const handleToggleHelp = () => setShowHelp((prev) => !prev);
 
   useKeyboardShortcuts(handleToggleHelp);
-  
+
   // Logic: Is this page allowed without auth?
-  const isAuthPage = AUTH_FREE_PAGES.has(pathname) || pathname.startsWith('/(auth)');
+  const isAuthPage =
+    AUTH_FREE_PAGES.has(pathname) || pathname.startsWith('/(auth)');
 
   useEffect(() => {
     setMounted(true);
@@ -32,7 +38,7 @@ export default function AppFrame({ children }) {
   // Strict Security Guard: Redirect unauthenticated users away from protected routes
   useEffect(() => {
     if (mounted && !loading && !user && !isAuthPage) {
-      router.replace("/login");
+      router.replace('/login');
     }
   }, [mounted, loading, user, isAuthPage, router]);
 
@@ -83,11 +89,21 @@ export default function AppFrame({ children }) {
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text)] md:flex max-w-[1600px] mx-auto">
       {/* Desktop Sidebar */}
-      <Sidebar pathname={pathname} user={user} onLogout={logout} onToggleHelp={handleToggleHelp} />
+      <Sidebar
+        pathname={pathname}
+        user={user}
+        onLogout={logout}
+        onToggleHelp={handleToggleHelp}
+      />
 
       <div className="flex-1">
         {/* Mobile Header & Nav */}
-        <MobileNav pathname={pathname} user={user} onLogout={logout} onToggleHelp={handleToggleHelp} />
+        <MobileNav
+          pathname={pathname}
+          user={user}
+          onLogout={logout}
+          onToggleHelp={handleToggleHelp}
+        />
 
         {/* Page Content */}
         <main className="mx-auto w-full max-w-[1200px] p-4 lg:p-8">

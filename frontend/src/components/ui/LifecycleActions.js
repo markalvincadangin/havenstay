@@ -1,12 +1,12 @@
-"use client";
-import Button from "./Button";
+'use client';
+import Button from './Button';
 
 export default function LifecycleActions({
   canManage = false,
-  status = "active",
+  status = 'active',
   hasActiveContract = false,
-  busyAction = "",
-  mode = "tenant", // "tenant", "room", or "user"
+  busyAction = '',
+  mode = 'tenant', // "tenant", "room", or "user"
   isActive = true, // mode="user"
   isArchived = false, // mode="user"
   isSelf = false, // mode="user"
@@ -17,13 +17,13 @@ export default function LifecycleActions({
 }) {
   if (!canManage) return null;
 
-  const isRoomMode = mode === "room";
-  const isUserMode = mode === "user";
+  const isRoomMode = mode === 'room';
+  const isUserMode = mode === 'user';
 
   // Archival logic
-  const archivedKey = isRoomMode ? "decommissioned" : "archived";
+  const archivedKey = isRoomMode ? 'decommissioned' : 'archived';
   const internalIsArchived = isUserMode ? isArchived : status === archivedKey;
-  
+
   // Reactivate logic (User only - Tenant reactivation is now strictly contract-driven)
   const canUserReactivate = isUserMode && !internalIsArchived && !isActive;
   const canUserDeactivate = isUserMode && !internalIsArchived && isActive;
@@ -32,11 +32,11 @@ export default function LifecycleActions({
   const canRestore = internalIsArchived;
 
   // Labels
-  let archiveLabel = isRoomMode ? "Decommission Room" : "Archive";
-  if (isUserMode) archiveLabel = "Archive Account";
+  let archiveLabel = isRoomMode ? 'Decommission Room' : 'Archive';
+  if (isUserMode) archiveLabel = 'Archive Account';
 
-  let restoreLabel = isRoomMode ? "Restore Room" : "Restore";
-  if (isUserMode) restoreLabel = "Restore Account";
+  let restoreLabel = isRoomMode ? 'Restore Room' : 'Restore';
+  if (isUserMode) restoreLabel = 'Restore Account';
 
   return (
     <div className="flex items-center gap-2">
@@ -46,7 +46,7 @@ export default function LifecycleActions({
           type="button"
           variant="secondary"
           onClick={onReactivate}
-          loading={busyAction === "reactivate"}
+          loading={busyAction === 'reactivate'}
           disabled={Boolean(busyAction) || isSelf}
           className="!h-11 rounded-xl px-6 text-[10px] font-black uppercase tracking-widest border-teal-100 text-teal-700 hover:bg-teal-50"
         >
@@ -60,10 +60,10 @@ export default function LifecycleActions({
           type="button"
           variant="ghost"
           onClick={onDeactivate}
-          loading={busyAction === "deactivate"}
+          loading={busyAction === 'deactivate'}
           disabled={Boolean(busyAction) || isSelf}
           className="!h-11 rounded-xl border border-stone-200 px-6 text-[10px] font-black uppercase tracking-widest text-stone-600 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed"
-          title={isSelf ? "Self-account deactivation restricted." : undefined}
+          title={isSelf ? 'Self-account deactivation restricted.' : undefined}
         >
           Deactivate
         </Button>
@@ -75,17 +75,19 @@ export default function LifecycleActions({
           type="button"
           variant="ghost"
           onClick={onArchive}
-          loading={busyAction === "archive" || busyAction === "decommission"}
+          loading={busyAction === 'archive' || busyAction === 'decommission'}
           disabled={Boolean(busyAction) || hasActiveContract || isSelf}
           className={`!h-11 rounded-xl border px-6 text-[10px] font-black uppercase tracking-widest transition-colors ${
-            isUserMode 
-              ? "border-rose-100 text-rose-600 hover:bg-rose-50 hover:border-rose-200" 
-              : "border-stone-200 text-stone-600 hover:bg-stone-50"
+            isUserMode
+              ? 'border-rose-100 text-rose-600 hover:bg-rose-50 hover:border-rose-200'
+              : 'border-stone-200 text-stone-600 hover:bg-stone-50'
           } disabled:opacity-30 disabled:cursor-not-allowed`}
           title={
-            isSelf ? "Self-account archival restricted." :
-            hasActiveContract ? `${isRoomMode ? "Decommissioning" : "Archive"} restricted: operational dependencies detected.` : 
-            undefined
+            isSelf
+              ? 'Self-account archival restricted.'
+              : hasActiveContract
+                ? `${isRoomMode ? 'Decommissioning' : 'Archive'} restricted: operational dependencies detected.`
+                : undefined
           }
         >
           {archiveLabel}
@@ -98,7 +100,7 @@ export default function LifecycleActions({
           type="button"
           variant="primary"
           onClick={onRestore}
-          loading={busyAction === "restore"}
+          loading={busyAction === 'restore'}
           disabled={Boolean(busyAction)}
           className="!h-11 rounded-xl bg-teal-600 px-8 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-900/10 border-0"
         >

@@ -1,38 +1,44 @@
-"use client";
+'use client';
 
-import React, { useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 /**
  * Next Gen (v7.0) SideSheetOverlay
  * Provides a context-aware slide-over for rapid edits.
  * Complies with the new floating elevation spec (backdrop-blur).
  */
-export function SideSheetOverlay({ isOpen, onClose, title, children, size = "md" }) {
+export function SideSheetOverlay({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = 'md',
+}) {
   const overlayRef = useRef(null);
 
   const sizeClasses = {
-    md: "max-w-md",
-    lg: "max-w-2xl",
-    xl: "max-w-4xl"
+    md: 'max-w-md',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl',
   };
 
   // Lock body scroll and handle Escape key
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === 'Escape') onClose();
     };
     if (isOpen) {
-      document.body.style.overflow = "hidden";
-      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleEscape);
     } else {
-      document.body.style.overflow = "";
+      document.body.style.overflow = '';
     }
     return () => {
-      document.body.style.overflow = "";
-      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleEscape);
     };
   }, [isOpen, onClose]);
 
@@ -56,10 +62,10 @@ export function SideSheetOverlay({ isOpen, onClose, title, children, size = "md"
         >
           <motion.div
             key="panel"
-            initial={{ x: "100%" }}
+            initial={{ x: '100%' }}
             animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className={`h-full w-full ${sizeClasses[size] || sizeClasses.md} bg-white shadow-[0_0_40px_rgba(0,0,0,0.1)] flex flex-col pointer-events-auto border-l border-stone-200`}
           >
             {/* Header */}
@@ -76,7 +82,7 @@ export function SideSheetOverlay({ isOpen, onClose, title, children, size = "md"
                 <X size={16} strokeWidth={2.5} />
               </button>
             </div>
-            
+
             {/* Content Body */}
             <div className="flex-1 overflow-y-auto p-8 relative">
               {children}
@@ -94,6 +100,6 @@ export function SideSheetOverlay({ isOpen, onClose, title, children, size = "md"
     return () => clearTimeout(timer);
   }, []);
   if (!mounted) return null;
-  
+
   return createPortal(content, document.body);
 }

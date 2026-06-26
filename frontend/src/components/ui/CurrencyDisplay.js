@@ -5,16 +5,16 @@
  * to avoid bloated monospace fallbacks, while keeping the digits perfectly
  * aligned using font-mono and tabular-nums.
  */
-"use client";
+'use client';
 
-export default function CurrencyDisplay({ amount, className = "" }) {
+export default function CurrencyDisplay({ amount, className = '' }) {
   const num = Number(amount);
 
   if (amount == null || isNaN(num)) {
     return <span className={`font-mono tabular-nums ${className}`}>—</span>;
   }
 
-  const formatted = new Intl.NumberFormat("en-PH", {
+  const formatted = new Intl.NumberFormat('en-PH', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(num);

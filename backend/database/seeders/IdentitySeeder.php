@@ -43,8 +43,8 @@ class IdentitySeeder extends Seeder
             $this->command->info("System administrator seeded: {$envAdminEmail}");
         }
 
-        // 2. Seed Academic Administrators
-        $academicAdmins = [
+        // 2. Seed System Administrators
+        $systemAdmins = [
             ['email' => 'alyannabianca.serra@wvsu.edu.ph', 'first' => 'Alyanna Bianca', 'last' => 'Serra', 'user' => 'alyannabianca'],
             ['email' => 'luisarose.brillantes@wvsu.edu.ph', 'first' => 'Luisa Rose', 'last' => 'Brillantes', 'user' => 'luisarose'],
             ['email' => 'elizamay.calisa@wvsu.edu.ph', 'first' => 'Eliza May', 'last' => 'Calisa', 'user' => 'elizamay'],
@@ -52,7 +52,7 @@ class IdentitySeeder extends Seeder
             ['email' => 'christianpaul.delacruz@wvsu.edu.ph', 'first' => 'Christian Paul', 'last' => 'Dela Cruz', 'user' => 'christianpaul'],
         ];
 
-        foreach ($academicAdmins as $adm) {
+        foreach ($systemAdmins as $adm) {
             User::updateOrCreate(
                 ['email' => $adm['email']],
                 [
@@ -64,7 +64,7 @@ class IdentitySeeder extends Seeder
                     'is_active' => 1,
                 ]
             );
-            $this->command->info("Academic administrator seeded: {$adm['email']}");
+            $this->command->info("System administrator seeded: {$adm['email']}");
         }
     }
 }

@@ -1,6 +1,6 @@
 /** @param {string|number|null|undefined} s */
 function parseTime(s) {
-  if (s == null || s === "") return null;
+  if (s == null || s === '') return null;
   const t = Date.parse(String(s));
   return Number.isNaN(t) ? null : t;
 }
@@ -16,10 +16,10 @@ function parseTime(s) {
  * @returns {T[]}
  */
 export function sortClientRows(items, sortKey, direction, getValue) {
-  if (!sortKey || !direction || typeof getValue !== "function") {
+  if (!sortKey || !direction || typeof getValue !== 'function') {
     return items;
   }
-  const dir = direction === "asc" ? 1 : -1;
+  const dir = direction === 'asc' ? 1 : -1;
   const list = [...items];
   list.sort((a, b) => {
     const va = getValue(a);
@@ -27,12 +27,17 @@ export function sortClientRows(items, sortKey, direction, getValue) {
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
-    if (typeof va === "number" && typeof vb === "number") {
+    if (typeof va === 'number' && typeof vb === 'number') {
       return (va - vb) * dir;
     }
     const na = Number(va);
     const nb = Number(vb);
-    if (!Number.isNaN(na) && !Number.isNaN(nb) && String(va).trim() !== "" && String(vb).trim() !== "") {
+    if (
+      !Number.isNaN(na) &&
+      !Number.isNaN(nb) &&
+      String(va).trim() !== '' &&
+      String(vb).trim() !== ''
+    ) {
       return (na - nb) * dir;
     }
     const ta = parseTime(va);
@@ -40,7 +45,12 @@ export function sortClientRows(items, sortKey, direction, getValue) {
     if (ta != null && tb != null) {
       return (ta - tb) * dir;
     }
-    return String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: "base" }) * dir;
+    return (
+      String(va).localeCompare(String(vb), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      }) * dir
+    );
   });
   return list;
 }

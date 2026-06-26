@@ -6,10 +6,10 @@ export const PAGINATION_DEFAULT_PER_PAGE = 25;
 
 export const PAGINATION_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-export const PAGINATION_STORAGE_KEY = "havenstay_table_per_page";
+export const PAGINATION_STORAGE_KEY = 'havenstay_table_per_page';
 
 export function readStoredPerPage() {
-  if (typeof window === "undefined") return PAGINATION_DEFAULT_PER_PAGE;
+  if (typeof window === 'undefined') return PAGINATION_DEFAULT_PER_PAGE;
   try {
     const raw = window.localStorage.getItem(PAGINATION_STORAGE_KEY);
     const n = Number.parseInt(raw, 10);
@@ -21,7 +21,7 @@ export function readStoredPerPage() {
 }
 
 export function writeStoredPerPage(n) {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   if (PAGINATION_PER_PAGE_OPTIONS.includes(n)) {
     window.localStorage.setItem(PAGINATION_STORAGE_KEY, String(n));
   }
@@ -45,13 +45,13 @@ export function normalizePaginatedList(body) {
  */
 export function buildPaginationQuery(page, perPage, extraParams = {}) {
   const p = new URLSearchParams();
-  if (page != null) p.set("page", String(page));
-  if (perPage != null) p.set("per_page", String(perPage));
+  if (page != null) p.set('page', String(page));
+  if (perPage != null) p.set('per_page', String(perPage));
   Object.entries(extraParams).forEach(([k, v]) => {
-    if (v != null && v !== "") p.set(k, String(v));
+    if (v != null && v !== '') p.set(k, String(v));
   });
   const qs = p.toString();
-  return qs ? `?${qs}` : "";
+  return qs ? `?${qs}` : '';
 }
 
 /**
@@ -61,12 +61,13 @@ export function buildPaginationQuery(page, perPage, extraParams = {}) {
  * @param {'rows'|'entries'} key
  * @returns {{ rows: unknown[], meta: object|null }}
  */
-export function normalizeReportRows(body, key = "rows") {
-  if (!body || typeof body !== "object") {
+export function normalizeReportRows(body, key = 'rows') {
+  if (!body || typeof body !== 'object') {
     return { rows: [], meta: null };
   }
   const list = Array.isArray(body[key]) ? body[key] : [];
-  const meta = body.meta != null && typeof body.meta === "object" ? body.meta : null;
+  const meta =
+    body.meta != null && typeof body.meta === 'object' ? body.meta : null;
   return { rows: list, meta };
 }
 

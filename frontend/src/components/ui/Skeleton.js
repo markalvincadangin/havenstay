@@ -1,18 +1,16 @@
-import { motion } from "framer-motion";
-import { AppMain } from "@/components/layout/AppShell";
-import { Card } from "@/components/ui/Card";
+import { motion } from 'framer-motion';
+import { AppMain } from '@/components/layout/AppShell';
+import { Card } from '@/components/ui/Card';
 
 /** Base skeleton primitive (box) */
-export function Skeleton({ className = "h-4 w-full", opacity = "opacity-30" }) {
+export function Skeleton({ className = 'h-4 w-full', opacity = 'opacity-30' }) {
   return (
-    <div 
-      className={`animate-pulse rounded bg-[var(--color-border-strong)] ${opacity} ${className}`} 
+    <div
+      className={`animate-pulse rounded bg-[var(--color-border-strong)] ${opacity} ${className}`}
       role="status"
     />
   );
 }
-
-
 
 /** Full-page skeleton for grid/card layouts (e.g. Rooms Dashboard) */
 export function SkeletonGridPage({ cards = 6 }) {
@@ -92,12 +90,18 @@ export function SkeletonListPage({ rows = 5 }) {
           {/* thead */}
           <div className="flex gap-6 bg-[var(--color-background)] px-4 py-4">
             {[40, 28, 20, 16, 12].map((w, i) => (
-              <div key={i} className={`h-3 w-${w} rounded bg-[var(--color-primary)]/10`} />
+              <div
+                key={i}
+                className={`h-3 w-${w} rounded bg-[var(--color-primary)]/10`}
+              />
             ))}
           </div>
           {/* tbody rows */}
           {Array.from({ length: rows }).map((_, i) => (
-            <div key={i} className="flex gap-6 border-t border-[var(--color-primary)]/5 px-4 py-5">
+            <div
+              key={i}
+              className="flex gap-6 border-t border-[var(--color-primary)]/5 px-4 py-5"
+            >
               <div className="h-4 w-24 rounded bg-[var(--color-primary)]/8" />
               <div className="h-4 w-48 rounded bg-[var(--color-primary)]/5" />
               <div className="h-4 w-32 rounded bg-[var(--color-primary)]/5" />
@@ -146,9 +150,15 @@ export function DashboardSkeleton() {
   return (
     <div className="space-y-8">
       {/* KPI Grid - 6 cards */}
-      <section aria-label="Loading metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section
+        aria-label="Loading metrics"
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      >
         {[...Array(6)].map((_, i) => (
-          <Skeleton key={`kpi-${i}`} className="h-32 rounded-2xl bg-white border border-stone-100 shadow-sm opacity-50" />
+          <Skeleton
+            key={`kpi-${i}`}
+            className="h-32 rounded-2xl bg-white border border-stone-100 shadow-sm opacity-50"
+          />
         ))}
       </section>
 
@@ -157,7 +167,10 @@ export function DashboardSkeleton() {
         <Skeleton className="mb-6 h-4 w-32 opacity-20" />
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[...Array(6)].map((_, i) => (
-            <Skeleton key={`link-${i}`} className="h-20 rounded-xl bg-stone-50/50 opacity-40" />
+            <Skeleton
+              key={`link-${i}`}
+              className="h-20 rounded-xl bg-stone-50/50 opacity-40"
+            />
           ))}
         </div>
       </div>
@@ -172,8 +185,11 @@ export function DashboardSkeleton() {
               <Skeleton className="w-16 h-2.5 opacity-10" />
             </div>
             <div className="p-0">
-               {[...Array(2)].map((_, i) => (
-                <div key={`turnover-${i}`} className="h-16 border-b border-stone-50 flex items-center px-8">
+              {[...Array(2)].map((_, i) => (
+                <div
+                  key={`turnover-${i}`}
+                  className="h-16 border-b border-stone-50 flex items-center px-8"
+                >
                   <Skeleton className="w-full h-4 opacity-5" />
                 </div>
               ))}
@@ -183,9 +199,12 @@ export function DashboardSkeleton() {
           <div className="rounded-2xl bg-white border border-stone-200 p-0 shadow-sm overflow-hidden">
             <div className="h-14 border-b border-stone-50 bg-stone-50/50" />
             <div className="p-0">
-               {[...Array(3)].map((_, i) => (
-                <div key={`row-${i}`} className="h-16 border-b border-stone-50 flex items-center px-8">
-                   <Skeleton className="w-full h-4 opacity-5" />
+              {[...Array(3)].map((_, i) => (
+                <div
+                  key={`row-${i}`}
+                  className="h-16 border-b border-stone-50 flex items-center px-8"
+                >
+                  <Skeleton className="w-full h-4 opacity-5" />
                 </div>
               ))}
             </div>
@@ -194,11 +213,17 @@ export function DashboardSkeleton() {
 
         <div className="lg:col-span-4 space-y-8">
           {[...Array(2)].map((_, i) => (
-            <div key={`list-${i}`} className="rounded-2xl bg-white border border-stone-200 p-0 shadow-sm overflow-hidden">
+            <div
+              key={`list-${i}`}
+              className="rounded-2xl bg-white border border-stone-200 p-0 shadow-sm overflow-hidden"
+            >
               <div className="h-14 border-b border-stone-50 bg-stone-50/50" />
               <div className="p-0 space-y-px">
                 {[...Array(3)].map((_, j) => (
-                  <div key={`list-item-${j}`} className="h-20 border-b border-stone-50 flex items-center px-8">
+                  <div
+                    key={`list-item-${j}`}
+                    className="h-20 border-b border-stone-50 flex items-center px-8"
+                  >
                     <Skeleton className="w-full h-10 opacity-5" />
                   </div>
                 ))}

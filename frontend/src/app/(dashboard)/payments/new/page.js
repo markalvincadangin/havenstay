@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { canManageBilling } from "@/lib/auth";
-import { useAuth } from "@/context/AuthContext";
-import StandardPage from "@/components/ui/StandardPage";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import Alert from "@/components/ui/Alert";
-import PaymentWizard from "@/features/payments/components/PaymentWizard";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
+import { canManageBilling } from '@/lib/auth';
+import { useAuth } from '@/context/AuthContext';
+import StandardPage from '@/components/ui/StandardPage';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import Alert from '@/components/ui/Alert';
+import PaymentWizard from '@/features/payments/components/PaymentWizard';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 
 /**
  * RecordPaymentPage — Orchestrator for the payment collection workflow.
@@ -23,11 +23,20 @@ export default function RecordPaymentPage() {
       loading={authLoading}
       skeleton={<SkeletonDetailPage />}
       breadcrumbs={
-        <Breadcrumbs items={[{ label: "Payments", href: "/payments" }, { label: "Record Payment" }]} />
+        <Breadcrumbs
+          items={[
+            { label: 'Payments', href: '/payments' },
+            { label: 'Record Payment' },
+          ]}
+        />
       }
     >
       {readOnly ? (
-        <Alert variant="warning" title="Access Restricted" className="max-w-4xl mx-auto mb-6">
+        <Alert
+          variant="warning"
+          title="Access Restricted"
+          className="max-w-4xl mx-auto mb-6"
+        >
           Administrative clearance is required to post payments.
         </Alert>
       ) : (

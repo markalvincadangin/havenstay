@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { motion, AnimatePresence } from "framer-motion";
-import { Keyboard, X } from "lucide-react";
-import { APP_KEYBOARD_SHORTCUTS, G_KEY_NAV_BINDINGS } from "@/lib/keyboardNav";
-import { Card } from "./Card";
+import { motion, AnimatePresence } from 'framer-motion';
+import { Keyboard, X } from 'lucide-react';
+import { APP_KEYBOARD_SHORTCUTS, G_KEY_NAV_BINDINGS } from '@/lib/keyboardNav';
+import { Card } from './Card';
 
 /**
  * KeyboardHelpModal - Centralized system shortcuts documentation overlay.
@@ -14,7 +14,7 @@ import { Card } from "./Card";
  */
 export default function KeyboardHelpModal({ isOpen, onClose }) {
   const shortcuts = [
-    { key: "?", label: "Toggle help overlay" },
+    { key: '?', label: 'Toggle help overlay' },
     ...G_KEY_NAV_BINDINGS.map(({ key, label }) => ({
       key: `G + ${key.toUpperCase()}`,
       label: `Go to ${label}`,
@@ -49,8 +49,12 @@ export default function KeyboardHelpModal({ isOpen, onClose }) {
                     <Keyboard size={20} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-[var(--color-text)] leading-none">System Shortcuts</h3>
-                    <p className="mt-1 text-[10px] uppercase tracking-widest text-[var(--color-text-secondary)] font-medium">Power-user Commands</p>
+                    <h3 className="text-sm font-bold text-[var(--color-text)] leading-none">
+                      System Shortcuts
+                    </h3>
+                    <p className="mt-1 text-[10px] uppercase tracking-widest text-[var(--color-text-secondary)] font-medium">
+                      Power-user Commands
+                    </p>
                   </div>
                 </div>
                 <button
@@ -66,10 +70,12 @@ export default function KeyboardHelpModal({ isOpen, onClose }) {
               {/* List */}
               <div className="max-h-[60vh] overflow-y-auto px-6 py-4 scrollbar-hide">
                 <p className="mb-3 rounded-lg border border-stone-100 bg-stone-50/80 px-3 py-2 text-[10px] leading-snug text-stone-500">
-                  Browser shortcuts such as <kbd className="font-mono">Ctrl+P</kbd> (Print) and{" "}
-                  <kbd className="font-mono">Ctrl+R</kbd> (Reload) are not overridden. Use{" "}
-                  <kbd className="font-mono">Alt+Shift+P</kbd> / <kbd className="font-mono">Alt+Shift+R</kbd> for the
-                  actions below.
+                  Browser shortcuts such as{' '}
+                  <kbd className="font-mono">Ctrl+P</kbd> (Print) and{' '}
+                  <kbd className="font-mono">Ctrl+R</kbd> (Reload) are not
+                  overridden. Use <kbd className="font-mono">Alt+Shift+P</kbd> /{' '}
+                  <kbd className="font-mono">Alt+Shift+R</kbd> for the actions
+                  below.
                 </p>
                 <div className="space-y-1">
                   {shortcuts.map((item) => (
@@ -77,7 +83,9 @@ export default function KeyboardHelpModal({ isOpen, onClose }) {
                       key={item.key}
                       className="flex items-center justify-between rounded-lg px-2 py-2.5 hover:bg-stone-50 transition-colors group"
                     >
-                      <span className="text-xs font-medium text-stone-600 group-hover:text-stone-900">{item.label}</span>
+                      <span className="text-xs font-medium text-stone-600 group-hover:text-stone-900">
+                        {item.label}
+                      </span>
                       <kbd className="inline-flex min-w-[2.5rem] items-center justify-center rounded-md border-b-2 border-stone-200 bg-white px-2 py-1 font-mono text-[10px] font-black text-stone-600 shadow-sm leading-none uppercase">
                         {item.key}
                       </kbd>

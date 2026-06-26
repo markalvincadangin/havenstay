@@ -53,6 +53,8 @@ view audit logs.
 Viewer has read-only access to operational modules (Tenants, Rooms,
 Contracts). Viewers cannot access the reports module or create, edit,
 or delete any record.
+> [!NOTE]
+> **Known Limitation (OAuth Auto-Provisioning):** Automatically provisioning new OAuth users into the `Viewer` role poses a security risk, as it grants immediate read-access to operational data (tenants, rooms) to any authenticated domain user. Until a stricter onboarding sandbox is built, all Viewer accounts must be explicitly provisioned by an Admin.
 
 **BR-GEN-008**
 Analytical reporting and data exports are restricted to System

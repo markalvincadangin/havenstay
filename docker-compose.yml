@@ -5,11 +5,8 @@ services:
     container_name: havenstay-db-primary
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: havenstay_db
-      # Dedicated replication user created on init
-      MYSQL_USER: replica_user
-      MYSQL_PASSWORD: replica_pass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
     command:
       - --server-id=1
       - --log-bin=mysql-bin
@@ -28,19 +25,19 @@ services:
       - db-primary-data:/var/lib/mysql
       - ./docker/primary-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -proot || exit 1" ]
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p${MYSQL_ROOT_PASSWORD} || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 60s
 
-  # Replica Database (3307)
+  # Replica Database (3307) 
   db-replica:
     image: mysql:8.4
     container_name: havenstay-db-replica
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     command:
       - --server-id=2
       - --gtid-mode=ON
@@ -58,7 +55,7 @@ services:
       - db-replica-data:/var/lib/mysql
       - ./docker/replica-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -proot || exit 1" ]
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p${MYSQL_ROOT_PASSWORD} || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,23 +76,10 @@ services:
       timeout: 15s
       retries: 5
       start_period: 90s
+    env_file: .env
     volumes:
       - ./backend:/var/www/html
-    environment:
-      - APP_ENV=local
-      - APP_DEBUG=true
-      - DB_CONNECTION=mysql
-      - DB_HOST=db-primary
-      - DB_PORT=3306
-      - DB_DATABASE=havenstay_db
-      - DB_USERNAME=root
-      - DB_PASSWORD=root
-      - DB_WRITE_HOST=db-primary
-      - DB_WRITE_PORT=3306
-      - DB_READ_HOST=db-primary
-      - DB_READ_PORT=3306
-      - DB_STICKY=true
-      - DB_SEED=true
+      - /var/www/html/vendor
     depends_on:
       db-primary:
         condition: service_healthy
@@ -114,18 +98,13 @@ services:
     restart: always
     ports:
       - "3000:3000"
-    environment:
-      - BACKEND_INTERNAL_URL=http://backend:80
-      - NEXT_PUBLIC_API_BASE_URL=
-      # PERFORMANCE NOTE: Polling is required for hot-reload on Windows-to-Linux bind mounts (C:\...)
-      # but causes high CPU/lag. To FIX this, move the project to the native WSL2 filesystem
-      # (e.g. \\wsl$\Ubuntu\...) and set these to 'false'.
-      - WATCHPACK_POLLING=true
-      - CHOKIDAR_USEPOLLING=true
+    env_file: .env
     volumes:
       - ./frontend:/app
       - /app/node_modules
-      - /app/.next
+    environment:
+      - BACKEND_INTERNAL_URL=http://backend:80
+      - NEXT_PUBLIC_API_BASE_URL=
     depends_on:
       backend:
         condition: service_healthy

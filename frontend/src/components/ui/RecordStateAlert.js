@@ -1,8 +1,13 @@
-"use client";
+'use client';
 
-import Alert from "./Alert";
+import Alert from './Alert';
 
-export default function RecordStateAlert({ show, variant = "info", title, children }) {
+export default function RecordStateAlert({
+  show,
+  variant = 'info',
+  title,
+  children,
+}) {
   if (!show) return null;
 
   return (

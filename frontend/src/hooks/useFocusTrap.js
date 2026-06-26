@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
 
 /**
  * useFocusTrap - Standard hook for trapping focus within a container (e.g., modals).
@@ -14,19 +14,19 @@ export function useFocusTrap(isActive) {
     if (!isActive || !rootRef.current) return;
 
     const root = rootRef.current;
-    
+
     // Find all focusable elements
     const focusableElements = root.querySelectorAll(
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
     );
-    
+
     if (focusableElements.length === 0) return;
 
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
 
     const handleKeyDown = (e) => {
-      if (e.key !== "Tab") return;
+      if (e.key !== 'Tab') return;
 
       if (e.shiftKey) {
         // Tab + Shift: focus previous
@@ -46,8 +46,8 @@ export function useFocusTrap(isActive) {
     // Auto-focus first element or the container if no focusable items
     firstElement.focus();
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActive]);
 
   return rootRef;

@@ -13,7 +13,7 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Base test case — helpers and SQLite vs MySQL trigger expectations per docs/TEST_PLAN.md / CLAUDE.md CCR-008.
+ * Base test case — helpers and SQLite vs MySQL trigger expectations per docs/TEST_PLAN.md .
  */
 abstract class TestCase extends BaseTestCase
 {

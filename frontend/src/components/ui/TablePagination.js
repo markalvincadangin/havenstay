@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
 import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
-} from "lucide-react";
-import Button from "./Button";
+  ChevronsRight,
+} from 'lucide-react';
+import Button from './Button';
 import {
   PAGINATION_PER_PAGE_OPTIONS,
   readStoredPerPage,
   writeStoredPerPage,
-} from "@/lib/pagination";
+} from '@/lib/pagination';
 
 /**
  * @param {{
@@ -31,7 +31,7 @@ export default function TablePagination({
   onPageChange,
   onPerPageChange,
   disabled = false,
-  className = "",
+  className = '',
 }) {
   if (!meta || meta.total === 0) {
     return null;
@@ -50,14 +50,21 @@ export default function TablePagination({
       <p className="text-[11px] font-medium text-stone-500">
         {total > 0 ? (
           <>
-            Showing{" "}
-            <span className="font-mono tabular-nums text-stone-700 font-bold">{from}</span>
+            Showing{' '}
+            <span className="font-mono tabular-nums text-stone-700 font-bold">
+              {from}
+            </span>
             –
-            <span className="font-mono tabular-nums text-stone-700 font-bold">{to}</span> of{" "}
-            <span className="font-mono tabular-nums text-stone-700 font-bold">{total}</span>
+            <span className="font-mono tabular-nums text-stone-700 font-bold">
+              {to}
+            </span>{' '}
+            of{' '}
+            <span className="font-mono tabular-nums text-stone-700 font-bold">
+              {total}
+            </span>
           </>
         ) : (
-          "No records available"
+          'No records available'
         )}
       </p>
 
@@ -107,10 +114,11 @@ export default function TablePagination({
           >
             <ChevronLeft size={14} strokeWidth={2.5} />
           </Button>
-          
+
           <div className="flex h-8 items-center px-4 rounded-lg border border-stone-100 bg-stone-50/50">
             <span className="font-mono text-[11px] font-bold tabular-nums text-stone-600">
-              {page} <span className="mx-1.5 text-stone-300 font-sans">/</span> {lastPage}
+              {page} <span className="mx-1.5 text-stone-300 font-sans">/</span>{' '}
+              {lastPage}
             </span>
           </div>
 

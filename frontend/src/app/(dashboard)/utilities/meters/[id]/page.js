@@ -1,30 +1,30 @@
-"use client";
-import { useMemo, use, useState } from "react";
-import useSWR from "swr";
-import { fetcher, apiRequest } from "@/lib/api";
-import { canManageMeters } from "@/lib/auth";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-import Alert from "@/components/ui/Alert";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import { Card } from "@/components/ui/Card";
-import PageHeaderActions from "@/components/ui/PageHeaderActions";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Table } from "@/components/ui/Table";
+'use client';
+import { useMemo, use, useState } from 'react';
+import useSWR from 'swr';
+import { fetcher, apiRequest } from '@/lib/api';
+import { canManageMeters } from '@/lib/auth';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
+import Alert from '@/components/ui/Alert';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { Card } from '@/components/ui/Card';
+import PageHeaderActions from '@/components/ui/PageHeaderActions';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Table } from '@/components/ui/Table';
 import Button from '@/components/ui/Button';
-import ResourceView from "@/components/ui/ResourceView";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import StandardPage from "@/components/ui/StandardPage";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
-import { formatDateString, } from "@/lib/formatters";
-import { Plus, Clock, FileMinus, Key, Zap, Droplet, Edit2 } from "lucide-react";
-import LifecycleActions from "@/components/ui/LifecycleActions";
-import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
-import { useRouter } from "next/navigation";
-import { useToasts } from "@/context/ToastContext";
-import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
+import ResourceView from '@/components/ui/ResourceView';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import StandardPage from '@/components/ui/StandardPage';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
+import { formatDateString } from '@/lib/formatters';
+import { Plus, Clock, FileMinus, Key, Zap, Droplet, Edit2 } from 'lucide-react';
+import LifecycleActions from '@/components/ui/LifecycleActions';
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
+import { useRouter } from 'next/navigation';
+import { useToasts } from '@/context/ToastContext';
+import { SideSheetOverlay } from '@/components/ui/SideSheetOverlay';
 import { MeterQuickEditForm } from '@/features/utilities/components/MeterQuickEditForm';
 import { MeterReadingForm } from '@/features/utilities/components/MeterReadingForm';
-import DetailHeader from "@/components/ui/DetailHeader";
+import DetailHeader from '@/components/ui/DetailHeader';
 /**
  * Meter Registry Detail — /admin/meters/[id]
  */
@@ -35,43 +35,60 @@ export default function MeterDetailPage({ params }) {
   const { showToast } = useToasts();
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const [showArchiveModal, setShowArchiveModal] = useState(false);
-  const [busyAction, setBusyAction] = useState("");
+  const [busyAction, setBusyAction] = useState('');
   const [activeSideSheet, setActiveSideSheet] = useState(null); // 'edit' or 'reading'
   const canAccess = useMemo(() => canManageMeters(currentUser), [currentUser]);
   const viewDenied = !authLoading && currentUser !== null && !canAccess;
-  const { data: meter, error: meterError, isValidating: isSyncing, mutate: refetchMeter } = useSWR(
+  const {
+    data: meter,
+    error: meterError,
+    isValidating: isSyncing,
+    mutate: refetchMeter,
+  } = useSWR(
     !authLoading && currentUser && canAccess ? `/api/meters/${meterId}` : null,
     fetcher
   );
   const handleArchiveMeter = async () => {
-    setBusyAction("archive");
+    setBusyAction('archive');
     try {
-      await apiRequest(`/api/meters/${meterId}/archive`, { method: "POST" });
-      showToast("Meter archived.", "success");
-      router.push("/utilities/meters");
+      await apiRequest(`/api/meters/${meterId}/archive`, { method: 'POST' });
+      showToast('Meter archived.', 'success');
+      router.push('/utilities/meters');
     } catch (e) {
-      showToast(e.message, "error");
+      showToast(e.message, 'error');
     } finally {
-      setBusyAction("");
+      setBusyAction('');
     }
   };
   const loading = !meter && !meterError;
   if (isUnauthorized) return null;
-  const title = meter ? `Meter #${meter.meter_id} (${meter.serial_number})` : "Meter Record";
-  const isElectric = meter?.utility?.name?.toLowerCase().includes("electric");
+  const title = meter
+    ? `Meter #${meter.meter_id} (${meter.serial_number})`
+    : 'Meter Record';
+  const isElectric = meter?.utility?.name?.toLowerCase().includes('electric');
   const UtilityIcon = isElectric ? Zap : Droplet;
-  const assignments = meter?.assignments ? [...meter.assignments].sort((a, b) => new Date(b.valid_from) - new Date(a.valid_from)) : [];
-  const readings = meter?.readings ? [...meter.readings].sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date)) : [];
+  const assignments = meter?.assignments
+    ? [...meter.assignments].sort(
+        (a, b) => new Date(b.valid_from) - new Date(a.valid_from)
+      )
+    : [];
+  const readings = meter?.readings
+    ? [...meter.readings].sort(
+        (a, b) => new Date(b.reading_date) - new Date(a.reading_date)
+      )
+    : [];
   const header = DetailHeader({
-    type: "meter",
+    type: 'meter',
     id: meterId,
-    title: meter ? `Meter #${meter.meter_id} (${meter.serial_number})` : "Meter Record",
-    subtitle: "Authoritative hardware profile and consumption ledger.",
+    title: meter
+      ? `Meter #${meter.meter_id} (${meter.serial_number})`
+      : 'Meter Record',
+    subtitle: 'Authoritative hardware profile and consumption ledger.',
     status: meter?.status,
     loading: authLoading || loading,
-    listHref: "/utilities/meters",
-    listLabel: "Meter Registry",
-    detailLabel: meter ? `SN: ${meter.serial_number}` : "Detail"
+    listHref: '/utilities/meters',
+    listLabel: 'Meter Registry',
+    detailLabel: meter ? `SN: ${meter.serial_number}` : 'Detail',
   });
 
   return (
@@ -119,13 +136,17 @@ export default function MeterDetailPage({ params }) {
         description="Are you sure you want to archive this meter? This will remove the unit from active room assignments and prevent new readings, though all historical consumption data will be preserved for forensic audits."
         confirmLabel="Confirm Archive"
         isDanger
-        isLoading={busyAction === "archive"}
+        isLoading={busyAction === 'archive'}
         onConfirm={handleArchiveMeter}
         onCancel={() => setShowArchiveModal(false)}
       />
       <div className="mx-auto w-full max-w-5xl space-y-6">
         {viewDenied && (
-          <Alert variant="warning" title="Access restricted" data-testid="access-denied-meter">
+          <Alert
+            variant="warning"
+            title="Access restricted"
+            data-testid="access-denied-meter"
+          >
             You do not have permission to view meter profiles.
           </Alert>
         )}
@@ -144,15 +165,21 @@ export default function MeterDetailPage({ params }) {
                 <Card className="overflow-hidden border-stone-200 shadow-sm rounded-2xl p-0 hs-glass-effect">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-8 bg-white">
                     <div className="flex items-center gap-4">
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-xl shadow-inner ${isElectric ? 'bg-amber-50 text-amber-500' : 'bg-sky-50 text-sky-500'}`}>
+                      <div
+                        className={`flex h-12 w-12 items-center justify-center rounded-xl shadow-inner ${isElectric ? 'bg-amber-50 text-amber-500' : 'bg-sky-50 text-sky-500'}`}
+                      >
                         <UtilityIcon size={24} strokeWidth={2.5} />
                       </div>
                       <div>
-                        <h2 className="text-xl font-black text-stone-900 tracking-tight">{meter.utility?.name || "Utility"}</h2>
+                        <h2 className="text-xl font-black text-stone-900 tracking-tight">
+                          {meter.utility?.name || 'Utility'}
+                        </h2>
                         <div className="flex items-center gap-2 mt-1 font-mono text-xs font-bold uppercase tracking-widest text-stone-400">
                           <ResourceIdCell id={meter.meter_id} prefix="METER" />
                           <span> • </span>
-                          <span>Unit: {meter.utility?.unit_of_measurement}</span>
+                          <span>
+                            Unit: {meter.utility?.unit_of_measurement}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -180,21 +207,33 @@ export default function MeterDetailPage({ params }) {
                         dense={true}
                         caption="Meter Assignment History"
                         columns={[
-                          { key: "room", label: "ROOM" },
-                          { key: "valid_from", label: "ACTIVATION DATE" },
-                          { key: "valid_to", label: "DEACTIVATION DATE", className: "text-right pr-8" },
+                          { key: 'room', label: 'ROOM' },
+                          { key: 'valid_from', label: 'ACTIVATION DATE' },
+                          {
+                            key: 'valid_to',
+                            label: 'DEACTIVATION DATE',
+                            className: 'text-right pr-8',
+                          },
                         ]}
                         rows={assignments.map((assignment) => (
-                          <tr key={assignment.assignment_id} className="border-t border-stone-100 hs-table-row-dense hover:bg-stone-50">
+                          <tr
+                            key={assignment.assignment_id}
+                            className="border-t border-stone-100 hs-table-row-dense hover:bg-stone-50"
+                          >
                             <td className="pl-8 py-3">
-                              <ResourceIdCell type="room" id={assignment.room_id} />
+                              <ResourceIdCell
+                                type="room"
+                                id={assignment.room_id}
+                              />
                             </td>
                             <td className="py-3 text-[11px] font-medium text-stone-600">
                               {formatDateString(assignment.valid_from)}
                             </td>
                             <td className="pr-8 py-3 text-right">
                               {assignment.valid_to ? (
-                                <span className="text-[11px] font-medium text-stone-500">{formatDateString(assignment.valid_to)}</span>
+                                <span className="text-[11px] font-medium text-stone-500">
+                                  {formatDateString(assignment.valid_to)}
+                                </span>
                               ) : (
                                 <StatusBadge size="sm">active</StatusBadge>
                               )}
@@ -224,12 +263,27 @@ export default function MeterDetailPage({ params }) {
                         dense={true}
                         caption="Meter Reading History"
                         columns={[
-                          { key: "date", label: "READING DATE", className: "pl-8" },
-                          { key: "value", label: "METER INDEX", className: "text-right" },
-                          { key: "agent", label: "STAFF OFFICER", className: "text-right pr-8" },
+                          {
+                            key: 'date',
+                            label: 'READING DATE',
+                            className: 'pl-8',
+                          },
+                          {
+                            key: 'value',
+                            label: 'METER INDEX',
+                            className: 'text-right',
+                          },
+                          {
+                            key: 'agent',
+                            label: 'STAFF OFFICER',
+                            className: 'text-right pr-8',
+                          },
                         ]}
                         rows={readings.map((reading) => (
-                          <tr key={reading.reading_id} className="border-t border-stone-100 hs-table-row-dense hover:bg-stone-50">
+                          <tr
+                            key={reading.reading_id}
+                            className="border-t border-stone-100 hs-table-row-dense hover:bg-stone-50"
+                          >
                             <td className="pl-8 py-3 text-[11px] font-medium text-stone-600">
                               <div className="flex items-center gap-2">
                                 <Clock size={12} className="text-stone-400" />
@@ -241,11 +295,14 @@ export default function MeterDetailPage({ params }) {
                                 {Number(reading.reading_value).toFixed(2)}
                               </span>
                               {reading.is_rollover ? (
-                                <div className="text-[9px] uppercase tracking-widest text-teal-600 font-bold mt-0.5">Rollover</div>
+                                <div className="text-[9px] uppercase tracking-widest text-teal-600 font-bold mt-0.5">
+                                  Rollover
+                                </div>
                               ) : null}
                             </td>
                             <td className="pr-8 py-3 text-right text-[11px] font-bold text-stone-500">
-                              {reading.recorder?.first_name} {reading.recorder?.last_name}
+                              {reading.recorder?.first_name}{' '}
+                              {reading.recorder?.last_name}
                             </td>
                           </tr>
                         ))}
@@ -263,7 +320,9 @@ export default function MeterDetailPage({ params }) {
       <SideSheetOverlay
         isOpen={!!activeSideSheet}
         onClose={() => setActiveSideSheet(null)}
-        title={activeSideSheet === 'edit' ? "Update Meter Info" : "Record Reading"}
+        title={
+          activeSideSheet === 'edit' ? 'Update Meter Info' : 'Record Reading'
+        }
       >
         {activeSideSheet === 'edit' && (
           <MeterQuickEditForm

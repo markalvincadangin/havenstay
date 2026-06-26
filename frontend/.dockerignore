@@ -22,3 +22,14 @@ test-results
 .gitignore
 .eslintignore
 *.md
+
+# Vitest / Playwright config (not needed in image)
+vitest.config.mjs
+vitest.setup.js
+playwright.config.mjs
+
+# IDE / AI
+.idea
+.vscode
+CLAUDE.md
+AGENTS.md

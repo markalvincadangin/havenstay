@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { canManageBilling } from "@/lib/auth";
-import { useAuth } from "@/context/AuthContext";
-import StandardPage from "@/components/ui/StandardPage";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import Alert from "@/components/ui/Alert";
-import BillingWizard from "@/features/billing/components/BillingWizard";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
+import { canManageBilling } from '@/lib/auth';
+import { useAuth } from '@/context/AuthContext';
+import StandardPage from '@/components/ui/StandardPage';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import Alert from '@/components/ui/Alert';
+import BillingWizard from '@/features/billing/components/BillingWizard';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
 
 /**
  * NewBillingPage — Orchestrator for the billing generation workflow.
@@ -23,11 +23,20 @@ export default function NewBillingPage() {
       loading={authLoading}
       skeleton={<SkeletonDetailPage />}
       breadcrumbs={
-        <Breadcrumbs items={[{ label: "Billing", href: "/billing" }, { label: "Generate Bills" }]} />
+        <Breadcrumbs
+          items={[
+            { label: 'Billing', href: '/billing' },
+            { label: 'Generate Bills' },
+          ]}
+        />
       }
     >
       {readOnly ? (
-        <Alert variant="warning" title="Restricted Role" className="max-w-4xl mx-auto mb-6">
+        <Alert
+          variant="warning"
+          title="Restricted Role"
+          className="max-w-4xl mx-auto mb-6"
+        >
           You do not have permission to execute billing ledgers.
         </Alert>
       ) : (

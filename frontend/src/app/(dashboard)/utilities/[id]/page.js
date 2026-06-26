@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useMemo, use, useState } from "react";
-import useSWR from "swr";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useMemo, use, useState } from 'react';
+import useSWR from 'swr';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Zap,
   Droplet,
@@ -12,44 +12,44 @@ import {
   Activity,
   Edit2,
   ShieldCheck,
-  History
-} from "lucide-react";
-import { fetcher, apiRequest } from "@/lib/api";
-import { canManageMeters, canManageUsers } from "@/lib/auth";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { formatDateString } from "@/lib/formatters";
-import { useToasts } from "@/context/ToastContext";
+  History,
+} from 'lucide-react';
+import { fetcher, apiRequest } from '@/lib/api';
+import { canManageMeters, canManageUsers } from '@/lib/auth';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { formatDateString } from '@/lib/formatters';
+import { useToasts } from '@/context/ToastContext';
 
-import Alert from "@/components/ui/Alert";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import { Card } from "@/components/ui/Card";
-import PageHeaderActions from "@/components/ui/PageHeaderActions";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Table } from "@/components/ui/Table";
-import ResourceView from "@/components/ui/ResourceView";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import StandardPage from "@/components/ui/StandardPage";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
-import Button from "@/components/ui/Button";
-import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
-import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
-import LifecycleActions from "@/components/ui/LifecycleActions";
-import CurrencyCell from "@/components/ui/CurrencyCell";
+import Alert from '@/components/ui/Alert';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { Card } from '@/components/ui/Card';
+import PageHeaderActions from '@/components/ui/PageHeaderActions';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Table } from '@/components/ui/Table';
+import ResourceView from '@/components/ui/ResourceView';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import StandardPage from '@/components/ui/StandardPage';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
+import Button from '@/components/ui/Button';
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
+import { SideSheetOverlay } from '@/components/ui/SideSheetOverlay';
+import LifecycleActions from '@/components/ui/LifecycleActions';
+import CurrencyCell from '@/components/ui/CurrencyCell';
 
 import { UtilityRateQuickEditForm } from '@/features/utilities/components/UtilityRateQuickEditForm';
 import { UtilityQuickEditForm } from '@/features/utilities/components/UtilityQuickEditForm';
-import DetailHeader from "@/components/ui/DetailHeader";
+import DetailHeader from '@/components/ui/DetailHeader';
 
 /**
  * @module Utilities/ServiceDetail
  * @description Operational view for specific utility categories, hardware inventory, and unit rate history.
  * @version 7.1.0
- * 
+ *
  * @traceability
  * - Requirements: FR-024, FR-025, FR-028, FR-031
  * - Business Rules: BR-GEN-002, BR-MET-001, BR-MET-002, BR-MET-007
- * - Forensic: CCR-007
- * 
+ * - Forensic: Audit Log
+ *
  * @performance
  * - Category: Operational (30s cache)
  * - Pattern: SWR DetailView with nested relations
@@ -64,7 +64,7 @@ export default function UtilityDetailPage({ params }) {
 
   const [activeSideSheet, setActiveSideSheet] = useState(null); // 'edit-utility', 'add-rate'
   const [showArchiveModal, setShowArchiveModal] = useState(false);
-  const [busyAction, setBusyAction] = useState("");
+  const [busyAction, setBusyAction] = useState('');
 
   const canAccess = useMemo(() => canManageMeters(currentUser), [currentUser]);
   const isAdmin = useMemo(() => canManageUsers(currentUser), [currentUser]);
@@ -74,22 +74,29 @@ export default function UtilityDetailPage({ params }) {
     data: utility,
     error: utilityError,
     isValidating: isSyncing,
-    mutate: refetchUtility
+    mutate: refetchUtility,
   } = useSWR(
-    !authLoading && currentUser && canAccess ? `/api/utilities/${utilityId}` : null,
+    !authLoading && currentUser && canAccess
+      ? `/api/utilities/${utilityId}`
+      : null,
     fetcher
   );
 
   const handleArchiveUtility = async () => {
-    setBusyAction("archive");
+    setBusyAction('archive');
     try {
-      await apiRequest(`/api/utilities/${utilityId}/archive`, { method: "POST" });
-      showToast("Service category archived.", "success");
-      router.push("/utilities");
+      await apiRequest(`/api/utilities/${utilityId}/archive`, {
+        method: 'POST',
+      });
+      showToast('Service category archived.', 'success');
+      router.push('/utilities');
     } catch (e) {
-      showToast(e.message || "Archive restricted: operational dependencies detected.", "error");
+      showToast(
+        e.message || 'Archive restricted: operational dependencies detected.',
+        'error'
+      );
     } finally {
-      setBusyAction("");
+      setBusyAction('');
       setShowArchiveModal(false);
     }
   };
@@ -97,28 +104,31 @@ export default function UtilityDetailPage({ params }) {
   const loading = !utility && !utilityError;
 
   const rates = useMemo(() => {
-    return (utility?.rates || []).sort((a, b) => new Date(b.effective_from) - new Date(a.effective_from));
+    return (utility?.rates || []).sort(
+      (a, b) => new Date(b.effective_from) - new Date(a.effective_from)
+    );
   }, [utility]);
 
   if (isUnauthorized) return null;
 
-  const title = utility ? utility.name : "Utility Details";
-  const isElectric = utility?.name?.toLowerCase().includes("electric");
-  const isWater = utility?.name?.toLowerCase().includes("water");
-  const UtilityIcon = isElectric ? Zap : (isWater ? Droplet : Box);
+  const title = utility ? utility.name : 'Utility Details';
+  const isElectric = utility?.name?.toLowerCase().includes('electric');
+  const isWater = utility?.name?.toLowerCase().includes('water');
+  const UtilityIcon = isElectric ? Zap : isWater ? Droplet : Box;
 
   const meters = utility?.meters || [];
 
   const header = DetailHeader({
-    type: "utility",
+    type: 'utility',
     id: utilityId,
-    title: utility ? utility.name : "Utility Details",
-    subtitle: "Configure specific utility settings and track historical unit rates.",
-    status: "active",
+    title: utility ? utility.name : 'Utility Details',
+    subtitle:
+      'Configure specific utility settings and track historical unit rates.',
+    status: 'active',
     loading: authLoading || loading,
-    listHref: "/utilities",
-    listLabel: "Utilities",
-    detailLabel: utility ? utility.name : "Detail"
+    listHref: '/utilities',
+    listLabel: 'Utilities',
+    detailLabel: utility ? utility.name : 'Detail',
   });
 
   return (
@@ -161,15 +171,20 @@ export default function UtilityDetailPage({ params }) {
         description="Are you sure you want to archive this utility category? This will hide the service from future registrations and prevent new meters from being assigned. All historical billing and consumption records will remain available for forensic audits, but active meters must be decommissioned first."
         confirmLabel="Confirm Archive"
         isDanger
-        isLoading={busyAction === "archive"}
+        isLoading={busyAction === 'archive'}
         onConfirm={handleArchiveUtility}
         onCancel={() => setShowArchiveModal(false)}
       />
 
       <div className="mx-auto w-full max-w-5xl space-y-8">
         {viewDenied && (
-          <Alert variant="warning" title="Access restricted" data-testid="access-denied-utilities">
-            You do not have permission to view utility profiles. Contact an administrator to adjust your access level.
+          <Alert
+            variant="warning"
+            title="Access restricted"
+            data-testid="access-denied-utilities"
+          >
+            You do not have permission to view utility profiles. Contact an
+            administrator to adjust your access level.
           </Alert>
         )}
 
@@ -187,11 +202,15 @@ export default function UtilityDetailPage({ params }) {
                 {/* Sidebar Summary (33%) */}
                 <div className="lg:col-span-4 space-y-6">
                   <Card className="border-stone-200 shadow-sm p-8 flex flex-col items-center text-center">
-                    <div className={`flex h-20 w-20 items-center justify-center rounded-2xl shadow-inner mb-6 ${isElectric ? 'bg-amber-50 text-amber-500' : (isWater ? 'bg-sky-50 text-sky-500' : 'bg-stone-50 text-stone-500')}`}>
+                    <div
+                      className={`flex h-20 w-20 items-center justify-center rounded-2xl shadow-inner mb-6 ${isElectric ? 'bg-amber-50 text-amber-500' : isWater ? 'bg-sky-50 text-sky-500' : 'bg-stone-50 text-stone-500'}`}
+                    >
                       <UtilityIcon size={40} strokeWidth={2.5} />
                     </div>
 
-                    <h2 className="text-2xl font-black text-stone-900 tracking-tight">{utility.name}</h2>
+                    <h2 className="text-2xl font-black text-stone-900 tracking-tight">
+                      {utility.name}
+                    </h2>
                     <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                       <ResourceIdCell type="utility" id={utility.utility_id} />
                       <StatusBadge size="sm">active</StatusBadge>
@@ -199,18 +218,32 @@ export default function UtilityDetailPage({ params }) {
 
                     <div className="mt-8 w-full border-t border-stone-100 pt-8 space-y-4">
                       <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold uppercase tracking-widest text-stone-400">Unit</span>
+                        <span className="font-bold uppercase tracking-widest text-stone-400">
+                          Unit
+                        </span>
                         <span className="font-black text-stone-900 border-b-2 border-teal-500/20">
-                          {utility.unit_of_measurement === "KWH" ? "kWh" : (utility.unit_of_measurement === "M3" ? "m³" : utility.unit_of_measurement)}
+                          {utility.unit_of_measurement === 'KWH'
+                            ? 'kWh'
+                            : utility.unit_of_measurement === 'M3'
+                              ? 'm³'
+                              : utility.unit_of_measurement}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold uppercase tracking-widest text-stone-400">Records</span>
-                        <span className="font-black text-stone-900">{rates.length} {rates.length === 1 ? 'rate' : 'rates'}</span>
+                        <span className="font-bold uppercase tracking-widest text-stone-400">
+                          Records
+                        </span>
+                        <span className="font-black text-stone-900">
+                          {rates.length} {rates.length === 1 ? 'rate' : 'rates'}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold uppercase tracking-widest text-stone-400">Meter Count</span>
-                        <span className="font-black text-stone-900">{meters.length} meters</span>
+                        <span className="font-bold uppercase tracking-widest text-stone-400">
+                          Meter Count
+                        </span>
+                        <span className="font-black text-stone-900">
+                          {meters.length} meters
+                        </span>
                       </div>
                     </div>
                   </Card>
@@ -219,7 +252,9 @@ export default function UtilityDetailPage({ params }) {
                   <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-6 flex items-start gap-4">
                     <ShieldCheck size={18} className="text-teal-600 mt-0.5" />
                     <p className="text-[11px] leading-relaxed text-stone-500 italic">
-                      Full audit trail enabled. All rate changes are timestamped and immutable once applied to a billing cycle. This utility is referenced by {meters.length} linked meters.
+                      Full audit trail enabled. All rate changes are timestamped
+                      and immutable once applied to a billing cycle. This
+                      utility is referenced by {meters.length} linked meters.
                     </p>
                   </div>
                 </div>
@@ -251,22 +286,31 @@ export default function UtilityDetailPage({ params }) {
                       <Table
                         embedded={true}
                         columns={[
-                          { key: "rate_id", label: "Rate ID", className: "pl-8" },
-                          { key: "base_rate", label: "Base Rate" },
-                          { key: "effective_from", label: "Effective from" },
-                          { key: "status", label: "Status", className: "text-right pr-8" },
+                          {
+                            key: 'rate_id',
+                            label: 'Rate ID',
+                            className: 'pl-8',
+                          },
+                          { key: 'base_rate', label: 'Base Rate' },
+                          { key: 'effective_from', label: 'Effective from' },
+                          {
+                            key: 'status',
+                            label: 'Status',
+                            className: 'text-right pr-8',
+                          },
                         ]}
                         rows={rates.map((rate) => {
-                          const isActive = utility.active_rate?.rate_id === rate.rate_id;
+                          const isActive =
+                            utility.active_rate?.rate_id === rate.rate_id;
                           return (
                             <tr key={rate.rate_id}>
                               <td className="pl-8 py-5">
                                 <ResourceIdCell type="rate" id={rate.rate_id} />
                               </td>
                               <td className="py-5">
-                                <CurrencyCell 
-                                  amount={rate.base_rate} 
-                                  suffix={`/ ${utility.unit_of_measurement === "KWH" ? "kWh" : (utility.unit_of_measurement === "M3" ? "m³" : utility.unit_of_measurement)}`} 
+                                <CurrencyCell
+                                  amount={rate.base_rate}
+                                  suffix={`/ ${utility.unit_of_measurement === 'KWH' ? 'kWh' : utility.unit_of_measurement === 'M3' ? 'm³' : utility.unit_of_measurement}`}
                                 />
                               </td>
                               <td className="py-5">
@@ -279,7 +323,9 @@ export default function UtilityDetailPage({ params }) {
                                 {isActive ? (
                                   <StatusBadge size="sm">active</StatusBadge>
                                 ) : (
-                                  <StatusBadge size="sm">historical</StatusBadge>
+                                  <StatusBadge size="sm">
+                                    historical
+                                  </StatusBadge>
                                 )}
                               </td>
                             </tr>
@@ -306,8 +352,16 @@ export default function UtilityDetailPage({ params }) {
                         embedded={true}
                         dense={true}
                         columns={[
-                          { key: "serial", label: "Serial Number", className: "pl-8" },
-                          { key: "status", label: "Status", className: "text-right pr-8" },
+                          {
+                            key: 'serial',
+                            label: 'Serial Number',
+                            className: 'pl-8',
+                          },
+                          {
+                            key: 'status',
+                            label: 'Status',
+                            className: 'text-right pr-8',
+                          },
                         ]}
                         rows={meters.map((meter) => (
                           <tr key={meter.meter_id}>
@@ -320,7 +374,9 @@ export default function UtilityDetailPage({ params }) {
                               </Link>
                             </td>
                             <td className="pr-8 py-4 text-right">
-                              <StatusBadge size="xs">{meter.status}</StatusBadge>
+                              <StatusBadge size="xs">
+                                {meter.status}
+                              </StatusBadge>
                             </td>
                           </tr>
                         ))}
@@ -339,7 +395,9 @@ export default function UtilityDetailPage({ params }) {
       <SideSheetOverlay
         isOpen={!!activeSideSheet}
         onClose={() => setActiveSideSheet(null)}
-        title={activeSideSheet === 'edit-utility' ? "Utility Details" : "Add Rate"}
+        title={
+          activeSideSheet === 'edit-utility' ? 'Utility Details' : 'Add Rate'
+        }
       >
         {activeSideSheet === 'add-rate' && (
           <UtilityRateQuickEditForm

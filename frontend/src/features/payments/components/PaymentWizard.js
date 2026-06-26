@@ -1,51 +1,63 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
-  CheckCircle, Building2, ShieldCheck, Receipt, CreditCard, Wallet
-} from "lucide-react";
+  CheckCircle,
+  Building2,
+  ShieldCheck,
+  Receipt,
+  CreditCard,
+  Wallet,
+} from 'lucide-react';
 
-import ConfirmPaymentModal from "./ConfirmPaymentModal";
+import ConfirmPaymentModal from './ConfirmPaymentModal';
 
-import { apiRequest, fetcher } from "@/lib/api";
-import useSWR from "swr";
-import { canManageBilling } from "@/lib/auth";
-import { flattenApiErrors } from "@/lib/errors";
-import { useAction } from "@/hooks/useAction";
-import { applyServerFieldErrors } from "@/lib/forms";
-import { formatPHP, formatDateRange } from "@/lib/formatters";
-import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
-import Alert from "@/components/ui/Alert";
-import Button from "@/components/ui/Button";
-import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
-import { Field, Input, Select, Textarea } from "@/components/ui/Fields";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import { FormSection } from "@/components/ui/FormSection";
-import { useToasts } from "@/context/ToastContext";
-import { useAuth } from "@/context/AuthContext";
+import { apiRequest, fetcher } from '@/lib/api';
+import useSWR from 'swr';
+import { canManageBilling } from '@/lib/auth';
+import { flattenApiErrors } from '@/lib/errors';
+import { useAction } from '@/hooks/useAction';
+import { applyServerFieldErrors } from '@/lib/forms';
+import { formatPHP, formatDateRange } from '@/lib/formatters';
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
+import Alert from '@/components/ui/Alert';
+import Button from '@/components/ui/Button';
+import CurrencyDisplay from '@/components/ui/CurrencyDisplay';
+import { Field, Input, Select, Textarea } from '@/components/ui/Fields';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import { FormSection } from '@/components/ui/FormSection';
+import { useToasts } from '@/context/ToastContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   METHOD_LABELS,
   PAYMENT_METHOD_KEYS,
   isBillingCollectibleStatus,
   isPaymentMethodCash,
-} from "@/lib/constants";
-import { normalizePaginatedList } from "@/lib/pagination";
+} from '@/lib/constants';
+import { normalizePaginatedList } from '@/lib/pagination';
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.2, ease: "easeOut" },
+  transition: { duration: 0.2, ease: 'easeOut' },
 };
 
-function BillingSummaryPanel({ selectedBilling, paymentAmount, isInitialSettlement, initialValues }) {
+function BillingSummaryPanel({
+  selectedBilling,
+  paymentAmount,
+  isInitialSettlement,
+  initialValues,
+}) {
   if (!selectedBilling && !isInitialSettlement) return null;
 
   let currentBalance = Number(selectedBilling?.balance || 0);
   if (isInitialSettlement) {
-    currentBalance = Number(initialValues?.rent_amount || 0) + Number(initialValues?.deposit_amount || 0);
+    currentBalance =
+      Number(initialValues?.rent_amount || 0) +
+      Number(initialValues?.deposit_amount || 0);
   }
 
   const amount = Number(paymentAmount) || 0;
@@ -59,26 +71,38 @@ function BillingSummaryPanel({ selectedBilling, paymentAmount, isInitialSettleme
     >
       <div className="flex items-center gap-2 mb-4">
         <Building2 size={16} className="text-teal-700" />
-        <p className="text-xs font-black uppercase tracking-widest text-teal-900">Account Summary</p>
+        <p className="text-xs font-black uppercase tracking-widest text-teal-900">
+          Account Summary
+        </p>
       </div>
 
       <div className="space-y-3">
         <div className="flex justify-between text-xs">
-          <span className="font-bold uppercase tracking-widest text-stone-400">Current Balance</span>
-          <CurrencyDisplay amount={currentBalance} className="font-bold text-stone-900" />
+          <span className="font-bold uppercase tracking-widest text-stone-400">
+            Current Balance
+          </span>
+          <CurrencyDisplay
+            amount={currentBalance}
+            className="font-bold text-stone-900"
+          />
         </div>
 
         {amount > 0 && (
           <div className="mt-4 pt-4 border-t border-teal-600/10">
             <div className="flex justify-between items-baseline">
-              <span className="text-[10px] font-black uppercase tracking-widest text-teal-700">Remaining Balance</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-teal-700">
+                Remaining Balance
+              </span>
               <CurrencyDisplay
                 amount={Math.abs(newBalance)}
-                className={`text-xl font-bold ${isOverpayment ? "text-red-700" : newBalance === 0 ? "text-stone-800" : newBalance < 0 ? "text-emerald-700" : "text-teal-700"}`}
+                className={`text-xl font-bold ${isOverpayment ? 'text-red-700' : newBalance === 0 ? 'text-stone-800' : newBalance < 0 ? 'text-emerald-700' : 'text-teal-700'}`}
               />
             </div>
             {isOverpayment && (
-              <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-red-600" role="alert">
+              <p
+                className="mt-2 text-[10px] font-bold uppercase tracking-wide text-red-600"
+                role="alert"
+              >
                 Warning: Payment exceeds current receivable.
               </p>
             )}
@@ -89,9 +113,11 @@ function BillingSummaryPanel({ selectedBilling, paymentAmount, isInitialSettleme
   );
 }
 
-export default function PaymentWizard({ initialValues = null, onSuccess,
+export default function PaymentWizard({
+  initialValues = null,
+  onSuccess,
   onCancel,
-  isInitialSettlement = false
+  isInitialSettlement = false,
 }) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
@@ -118,47 +144,56 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
     trigger,
     formState: { errors, isDirty },
   } = useForm({
-    mode: "onChange",
+    mode: 'onChange',
     defaultValues: {
-      billing_id: initialValues?.billing_id || "",
-      contract_id: initialValues?.contract_id || "",
+      billing_id: initialValues?.billing_id || '',
+      contract_id: initialValues?.contract_id || '',
       amount_paid: isInitialSettlement
-        ? (Number(initialValues?.rent_amount || 0) + Number(initialValues?.deposit_amount || 0))
-        : (initialValues?.amount_paid || ""),
+        ? Number(initialValues?.rent_amount || 0) +
+          Number(initialValues?.deposit_amount || 0)
+        : initialValues?.amount_paid || '',
       payment_date: new Date().toISOString().slice(0, 10),
-      payment_method: "cash",
-      reference_number: "",
-      remarks: "",
-      payment_category: initialValues?.payment_category || "billing",
+      payment_method: 'cash',
+      reference_number: '',
+      remarks: '',
+      payment_category: initialValues?.payment_category || 'billing',
     },
   });
 
-  const selectedBillingId = watch("billing_id");
-  const watchedAmount = watch("amount_paid");
-  const watchedMethod = watch("payment_method");
-  const watchedCategory = watch("payment_category");
+  const selectedBillingId = watch('billing_id');
+  const watchedAmount = watch('amount_paid');
+  const watchedMethod = watch('payment_method');
+  const watchedCategory = watch('payment_category');
 
-  const isDepositMode = watchedCategory === "deposit";
+  const isDepositMode = watchedCategory === 'deposit';
 
   useEffect(() => {
     if (isPaymentMethodCash(watchedMethod)) {
-      setValue("reference_number", "", { shouldDirty: false });
-      clearErrors("reference_number");
+      setValue('reference_number', '', { shouldDirty: false });
+      clearErrors('reference_number');
       setScannedDuplicateRef(null);
     } else {
-      void trigger("reference_number");
+      void trigger('reference_number');
     }
   }, [watchedMethod, setValue, clearErrors, trigger]);
 
   const checkReferenceUniqueness = async (value) => {
-    if (isPaymentMethodCash(watchedMethod) || !value || value.trim().length < 5) {
+    if (
+      isPaymentMethodCash(watchedMethod) ||
+      !value ||
+      value.trim().length < 5
+    ) {
       setScannedDuplicateRef(null);
       return;
     }
     try {
-      const results = await apiRequest(`/api/payments?q=${encodeURIComponent(value.trim())}`);
+      const results = await apiRequest(
+        `/api/payments?q=${encodeURIComponent(value.trim())}`
+      );
       const list = results?.data || results || [];
-      const match = list.find(p => p.reference_number?.trim() === value.trim() && !p.voided_at);
+      const match = list.find(
+        (p) => p.reference_number?.trim() === value.trim() && !p.voided_at
+      );
       setScannedDuplicateRef(match ? match.payment_id : null);
     } catch (e) {
       // Ignore
@@ -166,46 +201,62 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
   };
 
   const selectedBilling = useMemo(
-    () => billingOptions.find((b) => String(b.billing_id) === String(selectedBillingId)) || null,
-    [selectedBillingId, billingOptions],
+    () =>
+      billingOptions.find(
+        (b) => String(b.billing_id) === String(selectedBillingId)
+      ) || null,
+    [selectedBillingId, billingOptions]
   );
 
-  const lastSelectedIdRef = useRef("");
+  const lastSelectedIdRef = useRef('');
 
   useEffect(() => {
     // DO NOT auto-fill balance if we are in a combined settlement (Onboarding)
-    if (selectedBillingId && billingOptions.length > 0 && !isInitialSettlement) {
+    if (
+      selectedBillingId &&
+      billingOptions.length > 0 &&
+      !isInitialSettlement
+    ) {
       if (selectedBillingId !== lastSelectedIdRef.current) {
-        const found = billingOptions.find((b) => String(b.billing_id) === String(selectedBillingId));
+        const found = billingOptions.find(
+          (b) => String(b.billing_id) === String(selectedBillingId)
+        );
         if (found && found.balance > 0) {
-          setValue("amount_paid", found.balance, { shouldDirty: true });
+          setValue('amount_paid', found.balance, { shouldDirty: true });
         }
         lastSelectedIdRef.current = selectedBillingId;
       }
     } else if (!selectedBillingId) {
-      lastSelectedIdRef.current = "";
+      lastSelectedIdRef.current = '';
     }
   }, [selectedBillingId, billingOptions, setValue, isInitialSettlement]);
 
   const { data: billingData, error: billingError } = useSWR(
-    currentUser && canManageBilling(currentUser) ? "/api/billing?per_page=100" : null,
+    currentUser && canManageBilling(currentUser)
+      ? '/api/billing?per_page=100'
+      : null,
     fetcher,
     { fallbackData: { data: [], meta: { total: 0 } } }
   );
 
   const loading = !billingData && !billingError;
 
-  const contractId = watch("contract_id");
+  const contractId = watch('contract_id');
   const { data: contractData } = useSWR(
-    (isRefundMode || isDepositMode) && Number(contractId) > 0 ? `/api/contracts/${contractId}` : null,
+    (isRefundMode || isDepositMode) && Number(contractId) > 0
+      ? `/api/contracts/${contractId}`
+      : null,
     fetcher
   );
 
   const { data: pendingContractsData } = useSWR(
-    isDepositMode ? "/api/contracts?status=pending_payment&per_page=100" : null,
+    isDepositMode ? '/api/contracts?status=pending_payment&per_page=100' : null,
     fetcher
   );
-  const pendingContracts = useMemo(() => normalizePaginatedList(pendingContractsData).rows, [pendingContractsData]);
+  const pendingContracts = useMemo(
+    () => normalizePaginatedList(pendingContractsData).rows,
+    [pendingContractsData]
+  );
 
   const residentName = useMemo(() => {
     if ((isRefundMode || isDepositMode) && contractData) {
@@ -213,17 +264,29 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
       if (t) return `${t.last_name}, ${t.first_name}`.trim();
     }
     if (isDepositMode && contractId) {
-      const selected = pendingContracts.find(c => String(c.contract_id) === String(contractId));
+      const selected = pendingContracts.find(
+        (c) => String(c.contract_id) === String(contractId)
+      );
       if (selected && selected.tenant) {
         return `${selected.tenant.last_name}, ${selected.tenant.first_name}`.trim();
       }
     }
-    return selectedBilling?.tenant_name || "";
-  }, [isRefundMode, isDepositMode, contractData, selectedBilling, pendingContracts, contractId]);
+    return selectedBilling?.tenant_name || '';
+  }, [
+    isRefundMode,
+    isDepositMode,
+    contractData,
+    selectedBilling,
+    pendingContracts,
+    contractId,
+  ]);
 
   useEffect(() => {
     if (billingError) {
-      showToast(flattenApiErrors(billingError) || "Failed to load billing records.", "error");
+      showToast(
+        flattenApiErrors(billingError) || 'Failed to load billing records.',
+        'error'
+      );
     }
   }, [billingError, showToast]);
 
@@ -234,36 +297,58 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
         .map((row) => {
           const amountDue = Number(row.amount_due || row.total_amount || 0);
           const amountPaid = Number(row.amount_paid || row.total_paid || 0);
-          const balance = Number(row.balance ?? (amountDue - amountPaid));
+          const balance = Number(row.balance ?? amountDue - amountPaid);
           const tenant = row?.contract?.tenant;
           return {
             billing_id: row.billing_id,
             contract_id: row.contract_id,
             tenant_id: tenant?.tenant_id,
             status: row.status,
-            tenant_name: tenant ? `${tenant.last_name || ""}, ${tenant.first_name || ""}`.trim() : "",
-            period: formatDateRange(row.billing_period_from, row.billing_period_to),
+            tenant_name: tenant
+              ? `${tenant.last_name || ''}, ${tenant.first_name || ''}`.trim()
+              : '',
+            period: formatDateRange(
+              row.billing_period_from,
+              row.billing_period_to
+            ),
             balance,
             total_amount: amountDue,
           };
         })
-        .filter((item) => item.balance > 0 || isBillingCollectibleStatus(item.status));
+        .filter(
+          (item) => item.balance > 0 || isBillingCollectibleStatus(item.status)
+        );
       setBillingOptions(options);
     }
   }, [billingData]);
 
   // 1. Reactive Sync for Onboarding Totals (Ensures 9,000 is set even if props load late)
   useEffect(() => {
-    if (isInitialSettlement && initialValues?.rent_amount && initialValues?.deposit_amount) {
-      const total = Number(initialValues.rent_amount) + Number(initialValues.deposit_amount);
-      setValue("amount_paid", total, { shouldValidate: true });
-      
+    if (
+      isInitialSettlement &&
+      initialValues?.rent_amount &&
+      initialValues?.deposit_amount
+    ) {
+      const total =
+        Number(initialValues.rent_amount) +
+        Number(initialValues.deposit_amount);
+      setValue('amount_paid', total, { shouldValidate: true });
+
       // Reactive Fallback: If billing_id was initially null but now exists in props, sync it
-      if (!watch("billing_id") && initialValues.billing_id) {
-        setValue("billing_id", initialValues.billing_id, { shouldValidate: true });
+      if (!watch('billing_id') && initialValues.billing_id) {
+        setValue('billing_id', initialValues.billing_id, {
+          shouldValidate: true,
+        });
       }
     }
-  }, [isInitialSettlement, initialValues?.rent_amount, initialValues?.deposit_amount, initialValues?.billing_id, setValue, watch]);
+  }, [
+    isInitialSettlement,
+    initialValues?.rent_amount,
+    initialValues?.deposit_amount,
+    initialValues?.billing_id,
+    setValue,
+    watch,
+  ]);
 
   // 2. Deep-linking and initialization
   useEffect(() => {
@@ -271,11 +356,16 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
 
     // Handle Onboarding / Initial Settlement Mode
     if (isInitialSettlement && initialValues) {
-      const total = Number(initialValues.rent_amount || 0) + Number(initialValues.deposit_amount || 0);
-      setValue("amount_paid", total);
-      if (initialValues.payment_category) setValue("payment_category", initialValues.payment_category);
-      if (initialValues.contract_id) setValue("contract_id", initialValues.contract_id);
-      if (initialValues.billing_id) setValue("billing_id", initialValues.billing_id);
+      const total =
+        Number(initialValues.rent_amount || 0) +
+        Number(initialValues.deposit_amount || 0);
+      setValue('amount_paid', total);
+      if (initialValues.payment_category)
+        setValue('payment_category', initialValues.payment_category);
+      if (initialValues.contract_id)
+        setValue('contract_id', initialValues.contract_id);
+      if (initialValues.billing_id)
+        setValue('billing_id', initialValues.billing_id);
       deepLinkApplied.current = true;
       return;
     }
@@ -283,72 +373,90 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
     // Handle Standard Deep-linking (Search Params or Props)
     if (billingOptions.length > 0 || initialValues) {
       if (initialValues) {
-        if (initialValues.payment_category) setValue("payment_category", initialValues.payment_category);
+        if (initialValues.payment_category)
+          setValue('payment_category', initialValues.payment_category);
 
         if (!isInitialSettlement && initialValues.amount_paid) {
-          setValue("amount_paid", initialValues.amount_paid);
+          setValue('amount_paid', initialValues.amount_paid);
         }
 
-        if (initialValues.contract_id) setValue("contract_id", initialValues.contract_id);
-        if (initialValues.billing_id) setValue("billing_id", initialValues.billing_id);
-        if (initialValues.payment_category === "refund") setIsRefundMode(true);
-        else if (initialValues.payment_category === "deposit") setIsRefundMode(false);
+        if (initialValues.contract_id)
+          setValue('contract_id', initialValues.contract_id);
+        if (initialValues.billing_id)
+          setValue('billing_id', initialValues.billing_id);
+        if (initialValues.payment_category === 'refund') setIsRefundMode(true);
+        else if (initialValues.payment_category === 'deposit')
+          setIsRefundMode(false);
       } else {
-        const bId = searchParams.get("billing_id");
-        const cId = searchParams.get("contract_id");
-        const category = searchParams.get("category");
-        const amount = searchParams.get("amount");
+        const bId = searchParams.get('billing_id');
+        const cId = searchParams.get('contract_id');
+        const category = searchParams.get('category');
+        const amount = searchParams.get('amount');
 
         if (category) {
-          setIsRefundMode(category === "refund");
-          setValue("payment_category", category);
-          if (amount) setValue("amount_paid", amount);
-          if (cId) setValue("contract_id", cId);
+          setIsRefundMode(category === 'refund');
+          setValue('payment_category', category);
+          if (amount) setValue('amount_paid', amount);
+          if (cId) setValue('contract_id', cId);
         }
-        if (bId) setValue("billing_id", bId);
-        else if (cId && category !== "refund") {
-          const matching = billingOptions.find((b) => String(b.contract_id) === String(cId));
-          if (matching) setValue("billing_id", String(matching.billing_id));
+        if (bId) setValue('billing_id', bId);
+        else if (cId && category !== 'refund') {
+          const matching = billingOptions.find(
+            (b) => String(b.contract_id) === String(cId)
+          );
+          if (matching) setValue('billing_id', String(matching.billing_id));
         }
       }
       deepLinkApplied.current = true;
     }
-  }, [billingOptions, setValue, searchParams, initialValues, isInitialSettlement]);
+  }, [
+    billingOptions,
+    setValue,
+    searchParams,
+    initialValues,
+    isInitialSettlement,
+  ]);
 
-  const { execute: submitStandardPayment, isPending: isStandardSubmitting } = useAction("/api/payments", {
-    method: "POST",
-    successMessage: "Payment recorded successfully.",
-    onSuccess: (response) => {
-      setShowConfirmModal(false);
-      if (onSuccess) {
-        onSuccess(response);
-      } else {
-        const updatedBillingId = response?.billing?.billing_id || response?.data?.billing?.billing_id;
-        router.push(updatedBillingId ? `/billing/${updatedBillingId}` : '/payments');
-      }
-    },
-    onError: (err) => {
-      setShowConfirmModal(false);
-      applyServerFieldErrors(err, setError, { showToast });
-    }
-  });
+  const { execute: submitStandardPayment, isPending: isStandardSubmitting } =
+    useAction('/api/payments', {
+      method: 'POST',
+      successMessage: 'Payment recorded successfully.',
+      onSuccess: (response) => {
+        setShowConfirmModal(false);
+        if (onSuccess) {
+          onSuccess(response);
+        } else {
+          const updatedBillingId =
+            response?.billing?.billing_id ||
+            response?.data?.billing?.billing_id;
+          router.push(
+            updatedBillingId ? `/billing/${updatedBillingId}` : '/payments'
+          );
+        }
+      },
+      onError: (err) => {
+        setShowConfirmModal(false);
+        applyServerFieldErrors(err, setError, { showToast });
+      },
+    });
 
-  const { execute: submitCompositePayment, isPending: isCompositeSubmitting } = useAction("/api/payments/composite", {
-    method: "POST",
-    successMessage: "Initial settlement recorded successfully.",
-    onSuccess: (response) => {
-      setShowConfirmModal(false);
-      if (onSuccess) {
-        onSuccess(response);
-      } else {
-        router.push(`/contracts/${initialValues?.contract_id}`);
-      }
-    },
-    onError: (err) => {
-      setShowConfirmModal(false);
-      applyServerFieldErrors(err, setError, { showToast });
-    }
-  });
+  const { execute: submitCompositePayment, isPending: isCompositeSubmitting } =
+    useAction('/api/payments/composite', {
+      method: 'POST',
+      successMessage: 'Initial settlement recorded successfully.',
+      onSuccess: (response) => {
+        setShowConfirmModal(false);
+        if (onSuccess) {
+          onSuccess(response);
+        } else {
+          router.push(`/contracts/${initialValues?.contract_id}`);
+        }
+      },
+      onError: (err) => {
+        setShowConfirmModal(false);
+        applyServerFieldErrors(err, setError, { showToast });
+      },
+    });
 
   const isSubmitting = isStandardSubmitting || isCompositeSubmitting;
 
@@ -359,8 +467,9 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
 
   const handleConfirmedSubmit = async () => {
     if (!pendingValues || isSubmitting) return;
-    const cat = pendingValues.payment_category || (isRefundMode ? "refund" : "billing");
-    const isStandalone = cat === "refund" || cat === "deposit";
+    const cat =
+      pendingValues.payment_category || (isRefundMode ? 'refund' : 'billing');
+    const isStandalone = cat === 'refund' || cat === 'deposit';
 
     try {
       if (isInitialSettlement) {
@@ -371,8 +480,11 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
           deposit_amount: Number(initialValues.deposit_amount || 0),
           payment_date: pendingValues.payment_date,
           payment_method: pendingValues.payment_method,
-          reference_number: isPaymentMethodCash(pendingValues.payment_method) ? null : pendingValues.reference_number || null,
-          remarks: (pendingValues.remarks || '') + " (Full Onboarding Settlement)",
+          reference_number: isPaymentMethodCash(pendingValues.payment_method)
+            ? null
+            : pendingValues.reference_number || null,
+          remarks:
+            (pendingValues.remarks || '') + ' (Full Onboarding Settlement)',
         });
       } else {
         await submitStandardPayment({
@@ -382,11 +494,13 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
           payment_date: pendingValues.payment_date,
           payment_method: pendingValues.payment_method,
           payment_category: cat,
-          reference_number: isPaymentMethodCash(pendingValues.payment_method) ? null : pendingValues.reference_number || null,
+          reference_number: isPaymentMethodCash(pendingValues.payment_method)
+            ? null
+            : pendingValues.reference_number || null,
           remarks: pendingValues.remarks || null,
         });
       }
-    } catch (error) { }
+    } catch (error) {}
   };
 
   useUnsavedChangesWarning(isDirty && !isSubmitting);
@@ -395,36 +509,52 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
 
   return (
     <div className="max-w-5xl mx-auto">
-      {showConfirmModal && pendingValues && (selectedBilling || isRefundMode || isDepositMode || isInitialSettlement) && (
-        <ConfirmPaymentModal
-          isInitialSettlement={isInitialSettlement}
-          selectedBilling={selectedBilling}
-          residentName={residentName}
-          values={pendingValues}
-          onConfirm={handleConfirmedSubmit}
-          onCancel={() => setShowConfirmModal(false)}
-          loading={isSubmitting}
-          isRefundMode={isRefundMode}
-          isDepositMode={isDepositMode}
-        />
-      )}
+      {showConfirmModal &&
+        pendingValues &&
+        (selectedBilling ||
+          isRefundMode ||
+          isDepositMode ||
+          isInitialSettlement) && (
+          <ConfirmPaymentModal
+            isInitialSettlement={isInitialSettlement}
+            selectedBilling={selectedBilling}
+            residentName={residentName}
+            values={pendingValues}
+            onConfirm={handleConfirmedSubmit}
+            onCancel={() => setShowConfirmModal(false)}
+            loading={isSubmitting}
+            isRefundMode={isRefundMode}
+            isDepositMode={isDepositMode}
+          />
+        )}
 
       {billingOptions.length === 0 && !isInitialSettlement && (
-        <Alert variant="info" title="No Pending Receivables" className="mb-6 hs-glass-effect">
-          There are currently no active bills or pending balances across the ledger.
+        <Alert
+          variant="info"
+          title="No Pending Receivables"
+          className="mb-6 hs-glass-effect"
+        >
+          There are currently no active bills or pending balances across the
+          ledger.
         </Alert>
       )}
 
       <motion.div
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0.2 } : pageVariants.transition}
+        transition={
+          shouldReduceMotion ? { duration: 0.2 } : pageVariants.transition
+        }
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid gap-6">
             <div className="space-y-6">
               <FormSection
-                title={isInitialSettlement ? "Onboarding Settlement" : "Transaction Context"}
+                title={
+                  isInitialSettlement
+                    ? 'Onboarding Settlement'
+                    : 'Transaction Context'
+                }
                 icon={ShieldCheck}
                 bodyClassName="p-8"
                 className="hs-glass-effect"
@@ -435,33 +565,49 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
                       <button
                         type="button"
                         onClick={() => {
-                          setValue("payment_category", "billing");
+                          setValue('payment_category', 'billing');
                           setIsRefundMode(false);
                         }}
-                        className={`flex flex-col items-center text-center gap-3 p-6 rounded-2xl border-2 transition-all ${watchedCategory === "billing" ? "border-teal-600 bg-teal-50/30" : "border-stone-100 bg-white hover:border-stone-200"}`}
+                        className={`flex flex-col items-center text-center gap-3 p-6 rounded-2xl border-2 transition-all ${watchedCategory === 'billing' ? 'border-teal-600 bg-teal-50/30' : 'border-stone-100 bg-white hover:border-stone-200'}`}
                       >
-                        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${watchedCategory === "billing" ? "bg-teal-600 text-white" : "bg-stone-50 text-stone-400"}`}>
+                        <div
+                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${watchedCategory === 'billing' ? 'bg-teal-600 text-white' : 'bg-stone-50 text-stone-400'}`}
+                        >
                           <Receipt size={24} />
                         </div>
                         <div className="overflow-hidden">
-                          <span className={`block text-[10px] font-black uppercase tracking-[0.2em] leading-tight ${watchedCategory === "billing" ? "text-teal-900" : "text-stone-600"}`}>Rent / Utilities</span>
-                          <span className="block text-[9px] text-stone-500 font-medium mt-2">Monthly collection</span>
+                          <span
+                            className={`block text-[10px] font-black uppercase tracking-[0.2em] leading-tight ${watchedCategory === 'billing' ? 'text-teal-900' : 'text-stone-600'}`}
+                          >
+                            Rent / Utilities
+                          </span>
+                          <span className="block text-[9px] text-stone-500 font-medium mt-2">
+                            Monthly collection
+                          </span>
                         </div>
                       </button>
                       <button
                         type="button"
                         onClick={() => {
-                          setValue("payment_category", "deposit");
+                          setValue('payment_category', 'deposit');
                           setIsRefundMode(false);
                         }}
-                        className={`flex flex-col items-center text-center gap-3 p-6 rounded-2xl border-2 transition-all ${watchedCategory === "deposit" ? "border-amber-600 bg-amber-50/30" : "border-stone-100 bg-white hover:border-stone-200"}`}
+                        className={`flex flex-col items-center text-center gap-3 p-6 rounded-2xl border-2 transition-all ${watchedCategory === 'deposit' ? 'border-amber-600 bg-amber-50/30' : 'border-stone-100 bg-white hover:border-stone-200'}`}
                       >
-                        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${watchedCategory === "deposit" ? "bg-amber-600 text-white" : "bg-stone-50 text-stone-400"}`}>
+                        <div
+                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${watchedCategory === 'deposit' ? 'bg-amber-600 text-white' : 'bg-stone-50 text-stone-400'}`}
+                        >
                           <ShieldCheck size={24} />
                         </div>
                         <div className="overflow-hidden">
-                          <span className={`block text-[10px] font-black uppercase tracking-[0.2em] leading-tight ${watchedCategory === "deposit" ? "text-amber-900" : "text-stone-600"}`}>Security Deposit</span>
-                          <span className="block text-[9px] text-stone-500 font-medium mt-2">Lease collateral</span>
+                          <span
+                            className={`block text-[10px] font-black uppercase tracking-[0.2em] leading-tight ${watchedCategory === 'deposit' ? 'text-amber-900' : 'text-stone-600'}`}
+                          >
+                            Security Deposit
+                          </span>
+                          <span className="block text-[9px] text-stone-500 font-medium mt-2">
+                            Lease collateral
+                          </span>
                         </div>
                       </button>
                     </div>
@@ -471,57 +617,122 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-600 text-white mb-4 shadow-lg shadow-teal-900/10">
                       <Wallet size={28} />
                     </div>
-                    <span className="text-xs font-black uppercase tracking-[0.2em] text-teal-900 mb-1">Full Onboarding Settlement</span>
-                    <span className="text-[10px] text-teal-700 font-medium italic">Combining Security Deposit & First Month Rent</span>
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-teal-900 mb-1">
+                      Full Onboarding Settlement
+                    </span>
+                    <span className="text-[10px] text-teal-700 font-medium italic">
+                      Combining Security Deposit & First Month Rent
+                    </span>
                   </div>
                 )}
               </FormSection>
 
               <FormSection
-                title={isRefundMode ? "Refund Authorization" : isDepositMode ? "Deposit Registration" : "Payment Information"}
+                title={
+                  isRefundMode
+                    ? 'Refund Authorization'
+                    : isDepositMode
+                      ? 'Deposit Registration'
+                      : 'Payment Information'
+                }
                 icon={isRefundMode || isDepositMode ? ShieldCheck : Receipt}
                 bodyClassName="space-y-6 p-8"
                 className="hs-glass-effect"
               >
-                <Field label={isInitialSettlement ? "Onboarding Target" : isRefundMode || isDepositMode ? "Target Contract" : "Target Bill"} required error={errors.billing_id?.message || errors.contract_id?.message}>
+                <Field
+                  label={
+                    isInitialSettlement
+                      ? 'Onboarding Target'
+                      : isRefundMode || isDepositMode
+                        ? 'Target Contract'
+                        : 'Target Bill'
+                  }
+                  required
+                  error={
+                    errors.billing_id?.message || errors.contract_id?.message
+                  }
+                >
                   {/* Standard Registration Layer (Hidden from UI, but active for validation) */}
                   <div className="sr-only" aria-hidden="true">
-                    <Select {...register("billing_id", { required: isInitialSettlement ? "Billing target missing." : false })} defaultValue={initialValues?.billing_id || ""}>
-                      <option value={initialValues?.billing_id || ""}>{initialValues?.billing_id}</option>
+                    <Select
+                      {...register('billing_id', {
+                        required: isInitialSettlement
+                          ? 'Billing target missing.'
+                          : false,
+                      })}
+                      defaultValue={initialValues?.billing_id || ''}
+                    >
+                      <option value={initialValues?.billing_id || ''}>
+                        {initialValues?.billing_id}
+                      </option>
                     </Select>
-                    <input {...register("contract_id", { required: "Contract target missing." })} defaultValue={initialValues?.contract_id || ""} />
+                    <input
+                      {...register('contract_id', {
+                        required: 'Contract target missing.',
+                      })}
+                      defaultValue={initialValues?.contract_id || ''}
+                    />
                   </div>
 
                   {isInitialSettlement || isRefundMode || isDepositMode ? (
-                    <div className={`rounded-xl border p-4 flex flex-col gap-3 ${isInitialSettlement ? 'border-teal-200 bg-teal-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
+                    <div
+                      className={`rounded-xl border p-4 flex flex-col gap-3 ${isInitialSettlement ? 'border-teal-200 bg-teal-50/50' : 'border-amber-200 bg-amber-50/50'}`}
+                    >
                       <div className="flex items-center justify-between">
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${isInitialSettlement ? 'text-teal-600' : 'text-amber-600'}`}>
-                          {isInitialSettlement ? 'Lease Agreement' : isDepositMode ? 'Deposit Target' : 'Refund Target'}
+                        <span
+                          className={`text-[10px] font-black uppercase tracking-widest ${isInitialSettlement ? 'text-teal-600' : 'text-amber-600'}`}
+                        >
+                          {isInitialSettlement
+                            ? 'Lease Agreement'
+                            : isDepositMode
+                              ? 'Deposit Target'
+                              : 'Refund Target'}
                         </span>
-                        <ShieldCheck className={isInitialSettlement ? 'text-teal-600' : 'text-amber-600'} size={20} />
+                        <ShieldCheck
+                          className={
+                            isInitialSettlement
+                              ? 'text-teal-600'
+                              : 'text-amber-600'
+                          }
+                          size={20}
+                        />
                       </div>
 
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-stone-900 leading-tight">
-                          {residentName || "Agreement Record"}
+                          {residentName || 'Agreement Record'}
                         </span>
                         <span className="text-[10px] font-mono font-bold text-stone-400 mt-1 uppercase tracking-tighter">
-                          {isInitialSettlement ? `Full Settlement for #CONTRACT-${String(initialValues?.contract_id || 0).padStart(6, '0')}` : `#CONTRACT-${String(initialValues?.contract_id || 0).padStart(6, '0')}`}
+                          {isInitialSettlement
+                            ? `Full Settlement for #CONTRACT-${String(initialValues?.contract_id || 0).padStart(6, '0')}`
+                            : `#CONTRACT-${String(initialValues?.contract_id || 0).padStart(6, '0')}`}
                         </span>
                       </div>
                     </div>
                   ) : (
-                    <Select hasError={Boolean(errors.billing_id)} className="!h-12 border-stone-200 font-bold" {...register("billing_id", { required: "Select an active ledger item." })}>
+                    <Select
+                      hasError={Boolean(errors.billing_id)}
+                      className="!h-12 border-stone-200 font-bold"
+                      {...register('billing_id', {
+                        required: 'Select an active ledger item.',
+                      })}
+                    >
                       <option value="">Select ledger record</option>
                       {billingOptions.map((bill) => (
                         <option key={bill.billing_id} value={bill.billing_id}>
-                          {bill.tenant_name} · #BILL-{String(bill.billing_id).padStart(6, '0')} · [{formatPHP(bill.balance)}]
+                          {bill.tenant_name} · #BILL-
+                          {String(bill.billing_id).padStart(6, '0')} · [
+                          {formatPHP(bill.balance)}]
                         </option>
                       ))}
                     </Select>
                   )}
                 </Field>
-                <Field label="Settlement Total" required error={errors.amount_paid?.message}>
+                <Field
+                  label="Settlement Total"
+                  required
+                  error={errors.amount_paid?.message}
+                >
                   <Input
                     type="number"
                     step="0.01"
@@ -529,24 +740,52 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
                     readOnly={isInitialSettlement}
                     hasError={Boolean(errors.amount_paid)}
                     className={`!h-12 border-stone-200 font-mono text-lg font-black tabular-nums ${isRefundMode || isDepositMode ? 'text-amber-700' : isInitialSettlement ? 'text-stone-900 bg-stone-50' : 'text-teal-700'}`}
-                    {...register("amount_paid", { required: "Required.", min: { value: 0.01, message: "Must be positive." } })}
+                    {...register('amount_paid', {
+                      required: 'Required.',
+                      min: { value: 0.01, message: 'Must be positive.' },
+                    })}
                   />
                   {isInitialSettlement && (
                     <p className="mt-2 text-[10px] font-black text-teal-600 uppercase tracking-[0.15em]">
-                      {formatPHP(initialValues.rent_amount)} Rent + {formatPHP(initialValues.deposit_amount)} Deposit
+                      {formatPHP(initialValues.rent_amount)} Rent +{' '}
+                      {formatPHP(initialValues.deposit_amount)} Deposit
                     </p>
                   )}
                 </Field>
               </FormSection>
 
-              <FormSection title="Transaction Details" icon={CreditCard} bodyClassName="space-y-6 p-8" className="hs-glass-effect">
+              <FormSection
+                title="Transaction Details"
+                icon={CreditCard}
+                bodyClassName="space-y-6 p-8"
+                className="hs-glass-effect"
+              >
                 <div className="grid gap-6 sm:grid-cols-2">
-                  <Field label="Payment Date" required error={errors.payment_date?.message}>
-                    <Input type="date" className="!h-12 border-stone-200 font-bold" {...register("payment_date", { required: "Required." })} />
+                  <Field
+                    label="Payment Date"
+                    required
+                    error={errors.payment_date?.message}
+                  >
+                    <Input
+                      type="date"
+                      className="!h-12 border-stone-200 font-bold"
+                      {...register('payment_date', { required: 'Required.' })}
+                    />
                   </Field>
-                  <Field label="Method" required error={errors.payment_method?.message}>
-                    <Select className="!h-12 border-stone-200 font-bold" {...register("payment_method", { required: "Required." })}>
-                      {PAYMENT_METHOD_KEYS.map((key) => <option key={key} value={key}>{METHOD_LABELS[key]}</option>)}
+                  <Field
+                    label="Method"
+                    required
+                    error={errors.payment_method?.message}
+                  >
+                    <Select
+                      className="!h-12 border-stone-200 font-bold"
+                      {...register('payment_method', { required: 'Required.' })}
+                    >
+                      {PAYMENT_METHOD_KEYS.map((key) => (
+                        <option key={key} value={key}>
+                          {METHOD_LABELS[key]}
+                        </option>
+                      ))}
                     </Select>
                   </Field>
                 </div>
@@ -554,28 +793,44 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
                   label="Reference No."
                   required={!isPaymentMethodCash(watchedMethod)}
                   error={errors.reference_number?.message}
-                  warning={scannedDuplicateRef ? "This reference number has already been recorded in a previous transaction." : null}
+                  warning={
+                    scannedDuplicateRef
+                      ? 'This reference number has already been recorded in a previous transaction.'
+                      : null
+                  }
                 >
                   <Input
                     type="text"
                     placeholder={
                       isPaymentMethodCash(watchedMethod)
-                        ? "Not required for cash"
-                        : watchedMethod === "gcash"
-                          ? "GCash Reference No. (e.g. 102938475)"
-                          : watchedMethod === "bank_transfer"
-                            ? "Bank Reference / Confirmation #"
-                            : "Enter transaction reference number"
+                        ? 'Not required for cash'
+                        : watchedMethod === 'gcash'
+                          ? 'GCash Reference No. (e.g. 102938475)'
+                          : watchedMethod === 'bank_transfer'
+                            ? 'Bank Reference / Confirmation #'
+                            : 'Enter transaction reference number'
                     }
                     disabled={isPaymentMethodCash(watchedMethod)}
                     className="!h-12 border-stone-200 font-mono font-bold"
-                    {...register("reference_number", { validate: (v) => isPaymentMethodCash(watchedMethod) || !!v || "Required." })}
+                    {...register('reference_number', {
+                      validate: (v) =>
+                        isPaymentMethodCash(watchedMethod) ||
+                        !!v ||
+                        'Required.',
+                    })}
                     onBlur={(e) => checkReferenceUniqueness(e.target.value)}
-                    hasError={Boolean(errors.reference_number || scannedDuplicateRef)}
+                    hasError={Boolean(
+                      errors.reference_number || scannedDuplicateRef
+                    )}
                   />
                 </Field>
                 <Field label="Notes" error={errors.remarks?.message}>
-                  <Textarea rows={3} className="border-stone-200" placeholder="Optional remarks..." {...register("remarks")} />
+                  <Textarea
+                    rows={3}
+                    className="border-stone-200"
+                    placeholder="Optional remarks..."
+                    {...register('remarks')}
+                  />
                 </Field>
               </FormSection>
             </div>
@@ -591,27 +846,38 @@ export default function PaymentWizard({ initialValues = null, onSuccess,
               <div className="rounded-2xl border border-stone-100 bg-stone-50 p-6 space-y-3">
                 <div className="flex items-center gap-3 text-stone-400">
                   <ShieldCheck size={18} />
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">Policy Verification</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">
+                    Policy Verification
+                  </p>
                 </div>
                 <p className="text-xs font-medium text-stone-500 leading-relaxed">
-                  Collections are final and legally binding once recorded. Audit trails are maintained for all ledger mutations.
+                  Collections are final and legally binding once recorded. Audit
+                  trails are maintained for all ledger mutations.
                 </p>
               </div>
 
               <div className="flex flex-col gap-3 pt-6">
                 <Button
                   type="submit"
-                  variant={isRefundMode || isDepositMode ? "primary" : "primary"}
+                  variant={
+                    isRefundMode || isDepositMode ? 'primary' : 'primary'
+                  }
                   loading={isSubmitting}
                   disabled={isSubmitting || !!scannedDuplicateRef}
                   className={`w-full !h-12 rounded-xl text-xs font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all ${isRefundMode || isDepositMode ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/10' : 'shadow-teal-900/10'}`}
                 >
-                  {isRefundMode ? "Confirm Refund Disbursement" : isDepositMode ? "Confirm Deposit Receipt" : "Record Payment"}
+                  {isRefundMode
+                    ? 'Confirm Refund Disbursement'
+                    : isDepositMode
+                      ? 'Confirm Deposit Receipt'
+                      : 'Record Payment'}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => onCancel ? onCancel() : router.push("/payments")}
+                  onClick={() =>
+                    onCancel ? onCancel() : router.push('/payments')
+                  }
                   className="w-full !h-12 rounded-xl text-xs font-black uppercase tracking-widest text-stone-400 hover:text-stone-600 transition-all active:scale-95"
                 >
                   Cancel Transaction

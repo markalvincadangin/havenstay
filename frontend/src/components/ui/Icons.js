@@ -16,7 +16,7 @@ import {
   TrendingUp,
   PlusCircle,
   ShieldCheck,
-  Zap
+  Zap,
 } from 'lucide-react';
 
 const withDefaultProps = (IconComponent) => {

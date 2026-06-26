@@ -93,7 +93,7 @@ class UtilityApportionmentService
             ];
         }
 
-        // CCR-011: Time-Weighted Apportionment (Fair Proration)
+        // Time-Weighted Apportionment (Fair Proration)
         // Instead of equal split, we use occupancy days in the period.
         $weights = self::calculateOccupancyWeights(
             $activeContracts,
@@ -108,7 +108,7 @@ class UtilityApportionmentService
         foreach ($activeContracts as $index => $contract) {
             $weight = $weights[$contract->contract_id] ?? 0;
 
-            // CCR-013: Detect existing billing to prevent wizard collision
+            // Detect existing billing to prevent wizard collision
             $alreadyBilled = Billing::where('contract_id', $contract->contract_id)
                 ->where(function ($q) use ($data) {
                     $q->whereDate('billing_period_from', '<=', $data['billing_period_end'])

@@ -1,0 +1,15 @@
+# Docker Compose Override — Local Development
+#
+# Copy to docker-compose.override.yml (gitignored).
+# Adds bind mounts for hot-reloading and WSL2 polling workarounds.
+
+services:
+  backend:
+    volumes:
+      - ./backend:/var/www/html
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next

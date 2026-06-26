@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import React from "react";
-import ResourceIdCell from "./ResourceIdCell";
-import { StatusBadge } from "./StatusBadge";
-import Breadcrumbs from "./Breadcrumbs";
+import React from 'react';
+import ResourceIdCell from './ResourceIdCell';
+import { StatusBadge } from './StatusBadge';
+import Breadcrumbs from './Breadcrumbs';
 
 /**
  * DetailHeader — A premium, standardized header for entity detail pages ([id]).
@@ -16,27 +16,22 @@ export default function DetailHeader({
   subtitle,
   status,
   loading = false,
-  loadingTitle = "Synchronizing data...",
-  loadingSubtitle = "Connecting to the forensic registry...",
+  loadingTitle = 'Synchronizing data...',
+  loadingSubtitle = 'Connecting to the forensic registry...',
   listHref,
   listLabel,
-  detailLabel = "Detail Profile",
+  detailLabel = 'Detail Profile',
 }) {
   // 1. Loading State Implementation
   if (loading) {
     return {
       title: (
-        <span className="animate-pulse text-stone-300">
-          {loadingTitle}
-        </span>
+        <span className="animate-pulse text-stone-300">{loadingTitle}</span>
       ),
       subtitle: loadingSubtitle,
       breadcrumbs: (
         <Breadcrumbs
-          items={[
-            { label: listLabel, href: listHref },
-            { label: "..." },
-          ]}
+          items={[{ label: listLabel, href: listHref }, { label: '...' }]}
         />
       ),
     };
@@ -58,10 +53,7 @@ export default function DetailHeader({
   // 3. Standardized Breadcrumb Flow
   const displayBreadcrumbs = (
     <Breadcrumbs
-      items={[
-        { label: listLabel, href: listHref },
-        { label: detailLabel },
-      ]}
+      items={[{ label: listLabel, href: listHref }, { label: detailLabel }]}
     />
   );
 

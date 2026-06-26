@@ -1,8 +1,12 @@
-"use client";
+'use client';
 
-import { Card } from "./Card";
+import { Card } from './Card';
 
-export default function FilterPanelCard({ icon: Icon, title = "Filters", children }) {
+export default function FilterPanelCard({
+  icon: Icon,
+  title = 'Filters',
+  children,
+}) {
   return (
     <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm">
       <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">

@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { useEffect } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 
 export function useAuthGuard() {
   const router = useRouter();
@@ -17,12 +17,12 @@ export function useAuthGuard() {
       if (search) {
         callback += `?${search}`;
       }
-      
-      const loginUrl = new URL("/login", window.location.origin);
-      if (callback && callback !== "/" && callback !== "/login") {
-        loginUrl.searchParams.set("callbackUrl", callback);
+
+      const loginUrl = new URL('/login', window.location.origin);
+      if (callback && callback !== '/' && callback !== '/login') {
+        loginUrl.searchParams.set('callbackUrl', callback);
       }
-      
+
       router.replace(loginUrl.pathname + loginUrl.search);
     }
   }, [user, authLoading, router, pathname, searchParams]);

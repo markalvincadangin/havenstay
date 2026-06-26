@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { SkeletonListPage } from "@/components/ui/Skeleton";
-import { AppMain } from "@/components/layout/AppShell";
-import PageHeader from "@/components/ui/PageHeader";
-import Alert from "@/components/ui/Alert";
+import React from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { SkeletonListPage } from '@/components/ui/Skeleton';
+import { AppMain } from '@/components/layout/AppShell';
+import PageHeader from '@/components/ui/PageHeader';
+import Alert from '@/components/ui/Alert';
 
 /**
  * StandardPage wrapper — centralizes page composition, auth guards, and skeletons.
@@ -38,14 +38,14 @@ export default function StandardPage({
   const pageVariants = {
     initial: { opacity: 0, y: 8 },
     animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.2, ease: "easeOut" },
+    transition: { duration: 0.2, ease: 'easeOut' },
   };
 
   const normalizedError =
-    typeof error === "string"
+    typeof error === 'string'
       ? error
-      : error && typeof error === "object"
-        ? error.message || "Something went wrong. Please try again."
+      : error && typeof error === 'object'
+        ? error.message || 'Something went wrong. Please try again.'
         : error;
 
   return (
@@ -53,7 +53,9 @@ export default function StandardPage({
       <motion.div
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
+        transition={
+          shouldReduceMotion ? { duration: 0 } : pageVariants.transition
+        }
         className="space-y-6"
       >
         <PageHeader

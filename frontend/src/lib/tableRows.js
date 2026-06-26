@@ -7,14 +7,14 @@
  * Standard hover and click-state classes for registry table rows.
  * Features: item highlight (stone-50), pointer cursor, and transition smoothing.
  */
-export const interactiveTableRowClass = 
-  "group cursor-pointer hover:bg-stone-50/80 transition-colors border-b border-stone-100 last:border-b-0";
+export const interactiveTableRowClass =
+  'group cursor-pointer hover:bg-stone-50/80 transition-colors border-b border-stone-100 last:border-b-0';
 
 /**
  * Prevents the parent row's onClick event from firing when a child element (link/button) is clicked.
  * Essential for "Action" columns within interactive registry rows.
- * 
- * @param {import('react').MouseEvent} e 
+ *
+ * @param {import('react').MouseEvent} e
  */
 export function stopRowClick(e) {
   if (e && typeof e.stopPropagation === 'function') {

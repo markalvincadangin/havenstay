@@ -3,12 +3,14 @@
 The HavenStay frontend is a modern SPA built with Next.js 16 (App Router), adhering to the Modular Feature-Based App Router architecture.
 
 ## 🛠️ Stack
+
 - **Framework:** Next.js 16.x (React 19)
 - **Styling:** Tailwind CSS v4 + HS-Utilities
 - **Data Fetching:** SWR (Stale-While-Revalidate)
 - **Forms:** React Hook Form + Zod
 
 ## 🚀 Quick Start
+
 1. **Install Dependencies**
    ```bash
    npm install
@@ -21,6 +23,7 @@ The HavenStay frontend is a modern SPA built with Next.js 16 (App Router), adher
    ```
 
 ## 📂 Documentation
+
 - [**Main Project README**](../README.md)
 - [**Frontend Coding Blueprint**](../docs/FRONTEND_CODING_BLUEPRINT.md)
 - [**Design System**](../design-system/havenstay/MASTER.md)
@@ -30,6 +33,7 @@ The HavenStay frontend is a modern SPA built with Next.js 16 (App Router), adher
 ## 🗺️ Implemented Route Map
 
 ### Core
+
 - `/dashboard` — Main operational metrics.
 - `/tenants` — Tenant lifecycle management (`/new`, `/[id]`, `/[id]/edit`).
 - `/rooms` — Inventory management (`/new`, `/[id]`, `/[id]/edit`).
@@ -38,6 +42,7 @@ The HavenStay frontend is a modern SPA built with Next.js 16 (App Router), adher
 - `/payments` — Collections and receipting (`/new`).
 
 ### Reports
+
 - `/reports` — Hub for all operational reporting.
 - `/reports/occupancy` — Real-time room capacity.
 - `/reports/active-contracts` — Current lease agreements.
@@ -45,6 +50,7 @@ The HavenStay frontend is a modern SPA built with Next.js 16 (App Router), adher
 - `/reports/tenant-ledger` — Detailed financial history per tenant.
 
 ### Administration
+
 - `/users` — Role-based access control (Admin only).
 - `/audit-logs` — Forensic row-level change tracking (Admin only).
 

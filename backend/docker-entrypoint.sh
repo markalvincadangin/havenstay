@@ -42,10 +42,16 @@ else
     php artisan migrate --force
 fi
 
-echo "[entrypoint] Optimizing for production..."
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+if [ "${APP_ENV}" = "production" ]; then
+    echo "[entrypoint] Optimizing for production..."
+    php artisan config:cache
+    php artisan route:cache
+else
+    echo "[entrypoint] Clearing cache for local development..."
+    php artisan config:clear
+    php artisan route:clear
+    php artisan cache:clear
+fi
 
 echo "[entrypoint] Starting Apache..."
 exec apache2-foreground

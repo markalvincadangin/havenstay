@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * StepIndicator — Standardized multi-step progress header for wizards.
@@ -8,7 +8,8 @@
 export default function StepIndicator({ steps, currentStep }) {
   const totalSteps = steps.length;
   // Progress is (currentStep - 1) / (totalSteps - 1)
-  const progressPercent = totalSteps > 1 ? ((currentStep - 1) / (totalSteps - 1)) * 100 : 100;
+  const progressPercent =
+    totalSteps > 1 ? ((currentStep - 1) / (totalSteps - 1)) * 100 : 100;
 
   return (
     <div className="mb-12">
@@ -18,17 +19,17 @@ export default function StepIndicator({ steps, currentStep }) {
             <div
               className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-300 ${
                 currentStep === item.step
-                  ? "bg-teal-600 text-white shadow-lg ring-4 ring-teal-50"
+                  ? 'bg-teal-600 text-white shadow-lg ring-4 ring-teal-50'
                   : currentStep > item.step
-                  ? "bg-stone-900 text-teal-400"
-                  : "bg-stone-100 text-stone-400"
+                    ? 'bg-stone-900 text-teal-400'
+                    : 'bg-stone-100 text-stone-400'
               }`}
             >
               {item.icon && <item.icon size={18} />}
             </div>
             <span
               className={`mt-4 text-[10px] font-black uppercase tracking-widest hs-strip-title ${
-                currentStep === item.step ? "text-teal-700" : "text-stone-300"
+                currentStep === item.step ? 'text-teal-700' : 'text-stone-300'
               }`}
             >
               {item.label}

@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { createContext, useContext, useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { fetchCurrentUser } from "@/lib/auth";
-import { apiRequest, clearAuthToken, UNAUTHORIZED_EVENT } from "@/lib/api";
+import { createContext, useContext, useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { fetchCurrentUser } from '@/lib/auth';
+import { apiRequest, clearAuthToken, UNAUTHORIZED_EVENT } from '@/lib/api';
 
 const AuthContext = createContext({
   user: null,
   loading: true,
   isLoggingOut: false,
-  logout: () => { },
+  logout: () => {},
 });
 
 export function AuthProvider({ children }) {
@@ -22,12 +22,12 @@ export function AuthProvider({ children }) {
 
   // Sync hydration from localStorage safely
   useEffect(() => {
-    const cached = localStorage.getItem("havenstay_user");
+    const cached = localStorage.getItem('havenstay_user');
     if (cached) {
       try {
         setUser(JSON.parse(cached));
       } catch {
-        localStorage.removeItem("havenstay_user");
+        localStorage.removeItem('havenstay_user');
       }
     }
   }, []);
@@ -40,15 +40,15 @@ export function AuthProvider({ children }) {
         if (isActive) {
           setUser(me);
           if (me) {
-            localStorage.setItem("havenstay_user", JSON.stringify(me));
+            localStorage.setItem('havenstay_user', JSON.stringify(me));
           } else {
-            localStorage.removeItem("havenstay_user");
+            localStorage.removeItem('havenstay_user');
           }
         }
       } catch {
         if (isActive) {
           setUser(null);
-          localStorage.removeItem("havenstay_user");
+          localStorage.removeItem('havenstay_user');
           clearAuthToken();
         }
       } finally {
@@ -66,19 +66,19 @@ export function AuthProvider({ children }) {
     const onUnauthorized = () => {
       setUser(null);
       try {
-        localStorage.removeItem("havenstay_user");
+        localStorage.removeItem('havenstay_user');
       } catch {
         /* ignore */
       }
-      
-      const currentPath = window.location.pathname + window.location.search;
-      if (currentPath === "/login") return;
 
-      const loginUrl = new URL("/login", window.location.origin);
-      if (currentPath !== "/") {
-        loginUrl.searchParams.set("callbackUrl", currentPath);
+      const currentPath = window.location.pathname + window.location.search;
+      if (currentPath === '/login') return;
+
+      const loginUrl = new URL('/login', window.location.origin);
+      if (currentPath !== '/') {
+        loginUrl.searchParams.set('callbackUrl', currentPath);
       }
-      
+
       router.replace(loginUrl.pathname + loginUrl.search);
     };
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
@@ -88,34 +88,36 @@ export function AuthProvider({ children }) {
   const login = (userData) => {
     setUser(userData);
     if (userData) {
-      localStorage.setItem("havenstay_user", JSON.stringify(userData));
+      localStorage.setItem('havenstay_user', JSON.stringify(userData));
     }
   };
 
   const logout = async () => {
     setIsLoggingOut(true);
     try {
-      await apiRequest("/api/auth/logout", {
-        method: "POST",
+      await apiRequest('/api/auth/logout', {
+        method: 'POST',
         skipAuthRedirect: true,
-      }).catch(() => { });
+      }).catch(() => {});
     } finally {
       try {
-        localStorage.removeItem("havenstay_user");
+        localStorage.removeItem('havenstay_user');
       } catch {
         /* ignore */
       }
       clearAuthToken();
       setUser(null);
       setIsLoggingOut(false);
-      if (pathname !== "/login") {
-        router.replace("/login");
+      if (pathname !== '/login') {
+        router.replace('/login');
       }
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isLoggingOut, logout, login }}>
+    <AuthContext.Provider
+      value={{ user, loading, isLoggingOut, logout, login }}
+    >
       {children}
     </AuthContext.Provider>
   );

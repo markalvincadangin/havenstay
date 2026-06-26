@@ -1,23 +1,23 @@
-"use client";
+'use client';
 
-import { useMemo, useState, use } from "react";
-import { useRouter } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
-import useSWR, { mutate } from "swr";
-import { FileMinus, AlertTriangle } from "lucide-react";
-import { fetcher, apiRequest } from "@/lib/api";
-import { canManageMeters } from "@/lib/auth";
-import { flattenApiErrors } from "@/lib/errors";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { useToasts } from "@/context/ToastContext";
-import Alert from "@/components/ui/Alert";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import Button from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Field, Input } from "@/components/ui/Fields";
-import StandardPage from "@/components/ui/StandardPage";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
-import { formatDateString } from "@/lib/formatters";
+import { useMemo, useState, use } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm, useWatch } from 'react-hook-form';
+import useSWR, { mutate } from 'swr';
+import { FileMinus, AlertTriangle } from 'lucide-react';
+import { fetcher, apiRequest } from '@/lib/api';
+import { canManageMeters } from '@/lib/auth';
+import { flattenApiErrors } from '@/lib/errors';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { useToasts } from '@/context/ToastContext';
+import Alert from '@/components/ui/Alert';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import Button from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Field, Input } from '@/components/ui/Fields';
+import StandardPage from '@/components/ui/StandardPage';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
+import { formatDateString } from '@/lib/formatters';
 
 /**
  * Meter Reading Entry Form — /admin/meters/[id]/readings/new
@@ -46,7 +46,9 @@ export default function NewMeterReadingPage({ params }) {
 
   const latestReading = useMemo(() => {
     if (!meter || !meter.readings || meter.readings.length === 0) return null;
-    return [...meter.readings].sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date))[0];
+    return [...meter.readings].sort(
+      (a, b) => new Date(b.reading_date) - new Date(a.reading_date)
+    )[0];
   }, [meter]);
 
   const {
@@ -56,27 +58,33 @@ export default function NewMeterReadingPage({ params }) {
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
-      reading_date: new Date().toISOString().split("T")[0],
-      reading_value: "",
+      reading_date: new Date().toISOString().split('T')[0],
+      reading_value: '',
       is_rollover: false,
-      rollover_reason: "", // Kept in state as required by rules
+      rollover_reason: '', // Kept in state as required by rules
     },
   });
 
-  const isRollover = useWatch({ control, name: "is_rollover" });
-  const readingValue = useWatch({ control, name: "reading_value" });
+  const isRollover = useWatch({ control, name: 'is_rollover' });
+  const readingValue = useWatch({ control, name: 'reading_value' });
 
   const onSubmit = async (values) => {
-
     // Client-Side Monotonicity Enforcement
-    if (!values.is_rollover && latestReading && parseFloat(values.reading_value) < parseFloat(latestReading.reading_value)) {
-      showToast("Reading value cannot be lower than the previous reading unless flagged as a rollover. Check the dial rollover box if the hardware reset.", "error");
+    if (
+      !values.is_rollover &&
+      latestReading &&
+      parseFloat(values.reading_value) < parseFloat(latestReading.reading_value)
+    ) {
+      showToast(
+        'Reading value cannot be lower than the previous reading unless flagged as a rollover. Check the dial rollover box if the hardware reset.',
+        'error'
+      );
       return;
     }
 
     try {
       await apiRequest(`/api/meters/${meterId}/readings`, {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
           reading_date: values.reading_date,
           reading_value: parseFloat(values.reading_value),
@@ -91,7 +99,7 @@ export default function NewMeterReadingPage({ params }) {
 
       router.push(`/admin/meters/${meterId}`);
     } catch (err) {
-      showToast(flattenApiErrors(err), "error");
+      showToast(flattenApiErrors(err), 'error');
     }
   };
 
@@ -104,10 +112,13 @@ export default function NewMeterReadingPage({ params }) {
       breadcrumbs={
         <Breadcrumbs
           items={[
-            { label: "Administration" },
-            { label: "Meters", href: "/admin/meters" },
-            { label: meter ? meter.serial_number : "Meter", href: `/admin/meters/${meterId}` },
-            { label: "Record Reading" },
+            { label: 'Administration' },
+            { label: 'Meters', href: '/admin/meters' },
+            {
+              label: meter ? meter.serial_number : 'Meter',
+              href: `/admin/meters/${meterId}`,
+            },
+            { label: 'Record Reading' },
           ]}
         />
       }
@@ -128,7 +139,11 @@ export default function NewMeterReadingPage({ params }) {
         )}
 
         {!viewDenied && meter && (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-6"
+            noValidate
+          >
             <Card className="overflow-hidden rounded-2xl border-stone-200 !p-0 shadow-sm">
               <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-5">
                 <div className="flex items-center gap-3">
@@ -154,7 +169,8 @@ export default function NewMeterReadingPage({ params }) {
                       Last Recorded Baseline
                     </div>
                     <div className="font-mono text-sm font-bold text-teal-900 tabular-nums">
-                      {Number(latestReading.reading_value).toFixed(2)} {meter.utility?.unit_of_measurement}
+                      {Number(latestReading.reading_value).toFixed(2)}{' '}
+                      {meter.utility?.unit_of_measurement}
                       <span className="text-teal-600/70 font-medium ml-2 text-xs">
                         on {formatDateString(latestReading.reading_date)}
                       </span>
@@ -166,23 +182,30 @@ export default function NewMeterReadingPage({ params }) {
                       Initial Reading
                     </div>
                     <div className="text-sm font-medium text-stone-600">
-                      No previous readings found. This entry will establish the baseline.
+                      No previous readings found. This entry will establish the
+                      baseline.
                     </div>
                   </div>
                 )}
 
                 <div className="grid gap-6 md:grid-cols-2">
-                  <Field label="Reading Date" required error={errors.reading_date?.message}>
+                  <Field
+                    label="Reading Date"
+                    required
+                    error={errors.reading_date?.message}
+                  >
                     <Input
                       type="date"
                       className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                       hasError={Boolean(errors.reading_date)}
-                      {...register("reading_date", { required: "Date is required." })}
+                      {...register('reading_date', {
+                        required: 'Date is required.',
+                      })}
                     />
                   </Field>
 
                   <Field
-                    label={`Reading Value (${meter.utility?.unit_of_measurement || "Units"})`}
+                    label={`Reading Value (${meter.utility?.unit_of_measurement || 'Units'})`}
                     required
                     error={errors.reading_value?.message}
                   >
@@ -193,20 +216,25 @@ export default function NewMeterReadingPage({ params }) {
                       placeholder="0.0000"
                       className="!h-12 border-stone-200 font-bold focus:border-teal-500/50 font-mono tracking-wider tabular-nums"
                       hasError={Boolean(errors.reading_value)}
-                      {...register("reading_value", {
-                        required: "Measurement value is required.",
-                        min: { value: 0, message: "Reading cannot be negative." }
+                      {...register('reading_value', {
+                        required: 'Measurement value is required.',
+                        min: {
+                          value: 0,
+                          message: 'Reading cannot be negative.',
+                        },
                       })}
                     />
                   </Field>
 
                   {/* Non-regressive context feedback */}
-                  {!isRollover && latestReading && readingValue !== "" && (
+                  {!isRollover && latestReading && readingValue !== '' && (
                     <div className="md:col-span-2">
-                      {parseFloat(readingValue) < parseFloat(latestReading.reading_value) && (
+                      {parseFloat(readingValue) <
+                        parseFloat(latestReading.reading_value) && (
                         <p className="text-xs font-bold text-rose-600 mt-1 flex items-center gap-1.5">
                           <AlertTriangle size={12} />
-                          Warning: Value is lower than previous reading. This will be rejected unless marked as a rollover.
+                          Warning: Value is lower than previous reading. This
+                          will be rejected unless marked as a rollover.
                         </p>
                       )}
                     </div>
@@ -218,13 +246,16 @@ export default function NewMeterReadingPage({ params }) {
                         <input
                           type="checkbox"
                           className="w-5 h-5 rounded border-stone-300 text-teal-600 focus:ring-teal-600"
-                          {...register("is_rollover")}
+                          {...register('is_rollover')}
                         />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-stone-900">Meter Reset or Rollover</div>
+                        <div className="text-sm font-bold text-stone-900">
+                          Meter Reset or Rollover
+                        </div>
                         <div className="text-xs text-stone-500 mt-1 font-medium leading-relaxed">
-                          Check this if the meter display has rolled past its maximum capacity or if the meter was replaced.
+                          Check this if the meter display has rolled past its
+                          maximum capacity or if the meter was replaced.
                         </div>
                       </div>
                     </label>
@@ -233,16 +264,24 @@ export default function NewMeterReadingPage({ params }) {
                   {isRollover && (
                     <div className="md:col-span-2 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                       <Alert variant="warning" title="Validation Bypass Active">
-                        You are skipping the check that prevents lower values from being entered. This action will be recorded in the audit history.
+                        You are skipping the check that prevents lower values
+                        from being entered. This action will be recorded in the
+                        audit history.
                       </Alert>
 
-                      <Field label="Rollover Reason" required error={errors.rollover_reason?.message}>
+                      <Field
+                        label="Rollover Reason"
+                        required
+                        error={errors.rollover_reason?.message}
+                      >
                         <Input
                           placeholder="Provide justification for bypass (e.g., 'Dial rolled over 99999', 'Meter swapped')"
                           className="!h-12 border-stone-200 font-bold focus:border-amber-500/50"
                           hasError={Boolean(errors.rollover_reason)}
-                          {...register("rollover_reason", {
-                            required: isRollover ? "A justification is strictly required for rollover events." : false
+                          {...register('rollover_reason', {
+                            required: isRollover
+                              ? 'A justification is strictly required for rollover events.'
+                              : false,
                           })}
                         />
                       </Field>

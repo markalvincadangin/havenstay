@@ -1,18 +1,26 @@
-"use client";
+'use client';
 
-import Image from "next/image";
-import { motion, useReducedMotion } from "framer-motion";
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { apiRequest, hasAuthToken, setAuthToken } from "@/lib/api";
-import { flattenApiErrors } from "@/lib/errors";
-import Alert from "@/components/ui/Alert";
-import Button from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Field, Input } from "@/components/ui/Fields";
-import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, Lock, User as UserIcon, LayoutDashboard, History, ClipboardCheck } from "lucide-react";
+import Image from 'next/image';
+import { motion, useReducedMotion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { apiRequest, hasAuthToken, setAuthToken } from '@/lib/api';
+import { flattenApiErrors } from '@/lib/errors';
+import Alert from '@/components/ui/Alert';
+import Button from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Field, Input } from '@/components/ui/Fields';
+import { useAuth } from '@/context/AuthContext';
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  User as UserIcon,
+  LayoutDashboard,
+  History,
+  ClipboardCheck,
+} from 'lucide-react';
 
 /**
  * LoginPage — Professional Management Portal
@@ -21,36 +29,46 @@ import { Eye, EyeOff, Lock, User as UserIcon, LayoutDashboard, History, Clipboar
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl");
+  const callbackUrl = searchParams.get('callbackUrl');
   const { login, user, loading: authLoading } = useAuth();
-  const [apiError, setApiError] = useState("");
+  const [apiError, setApiError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user && hasAuthToken()) {
-      router.replace(callbackUrl || "/dashboard");
+      router.replace(callbackUrl || '/dashboard');
     }
   }, [authLoading, user, router, callbackUrl]);
 
   // Handle OAuth and external errors from URL parameters
   useEffect(() => {
-    const errorType = searchParams.get("error");
-    if (errorType === "oauth_failed") {
-      setApiError("Google authentication failed. Please check your credentials or try again.");
-    } else if (errorType === "access_denied") {
-      setApiError("Access denied. You cancelled the authentication request.");
-    } else if (errorType === "account_not_found") {
-      setApiError("This Google account is not registered in our system. Please contact an administrator to request access.");
-    } else if (errorType === "account_deactivated") {
-      setApiError("This account has been deactivated. Please contact an administrator for assistance.");
+    const errorType = searchParams.get('error');
+    if (errorType === 'oauth_failed') {
+      setApiError(
+        'Google authentication failed. Please check your credentials or try again.'
+      );
+    } else if (errorType === 'access_denied') {
+      setApiError('Access denied. You cancelled the authentication request.');
+    } else if (errorType === 'account_not_found') {
+      setApiError(
+        'This Google account is not registered in our system. Please contact an administrator to request access.'
+      );
+    } else if (errorType === 'account_deactivated') {
+      setApiError(
+        'This account has been deactivated. Please contact an administrator for assistance.'
+      );
     }
   }, [searchParams]);
 
   useEffect(() => {
     const warmServer = async () => {
       try {
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ""}/api/ping`, { mode: 'no-cors' });
-      } catch (e) { /* silent catch */ }
+        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/ping`, {
+          mode: 'no-cors',
+        });
+      } catch (e) {
+        /* silent catch */
+      }
     };
     warmServer();
   }, []);
@@ -61,16 +79,16 @@ export default function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
-      username: "",
-      password: "",
+      username: '',
+      password: '',
     },
   });
 
   const onSubmit = async (values) => {
-    setApiError("");
+    setApiError('');
     try {
-      const response = await apiRequest("/api/auth/login", {
-        method: "POST",
+      const response = await apiRequest('/api/auth/login', {
+        method: 'POST',
         body: JSON.stringify({
           username: values.username,
           password: values.password,
@@ -78,7 +96,7 @@ export default function LoginPage() {
       });
       if (response?.token) setAuthToken(response.token);
       if (response?.user) login(response.user);
-      router.push(callbackUrl || "/dashboard");
+      router.push(callbackUrl || '/dashboard');
     } catch (error) {
       setApiError(flattenApiErrors(error));
     }
@@ -105,18 +123,26 @@ export default function LoginPage() {
           className="relative z-10"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
         >
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-xl">
-              <Image src="/brand/logo-dark.svg" alt="HavenStay" width={28} height={28} />
+              <Image
+                src="/brand/logo-dark.svg"
+                alt="HavenStay"
+                width={28}
+                height={28}
+              />
             </div>
-            <span className="text-xl font-black uppercase tracking-[0.3em] text-white">HavenStay</span>
+            <span className="text-xl font-black uppercase tracking-[0.3em] text-white">
+              HavenStay
+            </span>
           </div>
 
           <div className="mt-24 max-w-lg">
             <h1 className="text-5xl font-black leading-[1.1] tracking-tight text-white xl:text-6xl">
-              Smarter <span className="text-teal-400">Boarding</span> Operations.
+              Smarter <span className="text-teal-400">Boarding</span>{' '}
+              Operations.
             </h1>
             <p className="mt-6 text-lg font-medium leading-relaxed text-teal-100/70">
               The professional choice for modern residential management.
@@ -129,15 +155,19 @@ export default function LoginPage() {
           className="relative z-10 grid grid-cols-2 gap-10"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+          transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
         >
           <div className="space-y-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-800/50 backdrop-blur-sm">
               <LayoutDashboard className="text-teal-400" size={20} />
             </div>
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-widest text-white">Unified Control</h3>
-              <p className="mt-1 text-xs leading-relaxed text-teal-100/50">Manage rooms, tenants, and billing from a single dashboard.</p>
+              <h3 className="text-sm font-bold uppercase tracking-widest text-white">
+                Unified Control
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-teal-100/50">
+                Manage rooms, tenants, and billing from a single dashboard.
+              </p>
             </div>
           </div>
           <div className="space-y-3">
@@ -145,8 +175,12 @@ export default function LoginPage() {
               <History className="text-teal-400" size={20} />
             </div>
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-widest text-white">Full Transparency</h3>
-              <p className="mt-1 text-xs leading-relaxed text-teal-100/50">Traceable histories and comprehensive financial audit trails.</p>
+              <h3 className="text-sm font-bold uppercase tracking-widest text-white">
+                Full Transparency
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-teal-100/50">
+                Traceable histories and comprehensive financial audit trails.
+              </p>
             </div>
           </div>
         </motion.div>
@@ -164,10 +198,17 @@ export default function LoginPage() {
             {/* Mobile Header */}
             <div className="flex flex-col items-center px-8 pt-12 text-center sm:px-12">
               <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-md ring-1 ring-stone-100 lg:hidden">
-                <Image src="/brand/logo-dark.svg" alt="HavenStay" width={38} height={38} />
+                <Image
+                  src="/brand/logo-dark.svg"
+                  alt="HavenStay"
+                  width={38}
+                  height={38}
+                />
               </div>
 
-              <p className="hs-strip-title !text-[9px] !text-stone-400">Management Portal</p>
+              <p className="hs-strip-title !text-[9px] !text-stone-400">
+                Management Portal
+              </p>
               <h2 className="hs-page-title mt-2 !text-3xl">Welcome Back</h2>
               <p className="hs-page-subtitle mt-3 text-[13px] font-medium leading-relaxed text-stone-500/80">
                 Sign in to your staff or admin account to get started.
@@ -175,9 +216,17 @@ export default function LoginPage() {
             </div>
 
             <div className="px-8 pb-12 pt-10 sm:px-12">
-              <form className="space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
+              <form
+                className="space-y-6"
+                onSubmit={handleSubmit(onSubmit)}
+                noValidate
+              >
                 <div className="space-y-5">
-                  <Field label="Username or Email" required error={errors.username?.message}>
+                  <Field
+                    label="Username or Email"
+                    required
+                    error={errors.username?.message}
+                  >
                     <Input
                       autoFocus
                       type="text"
@@ -186,30 +235,36 @@ export default function LoginPage() {
                       placeholder="e.g. admin@havenstay.com"
                       className="!h-12 border-stone-200/60 !rounded-xl bg-white/40 focus:bg-white transition-all"
                       hasError={Boolean(errors.username)}
-                      {...register("username", {
-                        required: "Please enter your username or email.",
+                      {...register('username', {
+                        required: 'Please enter your username or email.',
                       })}
                     />
                   </Field>
 
-                  <Field label="Password" required error={errors.password?.message}>
+                  <Field
+                    label="Password"
+                    required
+                    error={errors.password?.message}
+                  >
                     <div className="relative group">
                       <Input
-                        type={showPassword ? "text" : "password"}
+                        type={showPassword ? 'text' : 'password'}
                         icon={Lock}
                         autoComplete="current-password"
                         hasError={Boolean(errors.password)}
                         placeholder="Enter your password"
                         className="!h-12 border-stone-200/60 pr-12 !rounded-xl bg-white/40 focus:bg-white transition-all"
-                        {...register("password", {
-                          required: "Please enter your password.",
+                        {...register('password', {
+                          required: 'Please enter your password.',
                         })}
                       />
                       <button
                         type="button"
                         className="absolute inset-y-0 right-1 flex h-10 w-10 items-center justify-center self-center text-stone-400 transition-colors hover:text-teal-600 sm:h-12 sm:w-12"
                         onClick={() => setShowPassword((prev) => !prev)}
-                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        aria-label={
+                          showPassword ? 'Hide password' : 'Show password'
+                        }
                         tabIndex={-1}
                       >
                         {showPassword ? (
@@ -223,7 +278,11 @@ export default function LoginPage() {
                 </div>
 
                 {apiError && (
-                  <Alert variant="error" title="Sign In Failed" className="rounded-xl border-red-100/50">
+                  <Alert
+                    variant="error"
+                    title="Sign In Failed"
+                    className="rounded-xl border-red-100/50"
+                  >
                     <p className="text-xs leading-relaxed">{apiError}</p>
                   </Alert>
                 )}
@@ -236,7 +295,7 @@ export default function LoginPage() {
                     disabled={isSubmitting}
                     className="w-full !h-12 rounded-xl bg-teal-600 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-[0_12px_24px_-4px_rgba(13,148,136,0.25)] hover:bg-teal-700 hover:shadow-[0_16px_32px_-4px_rgba(13,148,136,0.3)] hover:-translate-y-0.5 active:scale-[0.98] transition-all hs-pulse-glow"
                   >
-                    {isSubmitting ? "Signing in..." : "Sign In"}
+                    {isSubmitting ? 'Signing in...' : 'Sign In'}
                   </Button>
 
                   <div className="relative">
@@ -244,7 +303,9 @@ export default function LoginPage() {
                       <div className="w-full border-t border-stone-100"></div>
                     </div>
                     <div className="relative flex justify-center text-[10px] font-bold uppercase tracking-widest">
-                      <span className="bg-[#fcfcfc] px-4 text-stone-400">Or sign in with</span>
+                      <span className="bg-[#fcfcfc] px-4 text-stone-400">
+                        Or sign in with
+                      </span>
                     </div>
                   </div>
 
@@ -254,7 +315,7 @@ export default function LoginPage() {
                     className="w-full !h-12 rounded-xl border-stone-200 bg-white text-[10px] font-bold uppercase tracking-[0.15em] text-stone-600 transition-all hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98] shadow-sm flex items-center justify-center gap-3"
                     onClick={() => {
                       // Using relative path to leverage Next.js rewrites and avoid 'undefined' env var issues
-                      window.location.href = "/api/auth/google/redirect";
+                      window.location.href = '/api/auth/google/redirect';
                     }}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24">

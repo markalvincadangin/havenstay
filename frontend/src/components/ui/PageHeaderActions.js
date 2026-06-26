@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { headerIconBackButtonClass, primaryLinkCtaClass } from "./LinkTokens";
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
+import { headerIconBackButtonClass, primaryLinkCtaClass } from './LinkTokens';
 
 export default function PageHeaderActions({
   backHref,
-  backLabel = "Go back",
+  backLabel = 'Go back',
   ctaHref,
   ctaLabel,
   ctaIcon: CtaIcon,
-  ctaClassName = "",
+  ctaClassName = '',
   user,
   children = null,
 }) {
@@ -19,12 +19,20 @@ export default function PageHeaderActions({
   return (
     <div className="flex flex-wrap items-center gap-3">
       {backHref ? (
-        <Link href={backHref} className={headerIconBackButtonClass} aria-label={backLabel} title={backLabel}>
+        <Link
+          href={backHref}
+          className={headerIconBackButtonClass}
+          aria-label={backLabel}
+          title={backLabel}
+        >
           <ArrowLeft size={18} aria-hidden />
         </Link>
       ) : null}
       {hasCta ? (
-        <Link href={ctaHref} className={`${primaryLinkCtaClass} ${ctaClassName}`.trim()}>
+        <Link
+          href={ctaHref}
+          className={`${primaryLinkCtaClass} ${ctaClassName}`.trim()}
+        >
           {CtaIcon ? <CtaIcon size={18} aria-hidden /> : null}
           <span>{ctaLabel}</span>
         </Link>

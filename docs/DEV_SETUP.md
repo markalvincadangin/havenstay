@@ -31,7 +31,9 @@ Mirrors the Render + Aiven production topology locally.
 
 ```bash
 # From project root
-docker compose up --build -d
+make env-docker
+make build
+make up
 ```
 
 **Containers started:**
@@ -48,7 +50,7 @@ docker compose up --build -d
 Run once after the first `docker compose up`:
 
 ```bash
-docker compose exec backend php artisan migrate:fresh --seed
+make refresh
 ```
 
 > [!WARNING]
@@ -89,8 +91,7 @@ Requires PHP 8.3+, Composer, Node.js 20+, and a local MySQL 8.4 instance.
 ```bash
 cd backend
 composer install
-cp .env.example .env
-# Edit .env: set DB_CONNECTION=mysql and all DB_* variables for your local MySQL
+make env-native # Switches DB to SQLite
 php artisan key:generate
 php artisan migrate:fresh --seed
 php artisan serve          # runs on http://127.0.0.1:8000
@@ -169,7 +170,7 @@ Send the `https://<random-words>.trycloudflare.com` link to anyone.
 *How it works*: The browser hits the frontend tunnel. Next.js proxies the `/api/*` requests internally to your local Laravel server at `127.0.0.1:8000`. Laravel sees the request came from `*.trycloudflare.com` and automatically allows the CORS and Auth cookies because of the wildcard patterns in `config/cors.php` and `SANCTUM_STATEFUL_DOMAINS`!
 
 > [!NOTE]
-> If you are testing webhooks or an external service that needs to hit the backend directly, you will still need to open a second tunnel to `localhost:8000`.
+> If you are testing webhooks or an external service that needs to hit the backend directly, you can run `make share` which automatically runs Cloudflare tunnels for both frontend and backend and updates your `.env` seamlessly!
 
 ### Tunnel with Docker
 
@@ -206,16 +207,18 @@ The containers publish these ports to the host, so the tunnel sees them correctl
 ### Docker
 
 ```bash
-docker compose up -d                              # Start (existing images)
-docker compose up --build -d                      # Rebuild and start
-docker compose stop                               # Stop containers (data preserved)
-docker compose down -v                            # Destroy containers + volumes (full reset)
-docker compose logs -f frontend                   # Tail frontend logs
-docker compose logs -f backend                    # Tail backend logs
-docker compose exec backend php artisan migrate   # Safe migration (no data loss)
-docker compose exec backend php artisan migrate:fresh --seed  # Wipe + reseed
-docker compose exec backend php artisan config:clear          # Clear config cache
-docker compose exec backend php artisan test                  # Run backend tests
+make env-docker                                   # Switch to Docker DB environment
+make build                                        # Rebuild container images
+make up                                           # Start all containers in background
+make down                                         # Stop containers
+make clean                                        # Destroy containers + volumes (full reset)
+make logs                                         # Tail all logs
+make refresh                                      # Wipe + reseed database (Primary bypass)
+make format                                       # Run prettier & php-cs-fixer
+make analyse                                      # Run eslint & phpstan
+make test-backend                                 # Run backend tests in Docker
+make test-frontend                                # Run frontend tests in Docker
+make share                                        # Share local env to public URL via Cloudflare
 ```
 
 ### Backend (manual)

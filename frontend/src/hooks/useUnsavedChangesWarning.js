@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
+import { useEffect } from 'react';
 
 export function useUnsavedChangesWarning(isDirty) {
   useEffect(() => {
@@ -10,13 +10,12 @@ export function useUnsavedChangesWarning(isDirty) {
 
     const handleBeforeUnload = (event) => {
       event.preventDefault();
-      event.returnValue = "";
+      event.returnValue = '';
     };
 
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [isDirty]);
 }
-

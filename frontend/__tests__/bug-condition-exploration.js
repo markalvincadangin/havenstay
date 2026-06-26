@@ -1,13 +1,13 @@
 /**
  * Bug Condition Exploration Tests
- * 
+ *
  * CRITICAL: These tests are EXPECTED TO FAIL on unfixed code.
  * Failure confirms the bugs exist and helps document the root causes.
- * 
+ *
  * DO NOT attempt to fix the tests or code when they fail.
- * 
+ *
  * **Validates: Requirements 1.1-1.15**
- * 
+ *
  * Test Strategy:
  * - Test 1: Contract payload includes room_id (should only have bed_space_id)
  * - Test 2: Billing code uses fallback logic (should trust computed attributes)
@@ -77,23 +77,30 @@ function readFile(filePath) {
   try {
     return fs.readFileSync(fullPath, 'utf8');
   } catch (error) {
-    console.error(`${colors.red}Error reading file ${filePath}:${colors.reset}`, error.message);
+    console.error(
+      `${colors.red}Error reading file ${filePath}:${colors.reset}`,
+      error.message
+    );
     return null;
   }
 }
 
 /**
  * Test 1: Contract Creation - room_id in Payload
- * 
+ *
  * Bug Condition: Contract creation sends room_id in payload
  * Expected Behavior: Should only send bed_space_id (not room_id)
- * 
+ *
  * This test checks if the contracts/new page sends room_id in the payload,
  * which is incorrect because the contracts table only has bed_space_id.
  */
 function testContractPayloadRoomId() {
-  console.log(`${colors.bold}${colors.cyan}Test 1: Contract Payload - room_id Field${colors.reset}`);
-  console.log(`${colors.cyan}Checking if contract creation sends room_id in payload...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Test 1: Contract Payload - room_id Field${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Checking if contract creation sends room_id in payload...${colors.reset}\n`
+  );
 
   const content = readFile('src/app/contracts/new/page.js');
   if (!content) {
@@ -102,23 +109,25 @@ function testContractPayloadRoomId() {
   }
 
   // Check if room_id is being sent in the payload
-  const hasRoomIdInPayload = /room_id:\s*Number\(values\.room_id\)/.test(content);
-  
+  const hasRoomIdInPayload = /room_id:\s*Number\(values\.room_id\)/.test(
+    content
+  );
+
   // Expected to FAIL on unfixed code (hasRoomIdInPayload should be true)
   assert(
     !hasRoomIdInPayload,
     'Test 1.1: Contract payload should NOT include room_id',
-    hasRoomIdInPayload 
+    hasRoomIdInPayload
       ? 'FAIL (Expected): Contract payload includes room_id field - this is the bug!'
       : 'PASS (Unexpected): Contract payload does not include room_id - bug may be fixed',
-    hasRoomIdInPayload 
+    hasRoomIdInPayload
       ? 'Found: room_id: Number(values.room_id) in payload construction'
       : null
   );
 
   // Check if bed_space_id is conditional (it should always be required)
   const bedSpaceIdConditional = /if\s*\(values\.bed_space_id\)/.test(content);
-  
+
   assert(
     !bedSpaceIdConditional,
     'Test 1.2: bed_space_id should always be required (not conditional)',
@@ -133,16 +142,20 @@ function testContractPayloadRoomId() {
 
 /**
  * Test 2: Billing Amount Calculation - Fallback Logic
- * 
+ *
  * Bug Condition: Billing code uses fallback logic like total_amount || balance
  * Expected Behavior: Should trust computed attributes without fallbacks
- * 
+ *
  * This test checks if the billing page uses fallback logic for computed attributes,
  * indicating uncertainty about field availability.
  */
 function testBillingFallbackLogic() {
-  console.log(`${colors.bold}${colors.cyan}Test 2: Billing Amount Calculation - Fallback Logic${colors.reset}`);
-  console.log(`${colors.cyan}Checking if billing page uses fallback logic for computed attributes...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Test 2: Billing Amount Calculation - Fallback Logic${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Checking if billing page uses fallback logic for computed attributes...${colors.reset}\n`
+  );
 
   const content = readFile('src/app/billing/page.js');
   if (!content) {
@@ -151,8 +164,9 @@ function testBillingFallbackLogic() {
   }
 
   // Check for fallback patterns like || 0 or || billing.balance
-  const hasFallbackLogic = /billing\.(total_amount|total_paid|balance)\s*\|\|\s*/.test(content);
-  
+  const hasFallbackLogic =
+    /billing\.(total_amount|total_paid|balance)\s*\|\|\s*/.test(content);
+
   // Expected to FAIL on unfixed code (hasFallbackLogic should be true)
   assert(
     !hasFallbackLogic,
@@ -166,8 +180,11 @@ function testBillingFallbackLogic() {
   );
 
   // Check for Number() wrapping with || 0 pattern
-  const hasNumberFallback = /Number\(billing\.(total_amount|total_paid|balance)\s*\|\|\s*0\)/.test(content);
-  
+  const hasNumberFallback =
+    /Number\(billing\.(total_amount|total_paid|balance)\s*\|\|\s*0\)/.test(
+      content
+    );
+
   assert(
     !hasNumberFallback,
     'Test 2.2: Billing amounts should not use Number(...|| 0) pattern',
@@ -182,16 +199,20 @@ function testBillingFallbackLogic() {
 
 /**
  * Test 3: Room Status ENUM - 'occupied' Option
- * 
+ *
  * Bug Condition: Room status filter includes 'occupied' option
  * Expected Behavior: Should only show valid ENUM values (available, unavailable, maintenance)
- * 
+ *
  * This test checks if the rooms page includes 'occupied' in the status filter,
  * which is not a valid value in the rooms.status ENUM.
  */
 function testRoomStatusEnum() {
-  console.log(`${colors.bold}${colors.cyan}Test 3: Room Status ENUM - 'occupied' Option${colors.reset}`);
-  console.log(`${colors.cyan}Checking if room status filter includes invalid 'occupied' option...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Test 3: Room Status ENUM - 'occupied' Option${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Checking if room status filter includes invalid 'occupied' option...${colors.reset}\n`
+  );
 
   const content = readFile('src/app/rooms/page.js');
   if (!content) {
@@ -200,8 +221,9 @@ function testRoomStatusEnum() {
   }
 
   // Check if 'occupied' appears in the status filter options
-  const hasOccupiedOption = /<option\s+value="occupied">Occupied<\/option>/.test(content);
-  
+  const hasOccupiedOption =
+    /<option\s+value="occupied">Occupied<\/option>/.test(content);
+
   // Expected to FAIL on unfixed code (hasOccupiedOption should be true)
   assert(
     !hasOccupiedOption,
@@ -215,8 +237,9 @@ function testRoomStatusEnum() {
   );
 
   // Check if 'unavailable' option exists (it should)
-  const hasUnavailableOption = /<option\s+value="unavailable">Unavailable<\/option>/.test(content);
-  
+  const hasUnavailableOption =
+    /<option\s+value="unavailable">Unavailable<\/option>/.test(content);
+
   assert(
     hasUnavailableOption,
     'Test 3.2: Room status filter SHOULD include "unavailable" option',
@@ -231,15 +254,19 @@ function testRoomStatusEnum() {
 
 /**
  * Test 4: Payment Void Functionality - Button Presence
- * 
+ *
  * Bug Condition: Payment void button may be missing from UI
  * Expected Behavior: Void action button should be present for non-voided payments
- * 
+ *
  * This test checks if the payments page has a void button implementation.
  */
 function testPaymentVoidButton() {
-  console.log(`${colors.bold}${colors.cyan}Test 4: Payment Void Functionality - Button Presence${colors.reset}`);
-  console.log(`${colors.cyan}Checking if payment void button exists in the UI...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Test 4: Payment Void Functionality - Button Presence${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Checking if payment void button exists in the UI...${colors.reset}\n`
+  );
 
   const content = readFile('src/app/payments/page.js');
   if (!content) {
@@ -249,7 +276,7 @@ function testPaymentVoidButton() {
 
   // Check if VOID button exists
   const hasVoidButton = /VOID/.test(content) && /handleVoidClick/.test(content);
-  
+
   // This test should PASS on unfixed code (void button already exists)
   assert(
     hasVoidButton,
@@ -257,37 +284,37 @@ function testPaymentVoidButton() {
     hasVoidButton
       ? 'PASS: Void button found - functionality appears to be implemented'
       : 'FAIL: Void button not found - this would be the bug',
-    !hasVoidButton
-      ? 'Missing: VOID button or handleVoidClick handler'
-      : null
+    !hasVoidButton ? 'Missing: VOID button or handleVoidClick handler' : null
   );
 
   // Check if VoidConfirmModal exists
   const hasVoidModal = /VoidConfirmModal/.test(content);
-  
+
   assert(
     hasVoidModal,
     'Test 4.2: VoidConfirmModal component should exist',
     hasVoidModal
       ? 'PASS: VoidConfirmModal found - void workflow appears complete'
       : 'FAIL: VoidConfirmModal not found - void workflow incomplete',
-    !hasVoidModal
-      ? 'Missing: VoidConfirmModal component'
-      : null
+    !hasVoidModal ? 'Missing: VoidConfirmModal component' : null
   );
 }
 
 /**
  * Test 5: Dashboard Data Source - Real API Calls
- * 
+ *
  * Bug Condition: Dashboard may use mock data instead of real APIs
  * Expected Behavior: Dashboard should fetch from real backend APIs
- * 
+ *
  * This test checks if the dashboard fetches data from real API endpoints.
  */
 function testDashboardDataSource() {
-  console.log(`${colors.bold}${colors.cyan}Test 5: Dashboard Data Source - Real API Calls${colors.reset}`);
-  console.log(`${colors.cyan}Checking if dashboard fetches from real backend APIs...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Test 5: Dashboard Data Source - Real API Calls${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Checking if dashboard fetches from real backend APIs...${colors.reset}\n`
+  );
 
   const content = readFile('src/app/dashboard/page.js');
   if (!content) {
@@ -299,16 +326,14 @@ function testDashboardDataSource() {
   const hasOccupancyAPI = /\/api\/reports\/occupancy/.test(content);
   const hasBillingAPI = /\/api\/billing/.test(content);
   const hasTenantsAPI = /\/api\/tenants/.test(content);
-  
+
   assert(
     hasOccupancyAPI,
     'Test 5.1: Dashboard should fetch from /api/reports/occupancy',
     hasOccupancyAPI
       ? 'PASS: Dashboard fetches from /api/reports/occupancy'
       : 'FAIL: Dashboard does not fetch from /api/reports/occupancy - may use mock data',
-    !hasOccupancyAPI
-      ? 'Missing: /api/reports/occupancy API call'
-      : null
+    !hasOccupancyAPI ? 'Missing: /api/reports/occupancy API call' : null
   );
 
   assert(
@@ -317,9 +342,7 @@ function testDashboardDataSource() {
     hasBillingAPI
       ? 'PASS: Dashboard fetches from /api/billing'
       : 'FAIL: Dashboard does not fetch from /api/billing - may use mock data',
-    !hasBillingAPI
-      ? 'Missing: /api/billing API call'
-      : null
+    !hasBillingAPI ? 'Missing: /api/billing API call' : null
   );
 
   assert(
@@ -328,14 +351,13 @@ function testDashboardDataSource() {
     hasTenantsAPI
       ? 'PASS: Dashboard fetches from /api/tenants'
       : 'FAIL: Dashboard does not fetch from /api/tenants - may use mock data',
-    !hasTenantsAPI
-      ? 'Missing: /api/tenants API call'
-      : null
+    !hasTenantsAPI ? 'Missing: /api/tenants API call' : null
   );
 
   // Check for hardcoded values (mock data indicators)
-  const hasHardcodedValues = /const\s+(occupiedBeds|totalBeds|activeTenants)\s*=\s*\d+/.test(content);
-  
+  const hasHardcodedValues =
+    /const\s+(occupiedBeds|totalBeds|activeTenants)\s*=\s*\d+/.test(content);
+
   assert(
     !hasHardcodedValues,
     'Test 5.4: Dashboard should not have hardcoded metric values',
@@ -352,13 +374,25 @@ function testDashboardDataSource() {
  * Main test runner
  */
 function runTests() {
-  console.log(`\n${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`);
-  console.log(`${colors.bold}${colors.magenta}  Bug Condition Exploration Tests${colors.reset}`);
-  console.log(`${colors.bold}${colors.magenta}  Frontend-Backend Schema Alignment Bugfix${colors.reset}`);
-  console.log(`${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`);
+  console.log(
+    `\n${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`
+  );
+  console.log(
+    `${colors.bold}${colors.magenta}  Bug Condition Exploration Tests${colors.reset}`
+  );
+  console.log(
+    `${colors.bold}${colors.magenta}  Frontend-Backend Schema Alignment Bugfix${colors.reset}`
+  );
+  console.log(
+    `${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`
+  );
 
-  console.log(`${colors.yellow}IMPORTANT: These tests are EXPECTED TO FAIL on unfixed code.${colors.reset}`);
-  console.log(`${colors.yellow}Failures confirm the bugs exist and help document root causes.${colors.reset}\n`);
+  console.log(
+    `${colors.yellow}IMPORTANT: These tests are EXPECTED TO FAIL on unfixed code.${colors.reset}`
+  );
+  console.log(
+    `${colors.yellow}Failures confirm the bugs exist and help document root causes.${colors.reset}\n`
+  );
 
   // Run all tests
   testContractPayloadRoomId();
@@ -368,16 +402,22 @@ function runTests() {
   testDashboardDataSource();
 
   // Print summary
-  console.log(`${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`);
+  console.log(
+    `${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`
+  );
   console.log(`${colors.bold}Test Summary${colors.reset}\n`);
   console.log(`${colors.green}Passed:${colors.reset} ${results.passed}`);
   console.log(`${colors.red}Failed:${colors.reset} ${results.failed}`);
-  console.log(`${colors.bold}Total:${colors.reset} ${results.passed + results.failed}\n`);
+  console.log(
+    `${colors.bold}Total:${colors.reset} ${results.passed + results.failed}\n`
+  );
 
   // Document counterexamples
-  const failedTests = results.tests.filter(t => t.status === 'FAIL');
+  const failedTests = results.tests.filter((t) => t.status === 'FAIL');
   if (failedTests.length > 0) {
-    console.log(`${colors.bold}${colors.yellow}Documented Counterexamples (Root Causes):${colors.reset}\n`);
+    console.log(
+      `${colors.bold}${colors.yellow}Documented Counterexamples (Root Causes):${colors.reset}\n`
+    );
     failedTests.forEach((test, index) => {
       console.log(`${colors.yellow}${index + 1}. ${test.name}${colors.reset}`);
       console.log(`   ${test.message}`);
@@ -388,15 +428,25 @@ function runTests() {
     });
   }
 
-  console.log(`${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`
+  );
 
   // Expected outcome message
   if (results.failed > 0) {
-    console.log(`${colors.yellow}${colors.bold}✓ EXPECTED OUTCOME:${colors.reset} ${colors.yellow}Tests failed, confirming bugs exist.${colors.reset}`);
-    console.log(`${colors.yellow}  The failures above document the schema mismatches that need to be fixed.${colors.reset}\n`);
+    console.log(
+      `${colors.yellow}${colors.bold}✓ EXPECTED OUTCOME:${colors.reset} ${colors.yellow}Tests failed, confirming bugs exist.${colors.reset}`
+    );
+    console.log(
+      `${colors.yellow}  The failures above document the schema mismatches that need to be fixed.${colors.reset}\n`
+    );
   } else {
-    console.log(`${colors.green}${colors.bold}⚠ UNEXPECTED OUTCOME:${colors.reset} ${colors.green}All tests passed!${colors.reset}`);
-    console.log(`${colors.green}  This suggests the bugs may already be fixed or the root cause analysis is incorrect.${colors.reset}\n`);
+    console.log(
+      `${colors.green}${colors.bold}⚠ UNEXPECTED OUTCOME:${colors.reset} ${colors.green}All tests passed!${colors.reset}`
+    );
+    console.log(
+      `${colors.green}  This suggests the bugs may already be fixed or the root cause analysis is incorrect.${colors.reset}\n`
+    );
   }
 
   // Exit with appropriate code

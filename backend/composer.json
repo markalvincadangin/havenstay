@@ -58,6 +58,8 @@
             "@php artisan config:clear --ansi",
             "@php vendor/bin/pest --configuration=phpunit.mysql.xml"
         ],
+        "format": "vendor/bin/pint",
+        "analyse": "vendor/bin/phpstan analyse",
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

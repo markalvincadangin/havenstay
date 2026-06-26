@@ -19,14 +19,16 @@ A web-based Boarding House Management System built for bed-level occupancy track
     cd havenstay
     ```
 
-2.  **Spin up containers**
+2.  **Configure Environment & Start**
     ```bash
-    docker compose up --build -d
+    make env-docker
+    make build
+    make up
     ```
 
 3.  **Seed the database** (first time only)
     ```bash
-    docker compose exec backend php artisan migrate:fresh --seed
+    make refresh
     ```
 
 4.  **Open in browser**
@@ -58,13 +60,16 @@ Everything lives in `docs/`. Here's what's there:
 - [Database](docs/DATABASE.md) — schema, triggers, views, and ERD
 
 **Developer Guides**
-- [Dev Setup](docs/DEV_SETUP.md) — Docker, manual install, and tunnel profiles
+- [Dev Setup](docs/DEV_SETUP.md) — manual install, and tunnel profiles
+- [Docker Guide](docs/DOCKER.md) — local containerized development setup
+- [Contributing](docs/CONTRIBUTING.md) — version control, branching, and PR workflow
 - [API Reference](docs/API_REFERENCE.md) — every endpoint, request/response shapes
 - [Backend Blueprint](docs/BACKEND_CODING_BLUEPRINT.md) — Laravel conventions
 - [Frontend Blueprint](docs/FRONTEND_CODING_BLUEPRINT.md) — Next.js conventions
 
 **Operations**
 - [Deployment](docs/DEPLOYMENT.md) — Render + Vercel + Aiven production setup
+- [CI/CD](docs/CI_CD.md) — GitHub Actions and automated deployment pipeline
 - [Runbook](docs/OPERATIONS_RUNBOOK.md) — maintenance and temporal logic
 
 ---

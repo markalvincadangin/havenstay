@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { G_KEY_ROUTES } from "@/lib/keyboardNav";
+import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { G_KEY_ROUTES } from '@/lib/keyboardNav';
 
 /**
  * useKeyboardShortcuts — G+letter navigation, help (?), and app shortcuts.
@@ -19,33 +19,36 @@ export function useKeyboardShortcuts(onHelp) {
     const handleKeyDown = (e) => {
       // Don't trigger if typing in input/textarea
       const active = document.activeElement;
-      const isInput = active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.contentEditable === "true";
+      const isInput =
+        active.tagName === 'INPUT' ||
+        active.tagName === 'TEXTAREA' ||
+        active.contentEditable === 'true';
       if (isInput) return;
 
       const key = e.key.toLowerCase();
 
       // Alt+Shift+P → new payment (not Ctrl+P — reserved for Print)
-      if (e.altKey && e.shiftKey && key === "p") {
+      if (e.altKey && e.shiftKey && key === 'p') {
         e.preventDefault();
-        router.push("/payments/new");
+        router.push('/payments/new');
         return;
       }
 
       // Alt+Shift+R → soft refresh (not Ctrl+R — browser reload)
-      if (e.altKey && e.shiftKey && key === "r") {
+      if (e.altKey && e.shiftKey && key === 'r') {
         e.preventDefault();
         router.refresh();
         return;
       }
 
       // Help shortcut (?)
-      if (e.key === "?" && onHelp) {
+      if (e.key === '?' && onHelp) {
         e.preventDefault();
         onHelp();
         return;
       }
 
-      if (key === "g") {
+      if (key === 'g') {
         gPressed.current = true;
         if (timer.current) clearTimeout(timer.current);
         timer.current = setTimeout(() => {
@@ -68,9 +71,9 @@ export function useKeyboardShortcuts(onHelp) {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown);
       if (timer.current) clearTimeout(timer.current);
     };
   }, [router, onHelp]);

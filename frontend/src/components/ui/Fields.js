@@ -14,44 +14,62 @@
  * @param {React.ReactNode} children
  * @param {string} [className]
  */
-export function Field({ label, required, error, warning, helpText, children, className = "" }) {
+export function Field({
+  label,
+  required,
+  error,
+  warning,
+  helpText,
+  children,
+  className = '',
+}) {
   return (
     <div className={className}>
       <label className="mb-2 block text-[11px] font-black uppercase tracking-widest text-stone-500">
         {label}
         {required ? (
-          <span className="ml-1.5 text-red-500" aria-hidden="true">*</span>
+          <span className="ml-1.5 text-red-500" aria-hidden="true">
+            *
+          </span>
         ) : null}
       </label>
       {children}
       {error ? (
-        <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-red-600" role="alert">
+        <div
+          className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-red-600"
+          role="alert"
+        >
           {error}
         </div>
       ) : warning ? (
-        <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-600" role="alert">
+        <div
+          className="mt-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-600"
+          role="alert"
+        >
           {warning}
         </div>
       ) : null}
       {!error && !warning && helpText ? (
-        <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{helpText}</div>
+        <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
+          {helpText}
+        </div>
       ) : null}
     </div>
   );
 }
 
 const baseInput =
-  "h-10 w-full rounded-lg border px-3.5 text-sm text-[var(--color-text)] bg-white " +
-  "placeholder:text-[var(--color-text-disabled)] " +
-  "transition-[border-color,box-shadow] duration-150 outline-none " +
-  "hover:border-[var(--color-border-strong)] " +
-  "disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)] disabled:cursor-not-allowed";
+  'h-10 w-full rounded-lg border px-3.5 text-sm text-[var(--color-text)] bg-white ' +
+  'placeholder:text-[var(--color-text-disabled)] ' +
+  'transition-[border-color,box-shadow] duration-150 outline-none ' +
+  'hover:border-[var(--color-border-strong)] ' +
+  'disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)] disabled:cursor-not-allowed';
 
 const normalBorder =
-  "border-[var(--color-border)] focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_rgba(13,148,136,0.15)]";
+  'border-[var(--color-border)] focus:border-[var(--color-primary)] focus:shadow-[0_0_0_3px_rgba(13,148,136,0.15)]';
 
 const errorBorder =
-  "border-[#EF4444] focus:border-[#EF4444] focus:shadow-[0_0_0_3px_rgba(239,68,68,0.15)]";
+  'border-[#EF4444] focus:border-[#EF4444] focus:shadow-[0_0_0_3px_rgba(239,68,68,0.15)]';
 
 /**
  * Text / number input.
@@ -60,7 +78,13 @@ const errorBorder =
  * @param {React.ReactNode} [icon] - Leading icon (absolute positioned)
  * @param {string} [prefix] - Leading text (e.g. "₱")
  */
-export function Input({ className = "", hasError = false, icon: Icon, prefix, ...props }) {
+export function Input({
+  className = '',
+  hasError = false,
+  icon: Icon,
+  prefix,
+  ...props
+}) {
   if (Icon || prefix) {
     return (
       <div className="relative group w-full">
@@ -78,9 +102,9 @@ export function Input({ className = "", hasError = false, icon: Icon, prefix, ..
           className={[
             baseInput,
             hasError ? errorBorder : normalBorder,
-            Icon || prefix ? "pl-11" : "",
+            Icon || prefix ? 'pl-11' : '',
             className,
-          ].join(" ")}
+          ].join(' ')}
           {...props}
         />
       </div>
@@ -89,7 +113,11 @@ export function Input({ className = "", hasError = false, icon: Icon, prefix, ..
 
   return (
     <input
-      className={[baseInput, hasError ? errorBorder : normalBorder, className].join(" ")}
+      className={[
+        baseInput,
+        hasError ? errorBorder : normalBorder,
+        className,
+      ].join(' ')}
       {...props}
     />
   );
@@ -99,16 +127,16 @@ export function Input({ className = "", hasError = false, icon: Icon, prefix, ..
  * Select dropdown — custom chevron via background-image per MASTER.md Section 5.7.
  * @param {boolean} [hasError=false]
  */
-export function Select({ className = "", hasError = false, ...props }) {
+export function Select({ className = '', hasError = false, ...props }) {
   return (
     <select
       className={[
         baseInput,
-        "appearance-none pr-10",
+        'appearance-none pr-10',
         "bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2378716C' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")] bg-no-repeat bg-[right_12px_center]",
         hasError ? errorBorder : normalBorder,
         className,
-      ].join(" ")}
+      ].join(' ')}
       {...props}
     />
   );
@@ -118,18 +146,18 @@ export function Select({ className = "", hasError = false, ...props }) {
  * Textarea — resizable, min 100px height.
  * @param {boolean} [hasError=false]
  */
-export function Textarea({ className = "", hasError = false, ...props }) {
+export function Textarea({ className = '', hasError = false, ...props }) {
   return (
     <textarea
       className={[
-        "min-h-[100px] w-full rounded-lg border px-3.5 py-2.5 text-sm text-[var(--color-text)] bg-white",
-        "placeholder:text-[var(--color-text-disabled)] resize-vertical leading-relaxed",
-        "transition-[border-color,box-shadow] duration-150 outline-none",
-        "hover:border-[var(--color-border-strong)]",
-        "disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)] disabled:cursor-not-allowed",
+        'min-h-[100px] w-full rounded-lg border px-3.5 py-2.5 text-sm text-[var(--color-text)] bg-white',
+        'placeholder:text-[var(--color-text-disabled)] resize-vertical leading-relaxed',
+        'transition-[border-color,box-shadow] duration-150 outline-none',
+        'hover:border-[var(--color-border-strong)]',
+        'disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)] disabled:cursor-not-allowed',
         hasError ? errorBorder : normalBorder,
         className,
-      ].join(" ")}
+      ].join(' ')}
       {...props}
     />
   );
@@ -138,9 +166,11 @@ export function Textarea({ className = "", hasError = false, ...props }) {
 /**
  * Checkbox — custom toggle with text label.
  */
-export function Checkbox({ label, className = "", ...props }) {
+export function Checkbox({ label, className = '', ...props }) {
   return (
-    <label className={`flex cursor-pointer items-start gap-3 select-none ${className}`}>
+    <label
+      className={`flex cursor-pointer items-start gap-3 select-none ${className}`}
+    >
       <div className="relative flex items-center h-5">
         <input
           type="checkbox"

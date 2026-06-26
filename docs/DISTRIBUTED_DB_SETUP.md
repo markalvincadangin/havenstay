@@ -1,5 +1,5 @@
 # HavenStay Boarding House Management System (BHMS)
-## Distributed Database Setup: Primary-Replica Topology (CCR-002)
+## Distributed Database Setup: Primary-Replica Topology
 
 **Version:** 1.2  
 **Last Updated:** May 02, 2026  
@@ -21,7 +21,7 @@
 
 ## 1. Overview
 
-To satisfy **CCR-002 (Distributed Database)**, HavenStay utilizes a Primary-Replica topology. The Primary instance handles all write operations (`INSERT`, `UPDATE`, `DELETE`), while the Replica instance handles intensive read operations (`SELECT` for reports and dashboard views).
+HavenStay utilizes a Primary-Replica topology. The Primary instance handles all write operations (`INSERT`, `UPDATE`, `DELETE`), while the Replica instance handles intensive read operations (`SELECT` for reports and dashboard views).
 
 ## 2. Topology Configuration
 
@@ -35,8 +35,16 @@ To satisfy **CCR-002 (Distributed Database)**, HavenStay utilizes a Primary-Repl
 
 ## 3. Phase 1: Primary Setup (Laravel)
 
+> [!IMPORTANT]
+> **Replication Ordering Dependency:** The scripts in `docker/` (`primary-init.sql`, `replica-init.sql`) only configure the replication users; they do *not* source the schema. The schema is applied by Laravel's migration runner. Therefore, MySQL replication must be **actively running** (`SHOW REPLICA STATUS` returning `Yes` for both IO and SQL threads) **before** executing `migrate:fresh`. If migrations run before replication is established, `db-replica` will silently miss the tables and all 45 forensic triggers.
+
 1. In **`backend/.env`**, set **`DB_READ_PORT=3306`** (identical to primary) to allow migrations to run.
-2. Initialize the database:
+2. Confirm replication is active:
+   ```bash
+   docker compose exec db-replica mysql -uroot -p -e "SHOW REPLICA STATUS\G"
+   # Verify Slave_IO_Running and Slave_SQL_Running are both 'Yes'
+   ```
+3. Initialize the database schema and triggers:
    ```bash
    cd backend
    php artisan migrate:fresh --seed
@@ -96,7 +104,7 @@ Once replication is healthy (`Replica_IO_Running: Yes`), update the application 
 
 | Version | Date | Changes |
 | :--- | :--- | :--- |
-| v1.0 | 2026-04-10 | Initial setup guide for CCR-002. |
+| v1.0 | 2026-04-10 | Initial setup guide. |
 | v1.1 | 2026-04-25 | Added Error 1236 troubleshooting section. |
 | **v1.2** | **2026-05-02** | **Standardized formatting and aligned with HavenStay Documentation Standard.** |
 

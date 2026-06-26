@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { apiRequest, setAuthToken } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
-import { Loader2 } from "lucide-react";
-import Image from "next/image";
-import { motion } from "framer-motion";
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { apiRequest, setAuthToken } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
+import { Loader2 } from 'lucide-react';
+import Image from 'next/image';
+import { motion } from 'framer-motion';
 
 /**
  * OAuthCallbackPage
@@ -21,50 +21,60 @@ export default function OAuthCallbackPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    const errorParam = searchParams.get("error");
+    const token = searchParams.get('token');
+    const errorParam = searchParams.get('error');
 
     if (!token && !errorParam) {
       // Direct access bypass: redirect to login immediately
-      router.replace("/login");
+      router.replace('/login');
       return;
     }
 
     if (errorParam === 'account_deactivated') {
-      setError("This account has been deactivated. Please contact your system administrator to restore access.");
+      setError(
+        'This account has been deactivated. Please contact your system administrator to restore access.'
+      );
       return;
     }
 
     if (errorParam === 'account_not_found') {
-      setError("This Google account is not registered with HavenStay. Please contact an administrator to request access.");
+      setError(
+        'This Google account is not registered with HavenStay. Please contact an administrator to request access.'
+      );
       return;
     }
 
     if (errorParam) {
-      setError("Authentication could not be completed. Please try again or contact support.");
+      setError(
+        'Authentication could not be completed. Please try again or contact support.'
+      );
       return;
     }
 
     if (!token) {
-      setError("Authentication token missing or invalid.");
+      setError('Authentication token missing or invalid.');
       return;
     }
 
     async function initializeSession() {
       try {
         setAuthToken(token);
-        const response = await apiRequest("/api/auth/me");
+        const response = await apiRequest('/api/auth/me');
 
         if (response) {
           login(response);
           // Small delay for UX transition, using replace to clear token from history
-          setTimeout(() => router.replace("/dashboard"), 800);
+          setTimeout(() => router.replace('/dashboard'), 800);
         } else {
-          setError("We were unable to initialize your session. Please try again.");
+          setError(
+            'We were unable to initialize your session. Please try again.'
+          );
         }
       } catch (err) {
-        console.error("Session Initialization Error:", err);
-        setError("A connection error occurred while establishing your session.");
+        console.error('Session Initialization Error:', err);
+        setError(
+          'A connection error occurred while establishing your session.'
+        );
       }
     }
 
@@ -87,7 +97,12 @@ export default function OAuthCallbackPage() {
             animate={{ opacity: 1, y: 0 }}
             className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-xl shadow-teal-900/5 border border-stone-100"
           >
-            <Image src="/brand/logo-dark.svg" alt="HavenStay" width={36} height={36} />
+            <Image
+              src="/brand/logo-dark.svg"
+              alt="HavenStay"
+              width={36}
+              height={36}
+            />
           </motion.div>
           <motion.span
             initial={{ opacity: 0 }}
@@ -109,20 +124,48 @@ export default function OAuthCallbackPage() {
           {error ? (
             <div className="space-y-8">
               <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-rose-50 text-rose-500">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
               </div>
               <div className="space-y-3">
-                <h2 className="text-2xl font-black text-stone-900 tracking-tight">Access Restricted</h2>
+                <h2 className="text-2xl font-black text-stone-900 tracking-tight">
+                  Access Restricted
+                </h2>
                 <p className="text-sm text-stone-500 leading-relaxed font-medium">
                   {error}
                 </p>
               </div>
               <button
-                onClick={() => router.push("/login")}
+                onClick={() => router.push('/login')}
                 className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-2xl bg-stone-900 !h-14 text-[11px] font-black uppercase tracking-[0.2em] text-white transition-all hover:bg-stone-800 active:scale-[0.98]"
               >
                 <span className="relative z-10">Return to Login</span>
-                <svg className="h-4 w-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                <svg
+                  className="h-4 w-4 transition-transform group-hover:-translate-x-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
               </button>
             </div>
           ) : (
@@ -136,7 +179,9 @@ export default function OAuthCallbackPage() {
               </div>
 
               <div className="space-y-3">
-                <h2 className="text-2xl font-black text-stone-900 tracking-tight">Authenticating</h2>
+                <h2 className="text-2xl font-black text-stone-900 tracking-tight">
+                  Authenticating
+                </h2>
                 <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-teal-600/60">
                   Preparing your secure session...
                 </p>

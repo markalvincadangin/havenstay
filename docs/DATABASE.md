@@ -11,7 +11,7 @@ This document is the authoritative specification for the HavenStay data layer. I
 
 ---
 
-## 2. Distributed Architecture (CCR-002)
+## 2. Distributed Architecture 
 
 The system utilizes a **Primary-Replica** topology to ensure data durability and optimize reporting performance:
 - **Primary Node (`db-primary`):** Processes all Data Manipulation Language (DML) operations (INSERT, UPDATE, DELETE). This node is the authoritative host for all 45 forensic triggers.
@@ -72,11 +72,17 @@ To ensure financial integrity across all operational modules, the following stan
 - **Meter Assignments:** Closed by setting `valid_to` to the decommission date. Open (active) assignments have `valid_to = NULL`. No deletion occurs; the full assignment history is retained.
 - **Billing Line Items:** Append-only. No update or soft-delete mechanism exists. Financial corrections are made by adding an `adjustment` type line item to the same or a subsequent billing cycle.
 - **Soft Void:** Payments are never physically deleted or soft-deleted; they are "voided" via `voided_at`. This preserves the transaction's place in the financial history and audit trail.
-- **Audit Immutability (BR-AUD-003):** The `audit_logs` table is protected by `BEFORE UPDATE` and `BEFORE DELETE` triggers that block any modification or removal of log entries, even by the Admin role.
+- **Audit Immutability (BR-AUD-003):** The `audit_logs` table is protected by `BEFORE UPDATE` and `BEFORE DELETE` triggers that block any modification or removal of log entries, even by the Admin role. 
+  > [!NOTE]
+  > **Known Limitation (Unbounded Growth):** With 45 triggers continuously writing to `audit_logs`, there is currently no retention or archival policy. The table grows unbounded. A periodic archival strategy should be considered for long-term production use.
+
+### 4.4 System Locks and Idempotency
+To prevent double-processing of financial transactions and critical state changes, the application uses an idempotency key mechanism (e.g., `HandleIdempotency` middleware). 
+- **TTL (Time To Live):** The cache-lock TTL is **1 hour**. Any repeated request with the same idempotency key within this 1-hour window will be blocked or replay the cached response. (Note: Previous documentation may have incorrectly stated a 24-hour TTL; 1 hour is the authoritative setting).
 
 ---
 
-## 5. Forensic Engineering (CCR-007)
+## 5. Forensic Engineering 
 
 The system utilizes a trigger-based auditing mechanism to ensure a verifiable change-set history of all operational and financial events.
 The MySQL primary node hosts **45 dedicated triggers** to ensure high-fidelity change capture while preventing infinite recursion on log tables.
@@ -87,10 +93,11 @@ The MySQL primary node hosts **45 dedicated triggers** to ensure high-fidelity c
   - 2 immutability protection triggers: BEFORE UPDATE + BEFORE DELETE on `audit_logs`.
 - **Assignment Guard:** `trg_meter_assignments_bi` (BEFORE INSERT) enforces BR-MET-003 — prevents double-assigning a meter that already has an open `valid_to = NULL` assignment.
 - **Correlation:** Every record is tagged with an `@current_user_id` and a `correlation_id` to link row changes to the initiating workflow.
+- **Raw SQL vs Migrations:** The 45 triggers are authored as raw SQL inside the canonical `havenstay_schema.sql` file, rather than within Laravel's PHP-based migration wrappers. This ensures clean SQL auditing. The Laravel migration (`2026_04_09_092954_create_havenstay_master_schema.php`) reads and executes this file directly, guarded by a driver check (`if (DB::getDriverName() === 'mysql')`). This explicitly bypasses trigger execution during SQLite CI test runs (`php artisan test`), intentionally decoupling fast application tests from the MySQL-specific forensic logic.
 
 ---
 
-## 6. Analytical Engine (CCR-005)
+## 6. Analytical Engine 
 
 To maintain reporting consistency and ensure that complex JOINS do not leak into the application logic, the database provides 6 standardized views. All analytical reports query these views exclusively.
 

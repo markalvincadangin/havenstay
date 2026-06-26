@@ -343,7 +343,7 @@ billing wizard follow these additional rules:
 - **Deposit Clearance Indicator:** Contract profiles and Side-Sheets must display `is_cleared` as an emerald `<StatusBadge>cleared</StatusBadge>` when settled. Completed contracts without clearance show an amber warning (BR-PAY-010).
 
 
-### 5.11 Forensic Tracing & Correlation (CCR-007)
+### 5.11 Forensic Tracing & Correlation
 
 The following rules ensure "DNA-level" traceability across all transactional interfaces:
 
@@ -527,7 +527,7 @@ Every page-level `page.js` needs a JSDoc block at the top. This connects the cod
  * @traceability
  * - Requirements: FR-032, FR-035, FR-038
  * - Business Rules: BR-BIL-001, BR-BIL-002
- * - Forensic: CCR-007
+ * - Forensic: Audit Log
  * 
  * @performance
  * - Category: Financial (30s cache)
@@ -585,7 +585,7 @@ the response must follow this structure:
 | **v3.1** | **2026-04-19** | **Architectural Lockdown.** Mandated directory structure, enforced API Choke Point (§4.5), codified Server/Client component boundaries. |
 | **v3.2** | **2026-04-19** | **Structure Correction.** Aligned directory structure with actual Next.js App Router patterns. |
 | v3.3 | 2026-04-19 | Forensic Route Mapping. Grounded Directory Structure in SRS/BR requirements. |
-| v4.0 | 2026-04-20 | Transaction Log Retirement. Removed TX log references. Consolidated forensics under Audit Logs (CCR-007). |
+| v4.0 | 2026-04-20 | Transaction Log Retirement. Removed TX log references. Consolidated forensics under Audit Logs. |
 | **v4.5** | **2026-04-20** | **Forensic Hardening Pass.** Codified Correlation ID tracing (§5.11), shared-room apportionment UI (§5.10), and contiguous renewal logic (§5.12). Synced with v4.8 Database Engine. |
 | **v4.6** | **2026-04-20** | **Forensic Normalization Pass.** Synced StatusBadge logic and Resource ID prefixes. Fixed stale file paths and removed deprecated Add-on Registry route tree. |
 | **v7.0.0** | **2026-04-21** | **Command Center Paradigm.** Decommissioned legacy `/new` and `/edit` folders. Mandated `SideSheetOverlay` and `WizardFrame` as the authoritative interaction model. |

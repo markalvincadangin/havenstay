@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:local": "node ./e2e/run-local.mjs"
+    "test:e2e:local": "node ./e2e/run-local.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "framer-motion": "^12.38.0",
@@ -32,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "jsdom": "^25.0.1",
+    "prettier": "^3.8.4",
     "tailwindcss": "^4",
     "vitest": "^3.0.5"
   }

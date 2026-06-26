@@ -566,7 +566,7 @@ class ReportService
         $voidedAmount = (float) $voidedQuery->sum('amount_paid');
 
         // Billed total for performance efficiency comparison
-        // CCR-009: Use period-overlap logic to align denominator with collection window
+        // Use period-overlap logic to align denominator with collection window
         $billingQuery = DB::table('vw_billing_summary');
         if (! empty($filters['start_date'])) {
             $billingQuery->whereDate('billing_period_to', '>=', Carbon::parse($filters['start_date'])->toDateString());

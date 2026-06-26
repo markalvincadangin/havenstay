@@ -8,6 +8,7 @@ vendor
 
 # Testing artifacts
 tests
+testsprite_tests
 .phpunit.result.cache
 phpunit.xml
 phpunit.mysql.xml
@@ -16,7 +17,21 @@ phpunit.mysql.xml
 .git
 .gitignore
 *.md
-migration_error.txt
+debug_output.txt
+scratch_debug_meters.php
 
 # Node artifacts (backend has a package.json for Vite)
 node_modules
+
+# Laravel storage artifacts (logs, cache, sessions)
+storage/logs
+storage/framework/cache
+storage/framework/sessions
+storage/framework/views
+storage/debugbar
+
+# IDE
+.idea
+.vscode
+.phpstorm.meta.php
+_ide_helper*.php

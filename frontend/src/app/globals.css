@@ -1,31 +1,31 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   /* Brand Palette - Deep Teal */
-  --color-primary: #0D9488;
-  --color-primary-dark: #0F766E;
-  --color-primary-light: #CCFBF1;
+  --color-primary: #0d9488;
+  --color-primary-dark: #0f766e;
+  --color-primary-light: #ccfbf1;
 
   /* Sidebar & Core UI */
-  --color-sidebar: #0F172A;
-  --color-sidebar-text: #94A3B8;
-  --color-sidebar-active: #FFFFFF;
+  --color-sidebar: #0f172a;
+  --color-sidebar-text: #94a3b8;
+  --color-sidebar-active: #ffffff;
 
   /* Layout Surfaces */
-  --color-background: #FAFAF9;
-  --color-surface: #FFFFFF;
-  --color-border: #E7E5E4;
-  --color-border-strong: #D6D3D1;
+  --color-background: #fafaf9;
+  --color-surface: #ffffff;
+  --color-border: #e7e5e4;
+  --color-border-strong: #d6d3d1;
 
   /* Typography */
-  --color-text: #1C1917;
-  --color-text-secondary: #78716C;
-  --color-text-disabled: #A8A29E;
+  --color-text: #1c1917;
+  --color-text-secondary: #78716c;
+  --color-text-disabled: #a8a29e;
 
   /* Functional Accents */
-  --color-cta: #0D9488;
-  --color-danger: #991B1B;
-  --color-warning: #92400E;
+  --color-cta: #0d9488;
+  --color-danger: #991b1b;
+  --color-warning: #92400e;
 
   /* Transitions */
   --transition-fast: 150ms ease;
@@ -34,22 +34,26 @@
 
   /* Shadow Depths - Soft UI Evolution */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-md:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg:
+    0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   --shadow-glass: 0 8px 32px 0 rgba(13, 148, 136, 0.12);
 
   /* Legacy & Semantic (for backward compatibility) */
   --surface-base: var(--color-background);
   --surface-card: var(--color-surface);
-  --surface-muted: #F5F5F4;
+  --surface-muted: #f5f5f4;
 
-  --primary-50: #F0FDFA;
-  --primary-400: #2DD4BF;
+  --primary-50: #f0fdfa;
+  --primary-400: #2dd4bf;
   --primary-600: var(--color-primary);
-  --primary-800: #115E59;
+  --primary-800: #115e59;
 
-  --font-sans: var(--font-dm-sans), 'DM Sans', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans:
+    var(--font-dm-sans), 'DM Sans', 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: var(--font-dm-mono), 'DM Mono', monospace;
 }
 
@@ -93,7 +97,9 @@
     border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 20px 24px;
-    transition: box-shadow 150ms ease, border-color 150ms ease;
+    transition:
+      box-shadow 150ms ease,
+      border-color 150ms ease;
   }
 
   .kpi-card-evolution:hover {
@@ -103,7 +109,6 @@
 }
 
 @media print {
-
   aside,
   header,
   button {
@@ -135,7 +140,7 @@
    * Avoid tracking-tighter on multi-word H1s; use word-spacing so titles breathe.
    */
   .hs-page-title {
-    font-family: "Plus Jakarta Sans", var(--font-sans), system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', var(--font-sans), system-ui, sans-serif;
     font-size: 1.5rem;
     line-height: 2rem;
     font-weight: 900;
@@ -149,7 +154,7 @@
   }
 
   .hs-strip-title {
-    font-family: "Plus Jakarta Sans", var(--font-sans), system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', var(--font-sans), system-ui, sans-serif;
     font-size: 10px;
     line-height: 1rem;
     font-weight: 900;
@@ -176,18 +181,23 @@
   }
 
   @keyframes hs-pulse-glow {
-    0%, 100% { box-shadow: 0 0 0px rgba(13, 148, 136, 0); }
-    50% { box-shadow: 0 0 20px rgba(13, 148, 136, 0.4); }
+    0%,
+    100% {
+      box-shadow: 0 0 0px rgba(13, 148, 136, 0);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(13, 148, 136, 0.4);
+    }
   }
 
   /** Subtle content feedback when syncing in the background */
   .hs-resource-syncing {
     opacity: 0.95;
     /* Instant return to full opacity when syncing stops */
-    transition: opacity 0s; 
+    transition: opacity 0s;
     user-select: none;
   }
-  
+
   /* Only animate when ENTERING the syncing state */
   .group\/resource:has(.hs-resource-syncing) .hs-resource-syncing {
     transition: opacity var(--transition-base);
@@ -202,9 +212,15 @@ input::-ms-clear {
 
 /* --- Forensic Loading UX Animations --- */
 @keyframes hs-indeterminate {
-  0% { transform: translateX(-100%); }
-  50% { transform: translateX(-30%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(-30%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .hs-indeterminate-bar {
@@ -213,19 +229,21 @@ input::-ms-clear {
 }
 
 .hs-indeterminate-bar::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, 
-    transparent 0%, 
-    rgba(255, 255, 255, 0.6) 50%, 
-    transparent 100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.6) 50%,
+    transparent 100%
+  );
   animation: hs-indeterminate 1.2s infinite ease-in-out;
 }
 
 .hs-loading-glow {
   box-shadow: 0 0 8px var(--color-primary);
-}
+}

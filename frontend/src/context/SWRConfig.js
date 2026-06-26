@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { SWRConfig } from "swr";
-import { fetcher } from "@/lib/api";
+import { SWRConfig } from 'swr';
+import { fetcher } from '@/lib/api';
 
 export function SWRProvider({ children }) {
   return (
@@ -17,21 +17,21 @@ export function SWRProvider({ children }) {
         shouldRetryOnError: false,
         onError: (error, key) => {
           // Centralized error surfacing for easier runtime debugging.
-          if (typeof window !== "undefined") {
+          if (typeof window !== 'undefined') {
             window.dispatchEvent(
-              new CustomEvent("havenstay:api-error", {
+              new CustomEvent('havenstay:api-error', {
                 detail: {
                   key,
                   status: error?.status ?? null,
-                  message: error?.message ?? "Unknown API error",
+                  message: error?.message ?? 'Unknown API error',
                 },
-              }),
+              })
             );
           }
 
-          if (process.env.NODE_ENV !== "production") {
+          if (process.env.NODE_ENV !== 'production') {
             // Keep noisy details in development only.
-            console.error("[SWR] request failed", { key, error });
+            console.error('[SWR] request failed', { key, error });
           }
         },
       }}

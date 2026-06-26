@@ -1,15 +1,18 @@
-"use client";
+'use client';
 
-import Image from "next/image";
-import Link from "next/link";
-import { Card } from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
+import Image from 'next/image';
+import Link from 'next/link';
+import { Card } from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
 
 export default function NotFound() {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--surface-base)]">
       <header className="flex h-16 shrink-0 items-center border-b border-[var(--neutral-200)] bg-white px-6">
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold text-[var(--neutral-900)] hover:opacity-80">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-lg font-semibold text-[var(--neutral-900)] hover:opacity-80"
+        >
           <Image src="/logo.svg" alt="HavenStay" width={28} height={28} />
           HavenStay
         </Link>
@@ -22,16 +25,25 @@ export default function NotFound() {
               404
             </div>
           </div>
-          <h1 className="mb-2 text-2xl font-bold text-[var(--neutral-900)]">Page Not Found</h1>
+          <h1 className="mb-2 text-2xl font-bold text-[var(--neutral-900)]">
+            Page Not Found
+          </h1>
           <p className="mb-8 text-sm text-[var(--neutral-600)]">
-            We couldn&apos;t find the page you&apos;re looking for. It may have been moved, deleted, or you might have mistyped the URL.
+            We couldn&apos;t find the page you&apos;re looking for. It may have
+            been moved, deleted, or you might have mistyped the URL.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Button asChild>
               <Link href="/dashboard">Return to Dashboard</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link href="#" onClick={(e) => { e.preventDefault(); window.history.back(); }}>
+              <Link
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.history.back();
+                }}
+              >
                 Go Back
               </Link>
             </Button>

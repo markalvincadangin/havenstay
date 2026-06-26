@@ -35,4 +35,3 @@ export default function FilterChips({ items = [], onClearAll }) {
     </div>
   );
 }
-

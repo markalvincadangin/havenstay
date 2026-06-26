@@ -1,11 +1,11 @@
-"use client";
-import { useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle,  } from "lucide-react";
-import Button from "./Button";
+'use client';
+import { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AlertTriangle } from 'lucide-react';
+import Button from './Button';
 /**
  * ConfirmationDialog — Premium replacement for window.confirm.
- * 
+ *
  * @param {boolean} open
  * @param {string} title
  * @param {string} description
@@ -20,8 +20,8 @@ export default function ConfirmationDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   onConfirm,
   onCancel,
   isLoading = false,
@@ -31,10 +31,10 @@ export default function ConfirmationDialog({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && !isLoading) onCancel();
+      if (e.key === 'Escape' && !isLoading) onCancel();
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, isLoading, onCancel]);
   return (
     <AnimatePresence>
@@ -54,7 +54,9 @@ export default function ConfirmationDialog({
             className="relative w-full max-w-[440px] rounded-3xl border border-stone-200 bg-white p-8 shadow-2xl shadow-stone-950/20"
           >
             <div className="flex items-start gap-4">
-              <div className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${isDanger ? 'bg-red-50 text-red-600' : 'bg-teal-50 text-teal-600'}`}>
+              <div
+                className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${isDanger ? 'bg-red-50 text-red-600' : 'bg-teal-50 text-teal-600'}`}
+              >
                 <AlertTriangle size={24} strokeWidth={2.5} />
               </div>
               <div className="flex-1">
@@ -77,7 +79,7 @@ export default function ConfirmationDialog({
                 {cancelLabel}
               </Button>
               <Button
-                variant={isDanger ? "danger" : "primary"}
+                variant={isDanger ? 'danger' : 'primary'}
                 className="rounded-xl px-8 !h-11 text-[10px] font-black uppercase tracking-widest shadow-lg"
                 onClick={onConfirm}
                 isLoading={isLoading}

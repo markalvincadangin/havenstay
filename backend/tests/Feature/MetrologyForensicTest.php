@@ -13,7 +13,7 @@ use Tests\TestCase;
 /**
  * MetrologyForensicTest
  *
- * Demonstrates CCR-008 (Audit Triggers) and Forensic Business Rules (Monotonicity).
+ * Demonstrates Audit Triggers and Forensic Business Rules (Monotonicity).
  */
 class MetrologyForensicTest extends TestCase
 {

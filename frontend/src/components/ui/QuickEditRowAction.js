@@ -1,8 +1,12 @@
-"use client";
+'use client';
 
-import { Pen } from "lucide-react";
+import { Pen } from 'lucide-react';
 
-export function QuickEditRowAction({ onClick, title = "Quick Edit", disabled = false }) {
+export function QuickEditRowAction({
+  onClick,
+  title = 'Quick Edit',
+  disabled = false,
+}) {
   if (disabled) return null;
 
   return (

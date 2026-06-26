@@ -7,7 +7,7 @@ Engineering reference for contributors. Read before making changes.
 ## 1. Project Overview
 
 HavenStay is a web-based Boarding House Management System for small-scale
-property operations. It is also an academic deliverable with strict database
+property operations. It is a robust application with strict database
 requirements that govern schema design. Both concerns are treated as hard
 constraints — neither overrides the other.
 
@@ -44,15 +44,8 @@ architectural constraints. They must not be removed or worked around.
 
 | ID      | Requirement                        | Where implemented                          |
 |---------|------------------------------------|--------------------------------------------|
-| CCR-001 | ≥ 6 relational entities            | 15 tables in `db/havenstay_schema.sql`     |
-| CCR-002 | Distributed DB (primary-replica)   | `docker-compose.yml`                       |
-| CCR-003 | Full CRUD operations               | All service classes                        |
-| CCR-004 | SQL operators: AND, OR, BETWEEN, LIKE | Filter methods in service classes       |
-| CCR-005 | Multi-table JOINs                  | 6 reporting views (`vw_*`)                 |
-| CCR-006 | Explicit transactions              | `DB::transaction()` in write services      |
-| CCR-007 | DB triggers for change logging     | 45 triggers in schema, fire into `audit_logs` |
 
-### 3.1 Forensic Trigger Architecture (CCR-007)
+### 3.1 Forensic Trigger Architecture
 
 The system enforces 100% forensic attribution via **45 database triggers** on the MySQL primary. The math is non-standard due to specific integrity guards:
 
@@ -125,7 +118,7 @@ AuditService::setSystemContext();
 
 Write comments that explain intent or non-obvious decisions.
 Do not write comments that restate what the code already says.
-Avoid scatter-tags (like CCR-001) in function bodies; maintain
+Avoid scatter-tags in function bodies; maintain
 traceability in this document and SRS instead.
 
 ### Error handling

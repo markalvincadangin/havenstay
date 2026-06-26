@@ -1,13 +1,13 @@
-import React from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import EmptyState from "./EmptyState";
+import React from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import EmptyState from './EmptyState';
 
 export function Table({
   columns,
   rows,
-  emptyTitle = "No records found.",
-  emptyDescription = "Adjust filters or add a new record.",
+  emptyTitle = 'No records found.',
+  emptyDescription = 'Adjust filters or add a new record.',
   caption,
   ariaLabel,
   /** When true, omit outer border/radius/shadow — use inside a registry card body. */
@@ -18,7 +18,7 @@ export function Table({
   dense = false,
   /** Optional client-side sort: column `sortKey` (or `key`) must match parent state. */
   sortColumn = null,
-  sortDirection = "asc",
+  sortDirection = 'asc',
   onSortChange,
   /** ID of the row to briefly highlight/flash for context preservation. */
   highlightedRowId = null,
@@ -26,65 +26,81 @@ export function Table({
   const shouldReduceMotion = useReducedMotion();
 
   const shellClass = [
-    "relative scroll-smooth scrollbar-hide w-full",
-    embedded ? "min-w-0 overflow-x-auto" : "overflow-x-auto rounded-2xl border border-stone-200 bg-white shadow-sm"
-  ].join(" ");
+    'relative scroll-smooth scrollbar-hide w-full',
+    embedded
+      ? 'min-w-0 overflow-x-auto'
+      : 'overflow-x-auto rounded-2xl border border-stone-200 bg-white shadow-sm',
+  ].join(' ');
 
   const tbodyVariants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
       transition: {
-        // Faster stagger for a snappier feel. 
+        // Faster stagger for a snappier feel.
         // Disable stagger if there are too many rows (>25) or if it's just a data update.
-        staggerChildren: (shouldReduceMotion || rows.length > 25) ? 0 : 0.01
-      }
-    }
+        staggerChildren: shouldReduceMotion || rows.length > 25 ? 0 : 0.01,
+      },
+    },
   };
 
   const trVariants = {
     hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 4 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } }
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.15, ease: 'easeOut' },
+    },
   };
 
   const headerRowClass = [
-    "border-b border-stone-100",
-    stickyHeader ? "sticky top-0 z-10 bg-stone-50/90 backdrop-blur-md" : "bg-stone-50/50"
-  ].join(" ");
+    'border-b border-stone-100',
+    stickyHeader
+      ? 'sticky top-0 z-10 bg-stone-50/90 backdrop-blur-md'
+      : 'bg-stone-50/50',
+  ].join(' ');
 
-  const thPadding = dense ? "py-1.5" : "py-2.5";
+  const thPadding = dense ? 'py-1.5' : 'py-2.5';
 
   return (
     <div className={shellClass}>
-      <table className="min-w-full text-left text-sm" aria-label={ariaLabel || caption}>
+      <table
+        className="min-w-full text-left text-sm"
+        aria-label={ariaLabel || caption}
+      >
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         <thead className={headerRowClass}>
           <tr>
             {columns.map((col) => {
               const sk = col.sortKey ?? col.key;
               const active = sortColumn != null && sk === sortColumn;
-              const sortable = Boolean(col.sortable && typeof onSortChange === "function");
+              const sortable = Boolean(
+                col.sortable && typeof onSortChange === 'function'
+              );
 
               return (
                 <th
                   key={col.key}
                   scope="col"
                   className={[
-                    "px-6 text-[10px] font-black tracking-widest text-stone-400 uppercase",
+                    'px-6 text-[10px] font-black tracking-widest text-stone-400 uppercase',
                     thPadding,
-                    col.className?.includes("text-right") ? "text-right" :
-                      col.className?.includes("text-center") ? "text-center" : "text-left",
+                    col.className?.includes('text-right')
+                      ? 'text-right'
+                      : col.className?.includes('text-center')
+                        ? 'text-center'
+                        : 'text-left',
                     col.headerClassName,
                   ]
                     .filter(Boolean)
-                    .join(" ")}
+                    .join(' ')}
                   aria-sort={
                     sortable
                       ? active
-                        ? sortDirection === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : "none"
+                        ? sortDirection === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : 'none'
                       : undefined
                   }
                 >
@@ -92,24 +108,33 @@ export function Table({
                     <button
                       type="button"
                       className={[
-                        "max-w-full items-center gap-1.5 rounded-md py-0.5 font-inherit tracking-widest text-stone-400 transition-colors hover:text-stone-700",
-                        col.className?.includes("text-right") ? "flex w-full justify-end" :
-                          col.className?.includes("text-center") ? "flex w-full justify-center" : "inline-flex",
+                        'max-w-full items-center gap-1.5 rounded-md py-0.5 font-inherit tracking-widest text-stone-400 transition-colors hover:text-stone-700',
+                        col.className?.includes('text-right')
+                          ? 'flex w-full justify-end'
+                          : col.className?.includes('text-center')
+                            ? 'flex w-full justify-center'
+                            : 'inline-flex',
                       ]
                         .filter(Boolean)
-                        .join(" ")}
+                        .join(' ')}
                       onClick={() => onSortChange(sk)}
                     >
                       <span>{col.label}</span>
-                      <span className="inline-flex shrink-0 text-stone-400" aria-hidden>
+                      <span
+                        className="inline-flex shrink-0 text-stone-400"
+                        aria-hidden
+                      >
                         {active ? (
-                          sortDirection === "asc" ? (
+                          sortDirection === 'asc' ? (
                             <ArrowUp className="size-3.5" strokeWidth={2.5} />
                           ) : (
                             <ArrowDown className="size-3.5" strokeWidth={2.5} />
                           )
                         ) : (
-                          <ArrowUpDown className="size-3.5 opacity-45" strokeWidth={2.5} />
+                          <ArrowUpDown
+                            className="size-3.5 opacity-45"
+                            strokeWidth={2.5}
+                          />
                         )}
                       </span>
                     </button>
@@ -140,19 +165,25 @@ export function Table({
                   ...otherProps
                 } = child.props;
 
-                // If it's an ExpandableTableRow or marked as a custom component, 
+                // If it's an ExpandableTableRow or marked as a custom component,
                 // we render it directly to preserve its internal logic.
                 if (_expandableContent || asChild) {
                   return child;
                 }
 
-                const isHighlighted = highlightedRowId != null && String(child.key || index).includes(String(highlightedRowId));
+                const isHighlighted =
+                  highlightedRowId != null &&
+                  String(child.key || index).includes(String(highlightedRowId));
 
                 const finalRowClass = [
                   childClass,
-                  dense ? "hs-table-row-dense" : "",
-                  isHighlighted ? "bg-teal-50 transition-colors duration-1000" : ""
-                ].filter(Boolean).join(" ");
+                  dense ? 'hs-table-row-dense' : '',
+                  isHighlighted
+                    ? 'bg-teal-50 transition-colors duration-1000'
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ');
 
                 // Use existing key if available
                 const rowKey = child.key ?? `hs-row-${index}`;
@@ -186,5 +217,3 @@ export function Table({
     </div>
   );
 }
-
-

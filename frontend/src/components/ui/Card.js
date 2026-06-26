@@ -5,16 +5,16 @@
  * @param {React.ReactNode} props.children
  * @param {string} [props.className]
  */
-export function Card({ children, className = "" }) {
+export function Card({ children, className = '' }) {
   return (
     <div
       className={[
-        "relative rounded-2xl bg-white p-6",
-        "border border-stone-200 shadow-sm",
-        "transition-[box-shadow,border-color] duration-150",
-        "hover:shadow-lg hover:border-stone-300",
+        'relative rounded-2xl bg-white p-6',
+        'border border-stone-200 shadow-sm',
+        'transition-[box-shadow,border-color] duration-150',
+        'hover:shadow-lg hover:border-stone-300',
         className,
-      ].join(" ")}
+      ].join(' ')}
     >
       {children}
     </div>
@@ -27,6 +27,15 @@ export function Card({ children, className = "" }) {
  * @param {React.ReactNode} props.children
  * @param {string} [props.className]
  */
-export function Section({ children, className = "" }) {
-  return <div className={["rounded-xl border border-[var(--color-primary)]/10 bg-[var(--color-bg)] p-4 shadow-sm", className].join(" ")}>{children}</div>;
+export function Section({ children, className = '' }) {
+  return (
+    <div
+      className={[
+        'rounded-xl border border-[var(--color-primary)]/10 bg-[var(--color-bg)] p-4 shadow-sm',
+        className,
+      ].join(' ')}
+    >
+      {children}
+    </div>
+  );
 }

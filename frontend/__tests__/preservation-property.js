@@ -1,16 +1,16 @@
 /**
  * Preservation Property Tests
- * 
+ *
  * IMPORTANT: These tests verify existing working functionality.
  * They should PASS on unfixed code to establish a baseline.
- * 
+ *
  * **Validates: Requirements 3.1-3.15**
- * 
+ *
  * Test Strategy:
  * - Observe behavior on UNFIXED code for non-buggy inputs
  * - Write property-based tests capturing observed behavior patterns
  * - Ensure all existing functionality continues to work after fixes
- * 
+ *
  * Property-Based Testing Approach:
  * - Generate multiple test cases to verify behavior across input space
  * - Test core functionality that should remain unchanged
@@ -73,24 +73,31 @@ function readFile(filePath) {
   try {
     return fs.readFileSync(fullPath, 'utf8');
   } catch (error) {
-    console.error(`${colors.red}Error reading file ${filePath}:${colors.reset}`, error.message);
+    console.error(
+      `${colors.red}Error reading file ${filePath}:${colors.reset}`,
+      error.message
+    );
     return null;
   }
 }
 
 /**
  * Property 1: Contract Display and Filtering
- * 
+ *
  * Preservation Requirement 3.1, 3.2, 3.3:
  * - Contract list displays all existing columns correctly
  * - Contract creation for solo/shared rooms works correctly
  * - Contract details show tenant, room, and bed space information
- * 
+ *
  * This property verifies that contract display functionality remains intact.
  */
 function testContractDisplayPreservation() {
-  console.log(`${colors.bold}${colors.cyan}Property 1: Contract Display and Filtering${colors.reset}`);
-  console.log(`${colors.cyan}Verifying contract list and creation functionality is preserved...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Property 1: Contract Display and Filtering${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Verifying contract list and creation functionality is preserved...${colors.reset}\n`
+  );
 
   const contractsListContent = readFile('src/app/contracts/page.js');
   const contractsNewContent = readFile('src/app/contracts/new/page.js');
@@ -109,7 +116,12 @@ function testContractDisplayPreservation() {
   const hasStatusColumn = /status/.test(contractsListContent);
 
   assert(
-    hasContractIdColumn && hasTenantColumn && hasRoomColumn && hasPeriodColumn && hasMonthlyRateColumn && hasStatusColumn,
+    hasContractIdColumn &&
+      hasTenantColumn &&
+      hasRoomColumn &&
+      hasPeriodColumn &&
+      hasMonthlyRateColumn &&
+      hasStatusColumn,
     'Property 1.1: Contract list displays all required columns',
     'PASS: Contract list includes contract_id, tenant, room, period, monthly_rate, and status columns'
   );
@@ -144,13 +156,20 @@ function testContractDisplayPreservation() {
   const hasDepositAmount = /deposit_amount/.test(contractsNewContent);
 
   assert(
-    hasTenantField && hasRoomField && hasMoveInDate && hasMonthlyRent && hasDepositAmount,
+    hasTenantField &&
+      hasRoomField &&
+      hasMoveInDate &&
+      hasMonthlyRent &&
+      hasDepositAmount,
     'Property 1.4: Contract form includes all required fields',
     'PASS: Contract form has tenant_id, room_id, move_in_date, monthly_rent, and deposit_amount fields'
   );
 
   // Test 1.5: Contract list has row click navigation
-  const hasRowClickNavigation = /router\.push\(`\/contracts\/\$\{.*contract_id.*\}`\)/.test(contractsListContent);
+  const hasRowClickNavigation =
+    /router\.push\(`\/contracts\/\$\{.*contract_id.*\}`\)/.test(
+      contractsListContent
+    );
 
   assert(
     hasRowClickNavigation,
@@ -161,17 +180,21 @@ function testContractDisplayPreservation() {
 
 /**
  * Property 2: Billing Display and Calculations
- * 
+ *
  * Preservation Requirement 3.4, 3.5, 3.6:
  * - Billing list displays amounts, status, and payment history correctly
  * - Billing KPI calculations work correctly
  * - Billing details show line items and payment history
- * 
+ *
  * This property verifies that billing display and calculation functionality remains intact.
  */
 function testBillingDisplayPreservation() {
-  console.log(`${colors.bold}${colors.cyan}Property 2: Billing Display and Calculations${colors.reset}`);
-  console.log(`${colors.cyan}Verifying billing list and KPI calculation functionality is preserved...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Property 2: Billing Display and Calculations${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Verifying billing list and KPI calculation functionality is preserved...${colors.reset}\n`
+  );
 
   const billingContent = readFile('src/app/billing/page.js');
 
@@ -190,7 +213,13 @@ function testBillingDisplayPreservation() {
   const hasBalanceColumn = /balance/.test(billingContent);
 
   assert(
-    hasBillingIdColumn && hasTenantColumn && hasPeriodColumn && hasDueDateColumn && hasTotalAmountColumn && hasTotalPaidColumn && hasBalanceColumn,
+    hasBillingIdColumn &&
+      hasTenantColumn &&
+      hasPeriodColumn &&
+      hasDueDateColumn &&
+      hasTotalAmountColumn &&
+      hasTotalPaidColumn &&
+      hasBalanceColumn,
     'Property 2.1: Billing list displays all required columns',
     'PASS: Billing list includes billing_id, tenant, period, due_date, total_amount, total_paid, and balance columns'
   );
@@ -202,7 +231,10 @@ function testBillingDisplayPreservation() {
   const hasCollectedThisMonth = /collectedThisMonth/.test(billingContent);
 
   assert(
-    hasKpiCard && hasTotalOutstanding && hasPastDueAmount && hasCollectedThisMonth,
+    hasKpiCard &&
+      hasTotalOutstanding &&
+      hasPastDueAmount &&
+      hasCollectedThisMonth,
     'Property 2.2: Billing page displays KPI summary cards',
     'PASS: Billing page includes KPI cards for total outstanding, past due amount, and collected this month'
   );
@@ -250,17 +282,21 @@ function testBillingDisplayPreservation() {
 
 /**
  * Property 3: Room Management and Occupancy
- * 
+ *
  * Preservation Requirement 3.7, 3.8, 3.9:
  * - Room list displays in card grid layout correctly
  * - Room filtering by type and valid status values works correctly
  * - Room occupancy is calculated from bed_spaces correctly
- * 
+ *
  * This property verifies that room management functionality remains intact.
  */
 function testRoomManagementPreservation() {
-  console.log(`${colors.bold}${colors.cyan}Property 3: Room Management and Occupancy${colors.reset}`);
-  console.log(`${colors.cyan}Verifying room list and occupancy calculation functionality is preserved...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Property 3: Room Management and Occupancy${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Verifying room list and occupancy calculation functionality is preserved...${colors.reset}\n`
+  );
 
   const roomsContent = readFile('src/app/rooms/page.js');
 
@@ -287,7 +323,11 @@ function testRoomManagementPreservation() {
   const hasStatusBadge = /StatusBadge/.test(roomsContent);
 
   assert(
-    hasRoomNumber && hasRoomType && hasCapacity && hasMonthlyRate && hasStatusBadge,
+    hasRoomNumber &&
+      hasRoomType &&
+      hasCapacity &&
+      hasMonthlyRate &&
+      hasStatusBadge,
     'Property 3.2: Room cards display all required information',
     'PASS: Room cards include room_code, room_type, capacity, monthly_rate, and status badge'
   );
@@ -328,8 +368,10 @@ function testRoomManagementPreservation() {
   );
 
   // Test 3.6: Room status filter includes valid ENUM values
-  const hasAvailableOption = /<option value="available">Available<\/option>/.test(roomsContent);
-  const hasMaintenanceOption = /<option value="maintenance">Maintenance<\/option>/.test(roomsContent);
+  const hasAvailableOption =
+    /<option value="available">Available<\/option>/.test(roomsContent);
+  const hasMaintenanceOption =
+    /<option value="maintenance">Maintenance<\/option>/.test(roomsContent);
 
   assert(
     hasAvailableOption && hasMaintenanceOption,
@@ -340,17 +382,21 @@ function testRoomManagementPreservation() {
 
 /**
  * Property 4: Payment History and Filtering
- * 
+ *
  * Preservation Requirement 3.10, 3.11, 3.12:
  * - Payment list displays all columns correctly
  * - Payment filtering by date range works correctly
  * - Voided payments are displayed with strikethrough
- * 
+ *
  * This property verifies that payment display functionality remains intact.
  */
 function testPaymentDisplayPreservation() {
-  console.log(`${colors.bold}${colors.cyan}Property 4: Payment History and Filtering${colors.reset}`);
-  console.log(`${colors.cyan}Verifying payment list and filtering functionality is preserved...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Property 4: Payment History and Filtering${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Verifying payment list and filtering functionality is preserved...${colors.reset}\n`
+  );
 
   const paymentsContent = readFile('src/app/payments/page.js');
 
@@ -368,7 +414,12 @@ function testPaymentDisplayPreservation() {
   const hasReferenceColumn = /reference_number/.test(paymentsContent);
 
   assert(
-    hasPaymentIdColumn && hasDateColumn && hasTenantColumn && hasAmountColumn && hasMethodColumn && hasReferenceColumn,
+    hasPaymentIdColumn &&
+      hasDateColumn &&
+      hasTenantColumn &&
+      hasAmountColumn &&
+      hasMethodColumn &&
+      hasReferenceColumn,
     'Property 4.1: Payment list displays all required columns',
     'PASS: Payment list includes payment_id, date, tenant, amount, method, and reference columns'
   );
@@ -428,17 +479,21 @@ function testPaymentDisplayPreservation() {
 
 /**
  * Property 5: Dashboard Layout and Navigation
- * 
+ *
  * Preservation Requirement 3.13, 3.14, 3.15:
  * - Dashboard layout and card arrangement remains unchanged
  * - Dashboard navigation links work correctly
  * - Dashboard data refresh functionality works correctly
- * 
+ *
  * This property verifies that dashboard functionality remains intact.
  */
 function testDashboardPreservation() {
-  console.log(`${colors.bold}${colors.cyan}Property 5: Dashboard Layout and Navigation${colors.reset}`);
-  console.log(`${colors.cyan}Verifying dashboard layout and navigation functionality is preserved...${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.cyan}Property 5: Dashboard Layout and Navigation${colors.reset}`
+  );
+  console.log(
+    `${colors.cyan}Verifying dashboard layout and navigation functionality is preserved...${colors.reset}\n`
+  );
 
   const dashboardContent = readFile('src/app/dashboard/page.js');
 
@@ -479,7 +534,12 @@ function testDashboardPreservation() {
   const hasPaymentsLink = /\/payments/.test(dashboardContent);
 
   assert(
-    hasQuickLink && hasTenantsLink && hasRoomsLink && hasContractsLink && hasBillingLink && hasPaymentsLink,
+    hasQuickLink &&
+      hasTenantsLink &&
+      hasRoomsLink &&
+      hasContractsLink &&
+      hasBillingLink &&
+      hasPaymentsLink,
     'Property 5.3: Dashboard has quick navigation links',
     'PASS: Dashboard includes QuickLink components for all main sections'
   );
@@ -534,13 +594,25 @@ function testDashboardPreservation() {
  * Main test runner
  */
 function runTests() {
-  console.log(`\n${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`);
-  console.log(`${colors.bold}${colors.magenta}  Preservation Property Tests${colors.reset}`);
-  console.log(`${colors.bold}${colors.magenta}  Frontend-Backend Schema Alignment Bugfix${colors.reset}`);
-  console.log(`${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`);
+  console.log(
+    `\n${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`
+  );
+  console.log(
+    `${colors.bold}${colors.magenta}  Preservation Property Tests${colors.reset}`
+  );
+  console.log(
+    `${colors.bold}${colors.magenta}  Frontend-Backend Schema Alignment Bugfix${colors.reset}`
+  );
+  console.log(
+    `${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`
+  );
 
-  console.log(`${colors.yellow}IMPORTANT: These tests verify existing working functionality.${colors.reset}`);
-  console.log(`${colors.yellow}They should PASS on unfixed code to establish a baseline.${colors.reset}\n`);
+  console.log(
+    `${colors.yellow}IMPORTANT: These tests verify existing working functionality.${colors.reset}`
+  );
+  console.log(
+    `${colors.yellow}They should PASS on unfixed code to establish a baseline.${colors.reset}\n`
+  );
 
   // Run all property tests
   testContractDisplayPreservation();
@@ -550,16 +622,22 @@ function runTests() {
   testDashboardPreservation();
 
   // Print summary
-  console.log(`${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`);
+  console.log(
+    `${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}`
+  );
   console.log(`${colors.bold}Test Summary${colors.reset}\n`);
   console.log(`${colors.green}Passed:${colors.reset} ${results.passed}`);
   console.log(`${colors.red}Failed:${colors.reset} ${results.failed}`);
-  console.log(`${colors.bold}Total:${colors.reset} ${results.passed + results.failed}\n`);
+  console.log(
+    `${colors.bold}Total:${colors.reset} ${results.passed + results.failed}\n`
+  );
 
   // Document failures if any
-  const failedTests = results.tests.filter(t => t.status === 'FAIL');
+  const failedTests = results.tests.filter((t) => t.status === 'FAIL');
   if (failedTests.length > 0) {
-    console.log(`${colors.bold}${colors.red}Failed Tests (Unexpected):${colors.reset}\n`);
+    console.log(
+      `${colors.bold}${colors.red}Failed Tests (Unexpected):${colors.reset}\n`
+    );
     failedTests.forEach((test, index) => {
       console.log(`${colors.red}${index + 1}. ${test.name}${colors.reset}`);
       console.log(`   ${test.message}`);
@@ -567,15 +645,25 @@ function runTests() {
     });
   }
 
-  console.log(`${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`);
+  console.log(
+    `${colors.bold}${colors.magenta}═══════════════════════════════════════════════════════════════${colors.reset}\n`
+  );
 
   // Expected outcome message
   if (results.failed === 0) {
-    console.log(`${colors.green}${colors.bold}✓ EXPECTED OUTCOME:${colors.reset} ${colors.green}All tests passed!${colors.reset}`);
-    console.log(`${colors.green}  This confirms the baseline behavior that must be preserved after fixes.${colors.reset}\n`);
+    console.log(
+      `${colors.green}${colors.bold}✓ EXPECTED OUTCOME:${colors.reset} ${colors.green}All tests passed!${colors.reset}`
+    );
+    console.log(
+      `${colors.green}  This confirms the baseline behavior that must be preserved after fixes.${colors.reset}\n`
+    );
   } else {
-    console.log(`${colors.red}${colors.bold}⚠ UNEXPECTED OUTCOME:${colors.reset} ${colors.red}Some tests failed.${colors.reset}`);
-    console.log(`${colors.red}  This suggests existing functionality may already be broken.${colors.reset}\n`);
+    console.log(
+      `${colors.red}${colors.bold}⚠ UNEXPECTED OUTCOME:${colors.reset} ${colors.red}Some tests failed.${colors.reset}`
+    );
+    console.log(
+      `${colors.red}  This suggests existing functionality may already be broken.${colors.reset}\n`
+    );
   }
 
   // Exit with appropriate code

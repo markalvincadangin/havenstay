@@ -1,51 +1,60 @@
-"use client";
+'use client';
 
-import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  PlusCircle, Search, HandCoins, Receipt, Activity, FileX, Wallet
-} from "lucide-react";
+  PlusCircle,
+  Search,
+  HandCoins,
+  Receipt,
+  Activity,
+  FileX,
+  Wallet,
+} from 'lucide-react';
 
-import useSWR from "swr";
-import { fetcher } from "@/lib/api";
-import { canManageBilling, canViewBilling } from "@/lib/auth";
-
+import useSWR from 'swr';
+import { fetcher } from '@/lib/api';
+import { canManageBilling, canViewBilling } from '@/lib/auth';
 
 import {
   compareTenantDirectoryName,
   formatDateString,
   formatTenantDirectoryName,
   getCurrentMonthRange,
-} from "@/lib/formatters";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Card } from "@/components/ui/Card";
-import FilterPanelCard from "@/components/ui/FilterPanelCard";
-import FilterChips from "@/components/ui/FilterChips";
-import { Field, Input, Select } from "@/components/ui/Fields";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import { Table } from "@/components/ui/Table";
-import { KpiCard } from "@/components/ui/KpiCard";
-import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
-import { METHOD_LABELS, PAYMENT_STATUS_LABELS, SEARCH_LABELS, SEARCH_PLACEHOLDERS, FILTER_ALL_OPTION } from "@/lib/constants";
+} from '@/lib/formatters';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Card } from '@/components/ui/Card';
+import FilterPanelCard from '@/components/ui/FilterPanelCard';
+import FilterChips from '@/components/ui/FilterChips';
+import { Field, Input, Select } from '@/components/ui/Fields';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { Table } from '@/components/ui/Table';
+import { KpiCard } from '@/components/ui/KpiCard';
+import CurrencyDisplay from '@/components/ui/CurrencyDisplay';
 import {
-  normalizePaginatedList,
-} from "@/lib/pagination";
-import ResourceView from "@/components/ui/ResourceView";
-import TablePagination from "@/components/ui/TablePagination";
-import StandardPage from "@/components/ui/StandardPage";
-import { SkeletonListPage } from "@/components/ui/Skeleton";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import { useAuth } from "@/context/AuthContext";
-import PageHeaderActions from "@/components/ui/PageHeaderActions";
-import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
-import RowOpenIndicator from "@/components/ui/RowOpenIndicator";
-import { ExpandableTableRow } from "@/components/ui/ExpandableTableRow";
-import Button from "@/components/ui/Button";
-import { interactiveTableRowClass } from "@/lib/tableRows";
-import { CorrelationIdCell } from "@/components/ui/CorrelationIdCell";
+  METHOD_LABELS,
+  PAYMENT_STATUS_LABELS,
+  SEARCH_LABELS,
+  SEARCH_PLACEHOLDERS,
+  FILTER_ALL_OPTION,
+} from '@/lib/constants';
+import { normalizePaginatedList } from '@/lib/pagination';
+import ResourceView from '@/components/ui/ResourceView';
+import TablePagination from '@/components/ui/TablePagination';
+import StandardPage from '@/components/ui/StandardPage';
+import { SkeletonListPage } from '@/components/ui/Skeleton';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import { useAuth } from '@/context/AuthContext';
+import PageHeaderActions from '@/components/ui/PageHeaderActions';
+import { usePaginatedFilters } from '@/hooks/usePaginatedFilters';
+import RowOpenIndicator from '@/components/ui/RowOpenIndicator';
+import { ExpandableTableRow } from '@/components/ui/ExpandableTableRow';
+import Button from '@/components/ui/Button';
+import { interactiveTableRowClass } from '@/lib/tableRows';
+import { CorrelationIdCell } from '@/components/ui/CorrelationIdCell';
 
 function paymentRowStatus(p) {
-  return p?.voided_at ? "voided" : "posted";
+  return p?.voided_at ? 'voided' : 'posted';
 }
 
 export default function PaymentsListPage() {
@@ -63,16 +72,16 @@ export default function PaymentsListPage() {
     setPerPage,
     queryString,
   } = usePaginatedFilters({
-    initialFilters: { query: "", dateFrom: "", dateTo: "", status: "all" },
-    initialSort: { by: "id", dir: "desc" },
-    debounceKeys: ["query"],
+    initialFilters: { query: '', dateFrom: '', dateTo: '', status: 'all' },
+    initialSort: { by: 'id', dir: 'desc' },
+    debounceKeys: ['query'],
     buildExtraParams: ({ filters: current, debounced }) => {
       const extra = {};
-      const q = String(debounced.query ?? "").trim();
+      const q = String(debounced.query ?? '').trim();
       if (q) extra.q = q;
       if (current.dateFrom) extra.from = current.dateFrom;
       if (current.dateTo) extra.to = current.dateTo;
-      if (current.status !== "all") extra.posting_status = current.status;
+      if (current.status !== 'all') extra.posting_status = current.status;
       return extra;
     },
   });
@@ -83,23 +92,30 @@ export default function PaymentsListPage() {
   const statusFilter = filters.status;
 
   const canView = useMemo(() => canViewBilling(currentUser), [currentUser]);
-  const canPostPayments = useMemo(() => canManageBilling(currentUser), [currentUser]);
+  const canPostPayments = useMemo(
+    () => canManageBilling(currentUser),
+    [currentUser]
+  );
 
   // KPIs
   const { data: todayRepData, isValidating: todayValidating } = useSWR(
-    currentUser && canView ? (() => {
-      const today = new Date().toISOString().slice(0, 10);
-      return `/api/reports/collections-performance?start_date=${today}&end_date=${today}`;
-    })() : null,
+    currentUser && canView
+      ? (() => {
+          const today = new Date().toISOString().slice(0, 10);
+          return `/api/reports/collections-performance?start_date=${today}&end_date=${today}`;
+        })()
+      : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
 
   const { data: monthRepData, isValidating: monthValidating } = useSWR(
-    currentUser && canView ? (() => {
-      const { start, end } = getCurrentMonthRange();
-      return `/api/reports/collections-performance?start_date=${start}&end_date=${end}`;
-    })() : null,
+    currentUser && canView
+      ? (() => {
+          const { start, end } = getCurrentMonthRange();
+          return `/api/reports/collections-performance?start_date=${start}&end_date=${end}`;
+        })()
+      : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
@@ -110,7 +126,12 @@ export default function PaymentsListPage() {
   const collectionRate = monthRepData?.summary?.collection_rate ?? 0;
 
   // Payments
-  const { data: paymentsData, error: paymentsError, isValidating: isSyncing, mutate: refetchPayments } = useSWR(
+  const {
+    data: paymentsData,
+    error: paymentsError,
+    isValidating: isSyncing,
+    mutate: refetchPayments,
+  } = useSWR(
     currentUser && canView ? `/api/payments${queryString}` : null,
     fetcher,
     { keepPreviousData: true, dedupingInterval: 30000 }
@@ -124,19 +145,23 @@ export default function PaymentsListPage() {
   const loading = !paymentsData && !paymentsError;
   const sortedFiltered = payments;
 
-  const hasActiveFilters = Boolean(String(tenantQuery ?? "").trim()) || statusFilter !== "all" || Boolean(dateFrom) || Boolean(dateTo);
+  const hasActiveFilters =
+    Boolean(String(tenantQuery ?? '').trim()) ||
+    statusFilter !== 'all' ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo);
 
   return (
     <StandardPage
       title="Payment History"
       subtitle="List of all payments and financial settlements."
-      breadcrumbs={<Breadcrumbs items={[{ label: "Payments" }]} />}
+      breadcrumbs={<Breadcrumbs items={[{ label: 'Payments' }]} />}
       loading={loading}
       skeleton={<SkeletonListPage rows={10} />}
       error={paymentsError}
       actions={
         <PageHeaderActions
-          ctaHref={canPostPayments ? "/payments/new" : null}
+          ctaHref={canPostPayments ? '/payments/new' : null}
           ctaLabel="Record Payment"
           ctaIcon={PlusCircle}
           user={currentUser}
@@ -198,7 +223,7 @@ export default function PaymentsListPage() {
                 <Input
                   icon={Search}
                   value={tenantQuery}
-                  onChange={(e) => updateFilter("query", e.target.value)}
+                  onChange={(e) => updateFilter('query', e.target.value)}
                   placeholder={SEARCH_PLACEHOLDERS.payments}
                   className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                 />
@@ -208,13 +233,17 @@ export default function PaymentsListPage() {
               <Field label="Collection Status">
                 <Select
                   value={statusFilter}
-                  onChange={(e) => updateFilter("status", e.target.value)}
+                  onChange={(e) => updateFilter('status', e.target.value)}
                   className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                 >
                   <option value="all">{FILTER_ALL_OPTION}</option>
-                  {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
+                  {Object.entries(PAYMENT_STATUS_LABELS).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    )
+                  )}
                 </Select>
               </Field>
             </div>
@@ -223,7 +252,7 @@ export default function PaymentsListPage() {
                 <Input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => updateFilter("dateFrom", e.target.value)}
+                  onChange={(e) => updateFilter('dateFrom', e.target.value)}
                   className="!h-12 border-stone-200 font-bold tabular-nums"
                 />
               </Field>
@@ -233,7 +262,7 @@ export default function PaymentsListPage() {
                 <Input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => updateFilter("dateTo", e.target.value)}
+                  onChange={(e) => updateFilter('dateTo', e.target.value)}
                   className="!h-12 border-stone-200 font-bold tabular-nums"
                 />
               </Field>
@@ -242,15 +271,33 @@ export default function PaymentsListPage() {
           <FilterChips
             className="mt-6"
             items={[
-              { key: "tenant", label: "Payments", value: tenantQuery, onClear: () => updateFilter("query", "") },
               {
-                key: "status",
-                label: "Payment Status",
-                value: statusFilter !== "all" ? PAYMENT_STATUS_LABELS[statusFilter] || statusFilter : "",
-                onClear: () => updateFilter("status", "all"),
+                key: 'tenant',
+                label: 'Payments',
+                value: tenantQuery,
+                onClear: () => updateFilter('query', ''),
               },
-              { key: "from", label: "Date From", value: dateFrom, onClear: () => updateFilter("dateFrom", "") },
-              { key: "to", label: "Date To", value: dateTo, onClear: () => updateFilter("dateTo", "") },
+              {
+                key: 'status',
+                label: 'Payment Status',
+                value:
+                  statusFilter !== 'all'
+                    ? PAYMENT_STATUS_LABELS[statusFilter] || statusFilter
+                    : '',
+                onClear: () => updateFilter('status', 'all'),
+              },
+              {
+                key: 'from',
+                label: 'Date From',
+                value: dateFrom,
+                onClear: () => updateFilter('dateFrom', ''),
+              },
+              {
+                key: 'to',
+                label: 'Date To',
+                value: dateTo,
+                onClear: () => updateFilter('dateTo', ''),
+              },
             ]}
             onClearAll={resetFilters}
           />
@@ -264,8 +311,9 @@ export default function PaymentsListPage() {
           onRetry={() => refetchPayments()}
           skeleton={<SkeletonListPage rows={10} />}
           emptyProps={{
-            title: "No payments found",
-            description: "Adjust filters or record a payment to see results here.",
+            title: 'No payments found',
+            description:
+              'Adjust filters or record a payment to see results here.',
             action: hasActiveFilters ? (
               <Button
                 variant="secondary"
@@ -274,12 +322,14 @@ export default function PaymentsListPage() {
               >
                 Clear filters
               </Button>
-            ) : null
+            ) : null,
           }}
         >
           <Card className="!p-0 overflow-hidden border-stone-200 rounded-2xl shadow-sm hs-glass-effect">
             <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50/50 px-8 py-4">
-              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">PAYMENT DIRECTORY</h2>
+              <h2 className="hs-strip-title uppercase tracking-[0.2em] text-[10px] font-black text-stone-400">
+                PAYMENT DIRECTORY
+              </h2>
               <div className="text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
                 {listMeta?.total ?? sortedFiltered.length} PAYMENTS MATCHING
               </div>
@@ -292,20 +342,65 @@ export default function PaymentsListPage() {
               sortDirection={sort.dir}
               onSortChange={onSortChange}
               columns={[
-                { key: "payment_id", label: "PAYMENT ID", sortable: true, sortKey: "payment_id", className: "pl-8 w-32" },
-                { key: "date", label: "DATE", sortable: true, sortKey: "date", className: "text-center" },
-                { key: "tenant", label: "TENANT", sortable: true, sortKey: "tenant" },
-                { key: "amount", label: "AMOUNT", sortable: true, sortKey: "amount", className: "text-right" },
-                { key: "method", label: "METHOD", sortable: true, sortKey: "method", className: "text-center" },
-                { key: "status", label: "STATUS", sortable: true, sortKey: "status", className: "text-center" },
-                { key: "actions", label: "", className: "text-right w-16 px-8" },
+                {
+                  key: 'payment_id',
+                  label: 'PAYMENT ID',
+                  sortable: true,
+                  sortKey: 'payment_id',
+                  className: 'pl-8 w-32',
+                },
+                {
+                  key: 'date',
+                  label: 'DATE',
+                  sortable: true,
+                  sortKey: 'date',
+                  className: 'text-center',
+                },
+                {
+                  key: 'tenant',
+                  label: 'TENANT',
+                  sortable: true,
+                  sortKey: 'tenant',
+                },
+                {
+                  key: 'amount',
+                  label: 'AMOUNT',
+                  sortable: true,
+                  sortKey: 'amount',
+                  className: 'text-right',
+                },
+                {
+                  key: 'method',
+                  label: 'METHOD',
+                  sortable: true,
+                  sortKey: 'method',
+                  className: 'text-center',
+                },
+                {
+                  key: 'status',
+                  label: 'STATUS',
+                  sortable: true,
+                  sortKey: 'status',
+                  className: 'text-center',
+                },
+                {
+                  key: 'actions',
+                  label: '',
+                  className: 'text-right w-16 px-8',
+                },
               ]}
               rows={sortedFiltered.map((payment) => {
-                const tenant = payment?.billing?.contract?.tenant || payment?.contract?.tenant;
-                const tenantName = tenant ? formatTenantDirectoryName(tenant) : "—";
+                const tenant =
+                  payment?.billing?.contract?.tenant ||
+                  payment?.contract?.tenant;
+                const tenantName = tenant
+                  ? formatTenantDirectoryName(tenant)
+                  : '—';
                 const rowStatus = paymentRowStatus(payment);
-                const isVoided = rowStatus === "voided";
-                const methodKey = String(payment?.payment_method || "").toLowerCase();
+                const isVoided = rowStatus === 'voided';
+                const methodKey = String(
+                  payment?.payment_method || ''
+                ).toLowerCase();
 
                 return (
                   <ExpandableTableRow
@@ -314,14 +409,22 @@ export default function PaymentsListPage() {
                     expandableContent={
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border border-stone-200 bg-white rounded-xl p-6 shadow-sm">
                         <div className="flex flex-col">
-                          <span className="text-[10px] font-black uppercase text-stone-400 tracking-widest">Payment Details</span>
+                          <span className="text-[10px] font-black uppercase text-stone-400 tracking-widest">
+                            Payment Details
+                          </span>
                           <div className="mt-2 text-sm text-stone-900 font-mono font-bold">
-                            Method: {METHOD_LABELS[methodKey] || payment?.payment_method || "Other"} <span className="text-stone-300 mx-3">|</span>
-                            Reference: {payment.reference_number || "—"}
+                            Method:{' '}
+                            {METHOD_LABELS[methodKey] ||
+                              payment?.payment_method ||
+                              'Other'}{' '}
+                            <span className="text-stone-300 mx-3">|</span>
+                            Reference: {payment.reference_number || '—'}
                           </div>
                         </div>
                         <Button
-                          onClick={() => router.push(`/payments/${payment.payment_id}`)}
+                          onClick={() =>
+                            router.push(`/payments/${payment.payment_id}`)
+                          }
                           variant="secondary"
                           className="!h-10 px-8 text-[10px] font-bold tracking-widest uppercase shadow-sm border-stone-200"
                         >
@@ -340,21 +443,26 @@ export default function PaymentsListPage() {
                       <div className="flex items-center gap-2">
                         {tenantName}
                         {tenant?.correlation_id && (
-                          <CorrelationIdCell value={tenant.correlation_id} className="opacity-60 scale-90" />
+                          <CorrelationIdCell
+                            value={tenant.correlation_id}
+                            className="opacity-60 scale-90"
+                          />
                         )}
                       </div>
                     </td>
                     <td className="py-5 text-right">
                       <CurrencyDisplay
                         amount={payment.amount_paid}
-                        className={`text-sm font-bold ${isVoided ? "text-stone-300 line-through" : "text-emerald-700"}`}
+                        className={`text-sm font-bold ${isVoided ? 'text-stone-300 line-through' : 'text-emerald-700'}`}
                       />
                     </td>
                     <td className="py-5 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <Wallet size={12} className="text-stone-300" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
-                          {METHOD_LABELS[methodKey] || payment?.payment_method || "Other"}
+                          {METHOD_LABELS[methodKey] ||
+                            payment?.payment_method ||
+                            'Other'}
                         </span>
                       </div>
                     </td>
@@ -373,7 +481,10 @@ export default function PaymentsListPage() {
               page={page}
               perPage={perPage}
               onPageChange={setPage}
-              onPerPageChange={(n) => { setPage(1); setPerPage(n); }}
+              onPerPageChange={(n) => {
+                setPage(1);
+                setPerPage(n);
+              }}
               disabled={loading || isSyncing}
               className="hs-glass-effect mt-6"
             />

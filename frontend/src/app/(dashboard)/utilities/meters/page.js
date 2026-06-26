@@ -1,37 +1,51 @@
-"use client";
-import { useMemo } from "react";
-import { useRouter } from "next/navigation";
-import useSWR from "swr";
-import { Search, Plus, Activity, Zap, Droplet, ShieldAlert, Droplets } from "lucide-react";
-import { fetcher } from "@/lib/api";
-import { canManageMeters } from "@/lib/auth";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { usePaginatedFilters } from "@/hooks/usePaginatedFilters";
-import { normalizePaginatedList } from "@/lib/pagination";
-import Alert from "@/components/ui/Alert";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import Button from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Field, Input, Select } from "@/components/ui/Fields";
-import FilterChips from "@/components/ui/FilterChips";
-import PageHeaderActions from "@/components/ui/PageHeaderActions";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Table } from "@/components/ui/Table";
-import TablePagination from "@/components/ui/TablePagination";
-import ResourceView from "@/components/ui/ResourceView";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import StandardPage from "@/components/ui/StandardPage";
-import { SkeletonListPage } from "@/components/ui/Skeleton";
-import { KpiCard } from "@/components/ui/KpiCard";
-import { METER_STATUS_LABELS, SEARCH_LABELS, SEARCH_PLACEHOLDERS, FILTER_ALL_OPTION, UTILITY_TYPE_FILTER_LABELS } from "@/lib/constants";
+'use client';
+import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import useSWR from 'swr';
+import {
+  Search,
+  Plus,
+  Activity,
+  Zap,
+  Droplet,
+  ShieldAlert,
+  Droplets,
+} from 'lucide-react';
+import { fetcher } from '@/lib/api';
+import { canManageMeters } from '@/lib/auth';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { usePaginatedFilters } from '@/hooks/usePaginatedFilters';
+import { normalizePaginatedList } from '@/lib/pagination';
+import Alert from '@/components/ui/Alert';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import Button from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Field, Input, Select } from '@/components/ui/Fields';
+import FilterChips from '@/components/ui/FilterChips';
+import PageHeaderActions from '@/components/ui/PageHeaderActions';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Table } from '@/components/ui/Table';
+import TablePagination from '@/components/ui/TablePagination';
+import ResourceView from '@/components/ui/ResourceView';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import StandardPage from '@/components/ui/StandardPage';
+import { SkeletonListPage } from '@/components/ui/Skeleton';
+import { KpiCard } from '@/components/ui/KpiCard';
+import {
+  METER_STATUS_LABELS,
+  SEARCH_LABELS,
+  SEARCH_PLACEHOLDERS,
+  FILTER_ALL_OPTION,
+  UTILITY_TYPE_FILTER_LABELS,
+} from '@/lib/constants';
 
-import { interactiveTableRowClass } from "@/lib/tableRows";
-import RowOpenIndicator from "@/components/ui/RowOpenIndicator";
+import { interactiveTableRowClass } from '@/lib/tableRows';
+import RowOpenIndicator from '@/components/ui/RowOpenIndicator';
 import { MeterQuickEditForm } from '@/features/utilities/components/MeterQuickEditForm';
-import { QuickEditRowAction } from "@/components/ui/QuickEditRowAction";
-import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
-import { ExpandableTableRow } from "@/components/ui/ExpandableTableRow";
-import { useState } from "react";
+import { QuickEditRowAction } from '@/components/ui/QuickEditRowAction';
+import { SideSheetOverlay } from '@/components/ui/SideSheetOverlay';
+import { ExpandableTableRow } from '@/components/ui/ExpandableTableRow';
+import { useState } from 'react';
 export default function MeterRegistryPage() {
   const router = useRouter();
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
@@ -51,15 +65,15 @@ export default function MeterRegistryPage() {
     setPerPage,
     queryString,
   } = usePaginatedFilters({
-    initialFilters: { query: "", status: "all", utility_id: "all" },
-    initialSort: { by: "id", dir: "desc" },
-    debounceKeys: ["query"],
+    initialFilters: { query: '', status: 'all', utility_id: 'all' },
+    initialSort: { by: 'id', dir: 'desc' },
+    debounceKeys: ['query'],
     buildExtraParams: ({ filters: current, debounced }) => {
       const extra = {};
-      const q = String(debounced.query ?? "").trim();
+      const q = String(debounced.query ?? '').trim();
       if (q) extra.q = q;
-      if (current.status !== "all") extra.status = current.status;
-      if (current.utility_id !== "all") extra.utility_id = current.utility_id;
+      if (current.status !== 'all') extra.status = current.status;
+      if (current.utility_id !== 'all') extra.utility_id = current.utility_id;
       return extra;
     },
   });
@@ -68,13 +82,22 @@ export default function MeterRegistryPage() {
     fetcher
   );
   const utilities = Array.isArray(utilitiesData) ? utilitiesData : [];
-  const { data: metersData, error: metersError, isValidating: isSyncing, mutate: refetchMeters } = useSWR(
-    !authLoading && currentUser && canAccess ? `/api/meters${queryString}` : null,
+  const {
+    data: metersData,
+    error: metersError,
+    isValidating: isSyncing,
+    mutate: refetchMeters,
+  } = useSWR(
+    !authLoading && currentUser && canAccess
+      ? `/api/meters${queryString}`
+      : null,
     fetcher,
     { keepPreviousData: true }
   );
   const { data: summaryData, isValidating: summaryValidating } = useSWR(
-    !authLoading && currentUser && canAccess ? "/api/reports/meter-summary" : null,
+    !authLoading && currentUser && canAccess
+      ? '/api/reports/meter-summary'
+      : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
@@ -89,7 +112,15 @@ export default function MeterRegistryPage() {
     <StandardPage
       title="Meter Asset Registry"
       subtitle="Track technical infrastructure, service points, and post history."
-      breadcrumbs={<Breadcrumbs items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Utilities", href: "/utilities" }, { label: "Meters" }]} />}
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: 'Dashboard', href: '/dashboard' },
+            { label: 'Utilities', href: '/utilities' },
+            { label: 'Meters' },
+          ]}
+        />
+      }
       loading={loading}
       skeleton={<SkeletonListPage rows={6} />}
       actions={
@@ -105,8 +136,13 @@ export default function MeterRegistryPage() {
     >
       <div className="space-y-6">
         {viewDenied && (
-          <Alert variant="warning" title="Access restricted" data-testid="access-denied-meters">
-            You do not have permission to view or manage meters. Only administrators and staff can access technical infrastructure.
+          <Alert
+            variant="warning"
+            title="Access restricted"
+            data-testid="access-denied-meters"
+          >
+            You do not have permission to view or manage meters. Only
+            administrators and staff can access technical infrastructure.
           </Alert>
         )}
         {!viewDenied && (
@@ -187,7 +223,9 @@ export default function MeterRegistryPage() {
                         />
                         <Input
                           value={filters.query}
-                          onChange={(e) => updateFilter("query", e.target.value)}
+                          onChange={(e) =>
+                            updateFilter('query', e.target.value)
+                          }
                           placeholder={SEARCH_PLACEHOLDERS.meters}
                           className="!h-12 border-stone-200 pl-11 font-bold focus:border-teal-500/50"
                         />
@@ -198,10 +236,14 @@ export default function MeterRegistryPage() {
                     <Field label="Utility Type">
                       <Select
                         value={filters.utility_id}
-                        onChange={(e) => updateFilter("utility_id", e.target.value)}
+                        onChange={(e) =>
+                          updateFilter('utility_id', e.target.value)
+                        }
                         className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                       >
-                        <option value="all">{UTILITY_TYPE_FILTER_LABELS.all}</option>
+                        <option value="all">
+                          {UTILITY_TYPE_FILTER_LABELS.all}
+                        </option>
                         {utilities.map((u) => (
                           <option key={u.utility_id} value={u.utility_id}>
                             {u.name}
@@ -214,15 +256,17 @@ export default function MeterRegistryPage() {
                     <Field label="Meter Status">
                       <Select
                         value={filters.status}
-                        onChange={(e) => updateFilter("status", e.target.value)}
+                        onChange={(e) => updateFilter('status', e.target.value)}
                         className="!h-12 border-stone-200 font-bold focus:border-teal-500/50"
                       >
                         <option value="all">{FILTER_ALL_OPTION}</option>
-                        {Object.entries(METER_STATUS_LABELS).map(([val, label]) => (
-                          <option key={val} value={val}>
-                            {label}
-                          </option>
-                        ))}
+                        {Object.entries(METER_STATUS_LABELS).map(
+                          ([val, label]) => (
+                            <option key={val} value={val}>
+                              {label}
+                            </option>
+                          )
+                        )}
                       </Select>
                     </Field>
                   </div>
@@ -230,21 +274,31 @@ export default function MeterRegistryPage() {
                 <FilterChips
                   className="mt-6"
                   items={[
-                    { key: "q", label: "Meters", value: filters.query, onClear: () => updateFilter("query", "") },
                     {
-                      key: "utility_id",
-                      label: "Utility",
-                      value:
-                        filters.utility_id !== "all"
-                          ? utilities.find((u) => u.utility_id == filters.utility_id)?.name
-                          : "",
-                      onClear: () => updateFilter("utility_id", "all"),
+                      key: 'q',
+                      label: 'Meters',
+                      value: filters.query,
+                      onClear: () => updateFilter('query', ''),
                     },
                     {
-                      key: "status",
-                      label: "Meter Status",
-                      value: filters.status !== "all" ? METER_STATUS_LABELS[filters.status] : "",
-                      onClear: () => updateFilter("status", "all"),
+                      key: 'utility_id',
+                      label: 'Utility',
+                      value:
+                        filters.utility_id !== 'all'
+                          ? utilities.find(
+                              (u) => u.utility_id == filters.utility_id
+                            )?.name
+                          : '',
+                      onClear: () => updateFilter('utility_id', 'all'),
+                    },
+                    {
+                      key: 'status',
+                      label: 'Meter Status',
+                      value:
+                        filters.status !== 'all'
+                          ? METER_STATUS_LABELS[filters.status]
+                          : '',
+                      onClear: () => updateFilter('status', 'all'),
                     },
                   ]}
                   onClearAll={resetFilters}
@@ -260,8 +314,9 @@ export default function MeterRegistryPage() {
               onRetry={() => refetchMeters()}
               skeleton={<SkeletonListPage rows={10} />}
               emptyProps={{
-                title: "No meters match filters",
-                message: "Adjust your search criteria or register a new hardware unit.",
+                title: 'No meters match filters',
+                message:
+                  'Adjust your search criteria or register a new hardware unit.',
               }}
             >
               <Card className="overflow-hidden border-stone-200 !p-0 shadow-sm rounded-2xl hs-glass-effect">
@@ -282,21 +337,39 @@ export default function MeterRegistryPage() {
                   sortDirection={sort.dir}
                   onSortChange={onSortChange}
                   columns={[
-                    { key: "serial", label: "METER ID", sortable: true, className: "pl-8 w-48" },
-                    { key: "utility", label: "SERVICE TYPE", sortable: true },
                     {
-                      key: "assignment",
-                      label: "ASSIGNED TO",
+                      key: 'serial',
+                      label: 'METER ID',
                       sortable: true,
-                      sortKey: "room",
-                      className: "text-center w-64",
+                      className: 'pl-8 w-48',
                     },
-                    { key: "status", label: "STATUS", sortable: true, className: "text-center" },
-                    { key: "actions", label: "", className: "text-right px-8 w-24" },
+                    { key: 'utility', label: 'SERVICE TYPE', sortable: true },
+                    {
+                      key: 'assignment',
+                      label: 'ASSIGNED TO',
+                      sortable: true,
+                      sortKey: 'room',
+                      className: 'text-center w-64',
+                    },
+                    {
+                      key: 'status',
+                      label: 'STATUS',
+                      sortable: true,
+                      className: 'text-center',
+                    },
+                    {
+                      key: 'actions',
+                      label: '',
+                      className: 'text-right px-8 w-24',
+                    },
                   ]}
                   rows={sortedRows.map((meter) => {
-                    const activeAssignment = (meter.assignments || []).find((a) => a.valid_to === null);
-                    const isElectric = (meter.utility?.name || "").toLowerCase().includes("electric");
+                    const activeAssignment = (meter.assignments || []).find(
+                      (a) => a.valid_to === null
+                    );
+                    const isElectric = (meter.utility?.name || '')
+                      .toLowerCase()
+                      .includes('electric');
                     const UtilityIcon = isElectric ? Zap : Droplet;
                     return (
                       <ExpandableTableRow
@@ -309,14 +382,20 @@ export default function MeterRegistryPage() {
                                 Hardware Intelligence
                               </span>
                               <div className="mt-2 text-sm text-stone-900 font-mono font-bold">
-                                Location: {meter.location || "Central Panel"}{" "}
+                                Location: {meter.location || 'Central Panel'}{' '}
                                 <span className="text-stone-300 mx-3">|</span>
-                                Last Reading: {meter.last_reading?.reading_value || "0.00"}{" "}
+                                Last Reading:{' '}
+                                {meter.last_reading?.reading_value ||
+                                  '0.00'}{' '}
                                 {meter.utility?.unit_of_measurement}
                               </div>
                             </div>
                             <Button
-                              onClick={() => router.push(`/utilities/meters/${meter.meter_id}`)}
+                              onClick={() =>
+                                router.push(
+                                  `/utilities/meters/${meter.meter_id}`
+                                )
+                              }
                               variant="primary"
                               className="!h-10 px-8 text-[10px] font-black tracking-widest uppercase shadow-md active:scale-95 transition-transform bg-stone-900 hover:bg-stone-800"
                             >
@@ -336,13 +415,16 @@ export default function MeterRegistryPage() {
                         <td className="py-6">
                           <div className="flex items-center gap-3">
                             <div
-                              className={`flex h-8 w-8 items-center justify-center rounded-lg ${isElectric ? "bg-amber-50 text-amber-600" : "bg-sky-50 text-sky-600"
-                                }`}
+                              className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                                isElectric
+                                  ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-sky-50 text-sky-600'
+                              }`}
                             >
                               <UtilityIcon size={16} />
                             </div>
                             <span className="text-sm font-bold text-stone-900 group-hover:text-teal-700 transition-colors">
-                              {meter.utility?.name || "Generic Utility"}
+                              {meter.utility?.name || 'Generic Utility'}
                             </span>
                           </div>
                         </td>
@@ -350,10 +432,11 @@ export default function MeterRegistryPage() {
                           {activeAssignment ? (
                             <div className="flex flex-col items-center">
                               <span className="text-xs font-black text-stone-900 uppercase tracking-wide">
-                                {activeAssignment.room_code || activeAssignment.room_id}
+                                {activeAssignment.room_code ||
+                                  activeAssignment.room_id}
                               </span>
                               <span className="mt-1 text-[10px] font-mono font-bold text-stone-400 uppercase tracking-widest leading-none">
-                                {meter.location || "Main Panel"}
+                                {meter.location || 'Main Panel'}
                               </span>
                             </div>
                           ) : (
@@ -365,15 +448,20 @@ export default function MeterRegistryPage() {
                         <td className="py-6 text-center">
                           <StatusBadge>{meter.status}</StatusBadge>
                         </td>
-                        <td className="px-8 py-6 text-right" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className="px-8 py-6 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <div className="flex items-center justify-end gap-2">
                             <QuickEditRowAction
-                              disabled={!canAccess || meter.status === "replaced"}
+                              disabled={
+                                !canAccess || meter.status === 'replaced'
+                              }
                               onClick={() => setEditingMeter(meter)}
                               title={
-                                meter.status === "replaced"
-                                  ? "Replaced meter — historical record only"
-                                  : "Update details"
+                                meter.status === 'replaced'
+                                  ? 'Replaced meter — historical record only'
+                                  : 'Update details'
                               }
                             />
                             <RowOpenIndicator />
@@ -408,7 +496,7 @@ export default function MeterRegistryPage() {
           setIsRegistering(false);
           setEditingMeter(null);
         }}
-        title={isRegistering ? "Register Meter" : "Quick Update"}
+        title={isRegistering ? 'Register Meter' : 'Quick Update'}
       >
         <MeterQuickEditForm
           meter={editingMeter}

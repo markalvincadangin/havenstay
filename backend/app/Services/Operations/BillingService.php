@@ -335,7 +335,7 @@ class BillingService
         }
 
         // Rule BR-BIL-002: Duplicate Prevention
-        // CCR-010: Inclusive overlap check to prevent collision in contract transitions
+        // Inclusive overlap check to prevent collision in contract transitions
         $newFrom = Carbon::parse($data['billing_period_from'])->toDateString();
         $newTo = Carbon::parse($data['billing_period_to'])->toDateString();
 

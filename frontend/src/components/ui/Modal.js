@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X } from 'lucide-react';
 
 /**
  * Modal — Standard UI wrapper for complex dialogs.
- * 
+ *
  * @param {boolean} isOpen
  * @param {function} onClose
  * @param {string} [title]
@@ -17,29 +17,29 @@ export default function Modal({
   isOpen,
   onClose,
   title,
-  maxWidth = "520px",
+  maxWidth = '520px',
   children,
-  className = "",
+  className = '',
 }) {
   // Handle Escape key to close
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === 'Escape') onClose();
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
   // Lock body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = "hidden";
+      document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = 'unset';
     }
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = 'unset';
     };
   }, [isOpen]);
 
@@ -75,7 +75,7 @@ export default function Modal({
                 <h3 className="text-sm font-black uppercase tracking-widest text-stone-500">
                   {title}
                 </h3>
-                <button 
+                <button
                   onClick={onClose}
                   className="rounded-lg p-1 text-stone-400 hover:bg-stone-50 hover:text-stone-600 transition-colors"
                 >
@@ -83,11 +83,9 @@ export default function Modal({
                 </button>
               </div>
             )}
-            
+
             {/* Body */}
-            <div className={title ? "p-6 sm:p-8" : "p-0"}>
-              {children}
-            </div>
+            <div className={title ? 'p-6 sm:p-8' : 'p-0'}>{children}</div>
           </motion.div>
         </div>
       )}

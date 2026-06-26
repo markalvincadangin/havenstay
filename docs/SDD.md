@@ -40,7 +40,6 @@ The SDD is the authoritative reference for the **how** of the system. While the 
 - **Granular Tracking:** Support bed‑level occupancy tracking for shared and private rooms.
 - **Accountability:** Provide high‑fidelity, trigger‑based audit trails.
 - **Standardized Reporting:** Utilize standardized database views to ensure reporting consistency across all interfaces.
-- **Course Compliance:** Satisfy all academic requirements (CCR-001 through CCR-007) through robust design patterns.
 
 ---
 
@@ -79,7 +78,7 @@ graph TD
 | **API Architecture** | RESTful JSON | — |
 | **Authentication** | Laravel Sanctum | 4.x |
 
-### 3.3 Deployment Topology (CCR-002)
+### 3.3 Deployment Topology 
 The system utilizes a primary‑replica architecture to satisfy distributed database requirements. All write operations are directed to the primary instance, while read-only reporting queries are routable to the replica via Laravel's connection splitting. Detailed setup is documented in `docs/DISTRIBUTED_DB_SETUP.md`.
 
 ---
@@ -91,7 +90,7 @@ The database is normalized to the 3rd Normal Form (3NF) where operationally prac
 
 > **Schema Authority:** Both `db/havenstay_schema.sql` and `backend/database/sql/havenstay_schema.sql` must remain identical. `db/` is the reference for direct database import (e.g., phpMyAdmin/TablePlus). `backend/database/sql/` is the deployment copy used by migrations and CI. Any schema change must be applied to both. 
 
-### 4.2 Core Entities (CCR-001)
+### 4.2 Core Entities 
 
 | Table | Purpose | Logic |
 | :--- | :--- | :--- |
@@ -136,12 +135,12 @@ The system enforces strict status transitions to maintain occupancy integrity:
 
 ---
 
-## 5. Transaction Design (CCR-006)
+## 5. Transaction Design 
 
 ### 5.1 Transaction Management
 The system utilizes PHP‑layer `DB::transaction()` to ensure ACID properties for multi‑table writes. Financial operations (bill generation, payment posting, voids) and stateful workflows (check‑in, move‑out) are encapsulated in these boundaries.
 
-### 5.2 Audit Automation (CCR-007)
+### 5.2 Audit Automation 
 Row‑level change logging is handled exclusively by **45 database triggers** on the MySQL primary.
 - **Mechanism:** The application sets a session variable `@current_user_id` via the `SetAuditContext` middleware.
 - **Triggers:** `AFTER INSERT/UPDATE/DELETE` events across 14 tables write full JSON snapshots to `audit_logs`. The `meter_assignments` table receives a fourth trigger — a `BEFORE INSERT` guard — in addition to the standard three, enforcing BR-MET-003 integrity at the DB engine level. The full breakdown is: (13 tables × 3 AFTER triggers) + (1 table [`meter_assignments`] × 4 triggers [AFTER INSERT + AFTER UPDATE + AFTER DELETE + BEFORE INSERT]) + 2 immutability triggers (BEFORE UPDATE + BEFORE DELETE on `audit_logs`) = **45 triggers total**.
@@ -155,7 +154,7 @@ Row‑level change logging is handled exclusively by **45 database triggers** on
 
 ---
 
-## 6. Query and Reporting Design (CCR-004, CCR-005)
+## 6. Query and Reporting Design 
 
 ### 6.1 Reporting View Architecture (Admin Only)
 The system utilizes 6 dedicated database views to handle complex JOINS and ensure reporting accuracy. Access to these views via the API is strictly restricted to the Admin role. All report endpoints query these views directly to maintain single-source-of-truth logic:
@@ -201,13 +200,6 @@ The following design decisions satisfy the binding constraints of the Informatio
 
 | CCR | Requirement | Design Realization | Reference |
 | :--- | :--- | :--- | :--- |
-| **CCR-001** | Relational Model | 15 Normalized tables in MySQL InnoDB | SDD 4.2 |
-| **CCR-002** | Distributed Data | Primary‑Replica topology with GTID replication | SDD 3.3 |
-| **CCR-003** | SQL CRUD | Service‑layer Eloquent/SQL implementation | All Services |
-| **CCR-004** | SQL Operators | Date‑range (BETWEEN), Search (LIKE), Filters (AND/OR) | SDD 6.2 |
-| **CCR-005** | SQL JOINs | 6 Automated views utilizing complex INNER/LEFT JOINS | SDD 6.1 |
-| **CCR-006** | ACID Transactions | Explicit `DB::transaction()` boundaries in services | SDD 5.1 |
-| **CCR-007** | Change Audit | 45 triggers capturing snapshots + Immutability | SDD 5.2 |
 
 ---
 
@@ -257,7 +249,7 @@ The following design decisions satisfy the binding constraints of the Informatio
 | v3.3 | 2026-04-18 | Documented Two-Phase Check-In and Gate Pass transaction logic. |
 | v3.5 | 2026-04-18 | Forensic Lock. Synchronized to 15 tables and 45 triggers. |
 | v4.4 | 2026-04-19 | Level 4 Forensic Hardening. Established physical reading-to-bill traceability; resolved overpayment credit deadlock; authorized security bond refunds; enforced line item polarity. |
-| v4.6 | 2026-04-20 | Retire Transaction Log CCR; Consolidate forensic trail under trigger-based Audit Logs (CCR-007). Verified 45-trigger engine parity. |
+| v4.6 | 2026-04-20 | Retire Transaction Log CCR; Consolidate forensic trail under trigger-based Audit Logs . Verified 45-trigger engine parity. |
 | v4.7 | 2026-04-21 | Fixed §3.2 technology stack (Vanilla CSS). Corrected schema authority to dual-path. Added billing rate resolution and voided contract notes. Fixed FR-057 → FR-055 in §12. Aligned to SRS v4.7 and BUSINESS_RULES v1.9. |
 | v5.0 | 2026-04-29 | Major Stabilization: Documented Resilient Batch Billing (FR-036) and Dual-Path Forensic Context (BR-PAY-011). Updated Section 10 with stabilization decisions. Aligned to v5.0 Documentation Suite. |
 | v5.1 | 2026-04-29 | Realigned Analytical Rule references and footer synchronization. Aligned to SRS v5.1 / BR v2.1. |

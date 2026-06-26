@@ -136,7 +136,7 @@ class ContractManagementTest extends TestCase
 
     /**
      * TC-CONTRACT-003: Move-out success
-     * TC-TX-004: `transaction_logs` committed row for `tenant_move_out` (CCR-007)
+     * TC-TX-004: `transaction_logs` committed row for `tenant_move_out` 
      */
     public function test_move_out_success(): void
     {
@@ -186,7 +186,7 @@ class ContractManagementTest extends TestCase
             'action' => 'UPDATE',
         ]);
 
-        // TC-TX-004: Move-out workflow logs committed transaction (FR-034, CCR-007)
+        // TC-TX-004: Move-out workflow logs committed transaction (FR-034)
         $this->assertDatabaseHas('transaction_logs', [
             'action' => 'TENANT_MOVEOUT',
             'status' => 'committed',

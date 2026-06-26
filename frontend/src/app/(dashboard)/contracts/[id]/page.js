@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useEffect, useState, useMemo, useRef } from "react";
-import useSWR, { useSWRConfig } from "swr";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { useForm, useWatch } from "react-hook-form";
-import { useToasts } from "@/context/ToastContext";
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useState, useMemo, useRef } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useForm, useWatch } from 'react-hook-form';
+import { useToasts } from '@/context/ToastContext';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   AlertTriangle,
   Edit2,
@@ -21,51 +21,51 @@ import {
   Wallet,
   Clock,
   FileSignature,
-} from "lucide-react";
+} from 'lucide-react';
 
-import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
+import { SideSheetOverlay } from '@/components/ui/SideSheetOverlay';
 import { ContractQuickEditForm } from '@/features/contracts/components/ContractQuickEditForm';
-import MoveOutModal from "@/features/contracts/components/MoveOutModal";
-import PaymentWizard from "@/features/payments/components/PaymentWizard";
+import MoveOutModal from '@/features/contracts/components/MoveOutModal';
+import PaymentWizard from '@/features/payments/components/PaymentWizard';
 
-import { apiRequest, fetcher } from "@/lib/api";
-import { canManageContracts } from "@/lib/auth";
-import { useAuthGuard } from "@/hooks/useAuthGuard";
-import { flattenApiErrors } from "@/lib/errors";
+import { apiRequest, fetcher } from '@/lib/api';
+import { canManageContracts } from '@/lib/auth';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { flattenApiErrors } from '@/lib/errors';
 import {
   formatDateRange,
   formatDateString,
   formatTenantDirectoryName,
-} from "@/lib/formatters";
-import CurrencyDisplay from "@/components/ui/CurrencyDisplay";
+} from '@/lib/formatters';
+import CurrencyDisplay from '@/components/ui/CurrencyDisplay';
 
 function maskPhone(phone) {
-  if (!phone) return "—";
-  return phone.replace(/^(\d{4})\d+(\d{4})$/, "$1****$2");
+  if (!phone) return '—';
+  return phone.replace(/^(\d{4})\d+(\d{4})$/, '$1****$2');
 }
-import { isContractActive, isContractEnded } from "@/lib/constants";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
-import Alert from "@/components/ui/Alert";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import Button from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Field, Input, Textarea } from "@/components/ui/Fields";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Table } from "@/components/ui/Table";
-import { secondaryOutlineLinkClass } from "@/components/ui/LinkTokens";
-import StandardPage from "@/components/ui/StandardPage";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import PageHeaderActions from "@/components/ui/PageHeaderActions";
-import { normalizePaginatedList } from "@/lib/pagination";
-import { FormSection } from "@/components/ui/FormSection";
-import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
-import RecordStateAlert from "@/components/ui/RecordStateAlert";
-import DetailHeader from "@/components/ui/DetailHeader";
+import { isContractActive, isContractEnded } from '@/lib/constants';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
+import Alert from '@/components/ui/Alert';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import Button from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Field, Input, Textarea } from '@/components/ui/Fields';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Table } from '@/components/ui/Table';
+import { secondaryOutlineLinkClass } from '@/components/ui/LinkTokens';
+import StandardPage from '@/components/ui/StandardPage';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import PageHeaderActions from '@/components/ui/PageHeaderActions';
+import { normalizePaginatedList } from '@/lib/pagination';
+import { FormSection } from '@/components/ui/FormSection';
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
+import RecordStateAlert from '@/components/ui/RecordStateAlert';
+import DetailHeader from '@/components/ui/DetailHeader';
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.2, ease: "easeOut" },
+  transition: { duration: 0.2, ease: 'easeOut' },
 };
 
 function DetailRow({ label, value, icon: Icon, mono = false }) {
@@ -75,12 +75,14 @@ function DetailRow({ label, value, icon: Icon, mono = false }) {
         <div className="text-stone-300">
           <Icon size={14} strokeWidth={2.5} />
         </div>
-        <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">{label}</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">
+          {label}
+        </span>
       </div>
       <span
-        className={`max-w-[220px] text-right text-sm font-semibold text-stone-900 ${mono ? "font-mono tabular-nums" : ""}`}
+        className={`max-w-[220px] text-right text-sm font-semibold text-stone-900 ${mono ? 'font-mono tabular-nums' : ''}`}
       >
-        {value ?? "—"}
+        {value ?? '—'}
       </span>
     </div>
   );
@@ -93,14 +95,16 @@ function MetricItem({ label, value, icon: Icon }) {
         <Icon size={18} strokeWidth={2.5} />
       </div>
       <div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 leading-none mb-1.5">{label}</p>
-        <p className="text-sm font-black text-stone-900 tabular-nums leading-none">{value}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 leading-none mb-1.5">
+          {label}
+        </p>
+        <p className="text-sm font-black text-stone-900 tabular-nums leading-none">
+          {value}
+        </p>
       </div>
     </div>
   );
 }
-
-
 
 export default function ContractDetailsPage() {
   const params = useParams();
@@ -110,13 +114,21 @@ export default function ContractDetailsPage() {
 
   const { user: currentUser, authLoading, isUnauthorized } = useAuthGuard();
   const shouldReduceMotion = useReducedMotion();
-  const { data: contract, error: contractError, mutate: refetchContract } = useSWR(
-    !authLoading && currentUser && contractId ? `/api/contracts/${contractId}` : null,
+  const {
+    data: contract,
+    error: contractError,
+    mutate: refetchContract,
+  } = useSWR(
+    !authLoading && currentUser && contractId
+      ? `/api/contracts/${contractId}`
+      : null,
     fetcher
   );
 
   const { data: billData, mutate: refetchBills } = useSWR(
-    !authLoading && currentUser && contractId ? `/api/billing?contract_id=${contractId}&status=unpaid&per_page=100` : null,
+    !authLoading && currentUser && contractId
+      ? `/api/billing?contract_id=${contractId}&status=unpaid&per_page=100`
+      : null,
     fetcher
   );
 
@@ -127,7 +139,9 @@ export default function ContractDetailsPage() {
   }, [billData]);
 
   const { data: paymentsData, mutate: refetchPayments } = useSWR(
-    !authLoading && currentUser && contractId ? `/api/payments?contract_id=${contractId}` : null,
+    !authLoading && currentUser && contractId
+      ? `/api/payments?contract_id=${contractId}`
+      : null,
     fetcher
   );
 
@@ -136,7 +150,9 @@ export default function ContractDetailsPage() {
   }, [paymentsData]);
 
   const loading = !contract && !contractError;
-  const fetchError = contractError ? contractError.message || "Failed to load contract details." : "";
+  const fetchError = contractError
+    ? contractError.message || 'Failed to load contract details.'
+    : '';
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
   const [isSubmittingMoveOut, setIsSubmittingMoveOut] = useState(false);
   const [isInitializingBilling, setIsInitializingBilling] = useState(false);
@@ -152,13 +168,17 @@ export default function ContractDetailsPage() {
   }, [contract]);
 
   const totalPaid = useMemo(() => {
-    return payments.filter(p => !p.voided_at).reduce((sum, p) => sum + Number(p.amount_paid), 0);
+    return payments
+      .filter((p) => !p.voided_at)
+      .reduce((sum, p) => sum + Number(p.amount_paid), 0);
   }, [payments]);
 
-  const isFinanciallyReady = totalPaid >= (minRequired - 0.01);
+  const isFinanciallyReady = totalPaid >= minRequired - 0.01;
   const hasSetupBill = !!contract?.latest_billing;
 
-  const pageTitle = contract ? `CONTRACT #${String(contractId).padStart(6, "0")}` : "Contract Detail";
+  const pageTitle = contract
+    ? `CONTRACT #${String(contractId).padStart(6, '0')}`
+    : 'Contract Detail';
 
   const loadContract = () => refetchContract();
 
@@ -171,19 +191,32 @@ export default function ContractDetailsPage() {
     setIsVoiding(true);
     try {
       await apiRequest(`/api/contracts/${contractId}/void`, {
-        method: "POST",
-        body: JSON.stringify({ reason: "Contract voided by staff via detail action." }),
+        method: 'POST',
+        body: JSON.stringify({
+          reason: 'Contract voided by staff via detail action.',
+        }),
       });
-      showToast("Contract voided successfully. Inventory has been released.", "success");
+      showToast(
+        'Contract voided successfully. Inventory has been released.',
+        'success'
+      );
       setShowVoidConfirm(false);
 
       // Global revalidation for lists and reports
-      globalMutate(key => typeof key === 'string' && key.startsWith('/api/contracts'));
-      globalMutate(key => typeof key === 'string' && key.startsWith('/api/reports'));
+      globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/contracts')
+      );
+      globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/reports')
+      );
 
       await loadContract();
     } catch (err) {
-      showToast(flattenApiErrors(err) || "Unable to void this contract. Please try again or contact support.", "error");
+      showToast(
+        flattenApiErrors(err) ||
+          'Unable to void this contract. Please try again or contact support.',
+        'error'
+      );
       setShowVoidConfirm(false);
     } finally {
       setIsVoiding(false);
@@ -199,13 +232,17 @@ export default function ContractDetailsPage() {
 
     try {
       await apiRequest(`/api/billing/initialize/${contractId}`, {
-        method: "POST",
+        method: 'POST',
       });
-      showToast("Initial billing generated successfully.", "success");
+      showToast('Initial billing generated successfully.', 'success');
       await loadContract();
       await refetchBills();
     } catch (err) {
-      showToast(flattenApiErrors(err) || "Unable to generate initial billing. Please try again.", "error");
+      showToast(
+        flattenApiErrors(err) ||
+          'Unable to generate initial billing. Please try again.',
+        'error'
+      );
     } finally {
       setIsInitializingBilling(false);
       isInitializingBillingRef.current = false;
@@ -216,12 +253,19 @@ export default function ContractDetailsPage() {
     setIsActivating(true);
     try {
       await apiRequest(`/api/contracts/${contractId}/activate`, {
-        method: "POST",
+        method: 'POST',
       });
-      showToast("Contract activated. The lease agreement is now live.", "success");
+      showToast(
+        'Contract activated. The lease agreement is now live.',
+        'success'
+      );
       await loadContract();
     } catch (err) {
-      showToast(flattenApiErrors(err) || "Activation failed. Please ensure the minimum payment (deposit + 1st month) has been recorded.", "error");
+      showToast(
+        flattenApiErrors(err) ||
+          'Activation failed. Please ensure the minimum payment (deposit + 1st month) has been recorded.',
+        'error'
+      );
     } finally {
       setIsActivating(false);
     }
@@ -229,7 +273,10 @@ export default function ContractDetailsPage() {
 
   const handleMoveOut = async (values) => {
     if (outstandingBalance > 0) {
-      showToast("Move-out denied: A cleared balance is required before termination.", "error");
+      showToast(
+        'Move-out denied: A cleared balance is required before termination.',
+        'error'
+      );
       return;
     }
 
@@ -237,23 +284,27 @@ export default function ContractDetailsPage() {
 
     try {
       await apiRequest(`/api/contracts/${contractId}/move-out`, {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
           actual_move_out: values.actual_move_out,
           notes: values.notes || null,
         }),
       });
-      showToast("Move-out processed. The lease has been concluded.", "success");
+      showToast('Move-out processed. The lease has been concluded.', 'success');
 
       // Global revalidation
-      globalMutate(key => typeof key === 'string' && key.startsWith('/api/contracts'));
-      globalMutate(key => typeof key === 'string' && key.startsWith('/api/reports'));
+      globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/contracts')
+      );
+      globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/reports')
+      );
 
       await loadContract();
       setShowMoveOutModal(false);
       router.refresh();
     } catch (error) {
-      showToast(flattenApiErrors(error), "error");
+      showToast(flattenApiErrors(error), 'error');
       setShowMoveOutModal(false);
     } finally {
       setIsSubmittingMoveOut(false);
@@ -264,21 +315,29 @@ export default function ContractDetailsPage() {
     setIsArchiving(true);
     try {
       await apiRequest(`/api/contracts/${contractId}/archive`, {
-        method: "POST",
+        method: 'POST',
       });
       setShowArchiveConfirm(false);
 
       // Forensic Cache Eviction: Manually clear the contract data from the local cache
       // before redirecting to prevent the SWR 404 console error during unmounting.
       globalMutate(`/api/contracts/${contractId}`, null, false);
-      
-      // Global revalidation for lists and reports
-      globalMutate(key => typeof key === 'string' && key.startsWith('/api/contracts'));
-      globalMutate(key => typeof key === 'string' && key.startsWith('/api/reports'));
 
-      router.push("/contracts");
+      // Global revalidation for lists and reports
+      globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/contracts')
+      );
+      globalMutate(
+        (key) => typeof key === 'string' && key.startsWith('/api/reports')
+      );
+
+      router.push('/contracts');
     } catch (err) {
-      showToast(flattenApiErrors(err) || "Unable to archive this contract. Please try again.", "error");
+      showToast(
+        flattenApiErrors(err) ||
+          'Unable to archive this contract. Please try again.',
+        'error'
+      );
     } finally {
       setIsArchiving(false);
     }
@@ -291,17 +350,19 @@ export default function ContractDetailsPage() {
   const bedSpace = contract?.bed_space || contract?.bedSpace;
   const isActive = isContractActive(contract?.status);
   const isEnded = isContractEnded(contract?.status);
-  const tenantDisplay = tenant ? formatTenantDirectoryName(tenant) : "Agreement";
+  const tenantDisplay = tenant
+    ? formatTenantDirectoryName(tenant)
+    : 'Agreement';
   const header = DetailHeader({
-    type: "contract",
+    type: 'contract',
     id: contractId,
     title: pageTitle,
-    subtitle: "Lease profile: terms, billing, and payment history.",
+    subtitle: 'Lease profile: terms, billing, and payment history.',
     status: contract?.status,
     loading: loading,
-    listHref: "/contracts",
-    listLabel: "Contracts",
-    detailLabel: `Agreement ${contractId}`
+    listHref: '/contracts',
+    listLabel: 'Contracts',
+    detailLabel: `Agreement ${contractId}`,
   });
 
   return (
@@ -320,7 +381,7 @@ export default function ContractDetailsPage() {
             <button
               type="button"
               onClick={() => setEditingContract(contract)}
-              className={secondaryOutlineLinkClass + " px-6"}
+              className={secondaryOutlineLinkClass + ' px-6'}
             >
               <Edit2 size={16} aria-hidden />
               Update details
@@ -363,17 +424,24 @@ export default function ContractDetailsPage() {
       <motion.div
         initial={shouldReduceMotion ? false : pageVariants.initial}
         animate={shouldReduceMotion ? false : pageVariants.animate}
-        transition={shouldReduceMotion ? { duration: 0 } : pageVariants.transition}
+        transition={
+          shouldReduceMotion ? { duration: 0 } : pageVariants.transition
+        }
       >
-        {fetchError && <Alert variant="error" title="Load Failed" className="mb-6">{fetchError}</Alert>}
-        
+        {fetchError && (
+          <Alert variant="error" title="Load Failed" className="mb-6">
+            {fetchError}
+          </Alert>
+        )}
+
         <div className="mb-6 space-y-4">
           <RecordStateAlert
             show={contract?.status === 'voided'}
             variant="warning"
             title="Contract Voided"
           >
-            This contract was voided due to a registration error. Associated billing was cancelled and inventory released.
+            This contract was voided due to a registration error. Associated
+            billing was cancelled and inventory released.
           </RecordStateAlert>
 
           <RecordStateAlert
@@ -381,7 +449,8 @@ export default function ContractDetailsPage() {
             variant="warning"
             title="Contract Terminated"
           >
-            This contract was terminated early. Operational access for this agreement has been revoked.
+            This contract was terminated early. Operational access for this
+            agreement has been revoked.
           </RecordStateAlert>
 
           <RecordStateAlert
@@ -389,7 +458,8 @@ export default function ContractDetailsPage() {
             variant="info"
             title="Contract Completed"
           >
-            This contract is completed. Resident has moved out and all terms have been finalized.
+            This contract is completed. Resident has moved out and all terms
+            have been finalized.
           </RecordStateAlert>
         </div>
 
@@ -408,7 +478,7 @@ export default function ContractDetailsPage() {
                     <StatusBadge size="sm">{contract.status}</StatusBadge>
                     {contract.is_cleared ? (
                       <StatusBadge size="sm">cleared</StatusBadge>
-                    ) : (isEnded && contract.status !== 'voided') ? (
+                    ) : isEnded && contract.status !== 'voided' ? (
                       <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-600 border border-amber-200 uppercase tracking-tighter">
                         Unsettled
                       </span>
@@ -417,19 +487,30 @@ export default function ContractDetailsPage() {
                 </div>
 
                 <div className="space-y-2 p-8 pt-6">
-                  <MetricItem label="Primary Tenant" value={tenantDisplay} icon={User} />
+                  <MetricItem
+                    label="Primary Tenant"
+                    value={tenantDisplay}
+                    icon={User}
+                  />
                   <MetricItem
                     label="Room / Bed"
                     value={
                       room
-                        ? `${room.room_code}${bedSpace?.bed_label ? ` · ${bedSpace.bed_label}` : ""}`
-                        : "—"
+                        ? `${room.room_code}${bedSpace?.bed_label ? ` · ${bedSpace.bed_label}` : ''}`
+                        : '—'
                     }
                     icon={DoorOpen}
                   />
                   <MetricItem
                     label="Monthly Rent"
-                    value={<CurrencyDisplay amount={contract.monthly_rate_override ?? contract.monthly_rate} />}
+                    value={
+                      <CurrencyDisplay
+                        amount={
+                          contract.monthly_rate_override ??
+                          contract.monthly_rate
+                        }
+                      />
+                    }
                     icon={Wallet}
                   />
                   <MetricItem
@@ -440,35 +521,64 @@ export default function ContractDetailsPage() {
                 </div>
               </Card>
 
-              {canManageContracts(currentUser) && contract.status === "pending_payment" ? (
+              {canManageContracts(currentUser) &&
+              contract.status === 'pending_payment' ? (
                 <Card className="rounded-2xl border-stone-200 !p-0 shadow-sm overflow-hidden hs-glass-effect border-teal-100">
                   <div className="bg-teal-50/50 px-6 py-4 border-b border-teal-100/50">
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-teal-700">Onboarding Progress</h3>
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-teal-700">
+                      Onboarding Progress
+                    </h3>
                   </div>
-                  
+
                   <div className="p-6 space-y-5">
                     {/* Step 1: Financial Initialization */}
                     <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${hasSetupBill ? "bg-teal-500 border-teal-500 text-white" : "border-stone-200 text-stone-300"}`}>
-                        {hasSetupBill ? <FileCheck size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">1</span>}
+                      <div
+                        className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${hasSetupBill ? 'bg-teal-500 border-teal-500 text-white' : 'border-stone-200 text-stone-300'}`}
+                      >
+                        {hasSetupBill ? (
+                          <FileCheck size={12} strokeWidth={3} />
+                        ) : (
+                          <span className="text-[10px] font-bold">1</span>
+                        )}
                       </div>
                       <div>
-                        <p className={`text-xs font-bold ${hasSetupBill ? "text-stone-900" : "text-stone-400"}`}>Setup Billing</p>
-                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">Generate initial rent & deposit invoice.</p>
+                        <p
+                          className={`text-xs font-bold ${hasSetupBill ? 'text-stone-900' : 'text-stone-400'}`}
+                        >
+                          Setup Billing
+                        </p>
+                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">
+                          Generate initial rent & deposit invoice.
+                        </p>
                       </div>
                     </div>
 
                     {/* Step 2: Collection */}
                     <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${isFinanciallyReady ? "bg-teal-500 border-teal-500 text-white" : hasSetupBill ? "border-teal-200 text-teal-400" : "border-stone-200 text-stone-300"}`}>
-                        {isFinanciallyReady ? <FileCheck size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">2</span>}
+                      <div
+                        className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${isFinanciallyReady ? 'bg-teal-500 border-teal-500 text-white' : hasSetupBill ? 'border-teal-200 text-teal-400' : 'border-stone-200 text-stone-300'}`}
+                      >
+                        {isFinanciallyReady ? (
+                          <FileCheck size={12} strokeWidth={3} />
+                        ) : (
+                          <span className="text-[10px] font-bold">2</span>
+                        )}
                       </div>
                       <div>
-                        <p className={`text-xs font-bold ${isFinanciallyReady ? "text-stone-900" : hasSetupBill ? "text-stone-600" : "text-stone-400"}`}>Balance Settlement</p>
-                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">Collect required ₱{minRequired.toLocaleString()} payment.</p>
+                        <p
+                          className={`text-xs font-bold ${isFinanciallyReady ? 'text-stone-900' : hasSetupBill ? 'text-stone-600' : 'text-stone-400'}`}
+                        >
+                          Balance Settlement
+                        </p>
+                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">
+                          Collect required ₱{minRequired.toLocaleString()}{' '}
+                          payment.
+                        </p>
                         {hasSetupBill && !isFinanciallyReady && (
                           <div className="mt-2 text-[10px] font-black text-rose-500 uppercase tracking-tighter">
-                            Shortfall: ₱{(minRequired - totalPaid).toLocaleString()}
+                            Shortfall: ₱
+                            {(minRequired - totalPaid).toLocaleString()}
                           </div>
                         )}
                       </div>
@@ -476,12 +586,24 @@ export default function ContractDetailsPage() {
 
                     {/* Step 3: Activation */}
                     <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${contract.status === 'active' ? "bg-teal-500 border-teal-500 text-white" : "border-stone-200 text-stone-300"}`}>
-                        {contract.status === 'active' ? <ShieldCheck size={12} strokeWidth={3} /> : <span className="text-[10px] font-bold">3</span>}
+                      <div
+                        className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${contract.status === 'active' ? 'bg-teal-500 border-teal-500 text-white' : 'border-stone-200 text-stone-300'}`}
+                      >
+                        {contract.status === 'active' ? (
+                          <ShieldCheck size={12} strokeWidth={3} />
+                        ) : (
+                          <span className="text-[10px] font-bold">3</span>
+                        )}
                       </div>
                       <div>
-                        <p className={`text-xs font-bold ${contract.status === 'active' ? "text-stone-900" : "text-stone-400"}`}>Lease Activation</p>
-                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">Formalize agreement and start operations.</p>
+                        <p
+                          className={`text-xs font-bold ${contract.status === 'active' ? 'text-stone-900' : 'text-stone-400'}`}
+                        >
+                          Lease Activation
+                        </p>
+                        <p className="text-[10px] font-medium text-stone-400 mt-0.5">
+                          Formalize agreement and start operations.
+                        </p>
                       </div>
                     </div>
 
@@ -514,7 +636,7 @@ export default function ContractDetailsPage() {
                           Finalize Activation
                         </Button>
                       )}
-                      
+
                       <button
                         type="button"
                         onClick={() => setShowVoidConfirm(true)}
@@ -529,9 +651,12 @@ export default function ContractDetailsPage() {
 
               {canManageContracts(currentUser) && isActive ? (
                 <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-amber-50/20 border-amber-100">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-700">Operational Lifecycle</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+                    Operational Lifecycle
+                  </h3>
                   <p className="mt-2 text-sm font-medium text-stone-600 leading-relaxed">
-                    Once the resident completes their stay, process the move-out to release the bed inventory and finalize terms.
+                    Once the resident completes their stay, process the move-out
+                    to release the bed inventory and finalize terms.
                   </p>
                   <Button
                     variant="danger"
@@ -546,7 +671,8 @@ export default function ContractDetailsPage() {
                   {contract.expected_move_out_date && (
                     <div className="mt-6 pt-6 border-t border-stone-100">
                       <p className="text-[10px] font-medium text-stone-400 leading-relaxed mb-4">
-                        Extend this contract for another term. This will pre-fill a new contract with current terms.
+                        Extend this contract for another term. This will
+                        pre-fill a new contract with current terms.
                       </p>
                       <Link
                         href={`/contracts/new?renew_contract_id=${contractId}`}
@@ -560,38 +686,54 @@ export default function ContractDetailsPage() {
                 </Card>
               ) : null}
 
-              {canManageContracts(currentUser) && !isActive && contract.status !== "pending_payment" ? (
+              {canManageContracts(currentUser) &&
+              !isActive &&
+              contract.status !== 'pending_payment' ? (
                 <Card className="rounded-2xl border-stone-200 !p-6 shadow-sm bg-stone-50/50 border-stone-200">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">History Management</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+                    History Management
+                  </h3>
 
-                  {isEnded && contract.status !== 'voided' && !contract.is_cleared && (
-                    <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-100 mb-4">
-                      <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-2">Unsettled Deposit</p>
-                      <p className="text-[10px] font-medium text-amber-600 leading-relaxed mb-4">
-                        The security deposit (₱{contract.deposit_amount}) has not been refunded or rolled over.
-                      </p>
-                      <Button
-                        variant="primary"
-                        className="!h-9 w-full rounded-lg text-[10px] font-black uppercase tracking-widest bg-amber-600 hover:bg-amber-700 shadow-lg shadow-amber-900/10"
-                        onClick={() => router.push(`/payments/new?contract_id=${contractId}&category=refund&amount=${contract.deposit_amount}`)}
-                      >
-                        Process Deposit Refund
-                      </Button>
-                    </div>
-                  )}
+                  {isEnded &&
+                    contract.status !== 'voided' &&
+                    !contract.is_cleared && (
+                      <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-100 mb-4">
+                        <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-2">
+                          Unsettled Deposit
+                        </p>
+                        <p className="text-[10px] font-medium text-amber-600 leading-relaxed mb-4">
+                          The security deposit (₱{contract.deposit_amount}) has
+                          not been refunded or rolled over.
+                        </p>
+                        <Button
+                          variant="primary"
+                          className="!h-9 w-full rounded-lg text-[10px] font-black uppercase tracking-widest bg-amber-600 hover:bg-amber-700 shadow-lg shadow-amber-900/10"
+                          onClick={() =>
+                            router.push(
+                              `/payments/new?contract_id=${contractId}&category=refund&amount=${contract.deposit_amount}`
+                            )
+                          }
+                        >
+                          Process Deposit Refund
+                        </Button>
+                      </div>
+                    )}
 
                   <p className="mt-2 text-[10px] font-medium text-stone-400 leading-relaxed">
-                    Closed contracts can be archived for cleaner listings. Financial records will still be retained.
+                    Closed contracts can be archived for cleaner listings.
+                    Financial records will still be retained.
                   </p>
                   <Button
                     variant="outline"
                     className="mt-4 !h-9 w-full rounded-lg text-[10px] font-black uppercase tracking-widest border-stone-200 text-stone-600 hover:bg-white"
                     onClick={() => setShowArchiveConfirm(true)}
-                    disabled={!contract.is_cleared && contract.status !== "voided"}
+                    disabled={
+                      !contract.is_cleared && contract.status !== 'voided'
+                    }
                   >
                     Archive Contract
                   </Button>
-                  {!contract.is_cleared && contract.status !== "voided" && (
+                  {!contract.is_cleared && contract.status !== 'voided' && (
                     <p className="mt-2 text-[9px] font-bold text-rose-400 uppercase tracking-tighter text-center">
                       Settlement required before archiving
                     </p>
@@ -618,14 +760,18 @@ export default function ContractDetailsPage() {
                           {formatTenantDirectoryName(tenant)}
                         </Link>
                       ) : (
-                        "—"
+                        '—'
                       )
                     }
                     icon={User}
                   />
                   <DetailRow
                     label="Contact Number"
-                    value={canManageContracts(currentUser) ? tenant?.contact_number : maskPhone(tenant?.contact_number)}
+                    value={
+                      canManageContracts(currentUser)
+                        ? tenant?.contact_number
+                        : maskPhone(tenant?.contact_number)
+                    }
                     icon={User}
                     mono
                   />
@@ -640,12 +786,16 @@ export default function ContractDetailsPage() {
                           {room.room_code}
                         </Link>
                       ) : (
-                        "—"
+                        '—'
                       )
                     }
                     icon={MapPin}
                   />
-                  <DetailRow label="Bed Label" value={bedSpace?.bed_label} icon={DoorOpen} />
+                  <DetailRow
+                    label="Bed Label"
+                    value={bedSpace?.bed_label}
+                    icon={DoorOpen}
+                  />
                 </div>
               </FormSection>
 
@@ -656,22 +806,44 @@ export default function ContractDetailsPage() {
                   className="hs-glass-effect"
                 >
                   <div className="space-y-1">
-                    <DetailRow label="Deposit Amount" value={<CurrencyDisplay amount={contract.deposit_amount} />} icon={FileCheck} />
+                    <DetailRow
+                      label="Deposit Amount"
+                      value={
+                        <CurrencyDisplay amount={contract.deposit_amount} />
+                      }
+                      icon={FileCheck}
+                    />
                     {contract.monthly_rate_override ? (
                       <>
                         <DetailRow
                           label="Standard Rate"
-                          value={<span className="line-through text-stone-400"><CurrencyDisplay amount={contract.monthly_rate} /></span>}
+                          value={
+                            <span className="line-through text-stone-400">
+                              <CurrencyDisplay amount={contract.monthly_rate} />
+                            </span>
+                          }
                           icon={Receipt}
                         />
                         <DetailRow
                           label="Agreed Rent"
-                          value={<span className="font-bold text-teal-700"><CurrencyDisplay amount={contract.monthly_rate_override} /></span>}
+                          value={
+                            <span className="font-bold text-teal-700">
+                              <CurrencyDisplay
+                                amount={contract.monthly_rate_override}
+                              />
+                            </span>
+                          }
                           icon={Wallet}
                         />
                       </>
                     ) : (
-                      <DetailRow label="Monthly Rate" value={<CurrencyDisplay amount={contract.monthly_rate} />} icon={Receipt} />
+                      <DetailRow
+                        label="Monthly Rate"
+                        value={
+                          <CurrencyDisplay amount={contract.monthly_rate} />
+                        }
+                        icon={Receipt}
+                      />
                     )}
                   </div>
                 </FormSection>
@@ -682,8 +854,20 @@ export default function ContractDetailsPage() {
                   className="hs-glass-effect"
                 >
                   <div className="space-y-1">
-                    <DetailRow label="Start Date" value={formatDateString(contract.move_in_date)} icon={Calendar} />
-                    <DetailRow label="End Date" value={contract.expected_move_out_date ? formatDateString(contract.expected_move_out_date) : "Open Ended"} icon={Calendar} />
+                    <DetailRow
+                      label="Start Date"
+                      value={formatDateString(contract.move_in_date)}
+                      icon={Calendar}
+                    />
+                    <DetailRow
+                      label="End Date"
+                      value={
+                        contract.expected_move_out_date
+                          ? formatDateString(contract.expected_move_out_date)
+                          : 'Open Ended'
+                      }
+                      icon={Calendar}
+                    />
                   </div>
                 </FormSection>
               </div>
@@ -694,21 +878,26 @@ export default function ContractDetailsPage() {
                     <div className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-200 text-stone-600">
                       <Clock size={12} />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">History: Closed Agreement</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">
+                      History: Closed Agreement
+                    </span>
                   </div>
                   <p className="text-sm font-bold text-stone-900">
-                    Agreement finalized and closed on {formatDateString(contract.actual_move_out_date)}.
+                    Agreement finalized and closed on{' '}
+                    {formatDateString(contract.actual_move_out_date)}.
                   </p>
                 </Card>
               )}
 
               <Card className="!p-0 overflow-hidden rounded-2xl border-stone-200 shadow-sm hs-glass-effect">
                 <div className="border-b border-stone-100 bg-stone-50/50 px-8 py-5">
-                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">General Notes</h2>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">
+                    General Notes
+                  </h2>
                 </div>
                 <div className="p-8">
                   <p className="text-sm font-medium leading-relaxed text-stone-600 italic">
-                    {contract.notes || "No additional agreement notes on file."}
+                    {contract.notes || 'No additional agreement notes on file.'}
                   </p>
                 </div>
               </Card>
@@ -718,18 +907,40 @@ export default function ContractDetailsPage() {
                   <div className="flex size-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
                     <History size={14} aria-hidden />
                   </div>
-                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">Payment History</h2>
+                  <h2 className="hs-strip-title text-stone-400 tracking-widest uppercase font-black text-sm">
+                    Payment History
+                  </h2>
                 </div>
                 <div className="p-0">
                   <Table
                     embedded
                     caption="Payments posted against this contract"
                     columns={[
-                      { key: "payment_date", label: "PAYMENT DATE", className: "pl-8" },
-                      { key: "amount", label: "AMOUNT", className: "text-right" },
-                      { key: "period", label: "BILLING PERIOD", className: "text-center" },
-                      { key: "status", label: "STATUS", className: "text-center" },
-                      { key: "reference", label: "ENTRY ID", className: "text-right pr-8" },
+                      {
+                        key: 'payment_date',
+                        label: 'PAYMENT DATE',
+                        className: 'pl-8',
+                      },
+                      {
+                        key: 'amount',
+                        label: 'AMOUNT',
+                        className: 'text-right',
+                      },
+                      {
+                        key: 'period',
+                        label: 'BILLING PERIOD',
+                        className: 'text-center',
+                      },
+                      {
+                        key: 'status',
+                        label: 'STATUS',
+                        className: 'text-center',
+                      },
+                      {
+                        key: 'reference',
+                        label: 'ENTRY ID',
+                        className: 'text-right pr-8',
+                      },
                     ]}
                     rows={payments.map((p) => (
                       <tr
@@ -742,18 +953,19 @@ export default function ContractDetailsPage() {
                         <td className="py-5 text-right">
                           <CurrencyDisplay
                             amount={p.amount_paid}
-                            className={`text-sm font-bold ${p.voided_at ? "text-stone-400 line-through" : "text-emerald-700"}`}
+                            className={`text-sm font-bold ${p.voided_at ? 'text-stone-400 line-through' : 'text-emerald-700'}`}
                           />
                         </td>
                         <td className="py-5 text-center text-[10px] font-bold uppercase tracking-widest text-stone-400">
                           {formatDateRange(
-                            p.billing_period_from || p.billing?.billing_period_from,
+                            p.billing_period_from ||
+                              p.billing?.billing_period_from,
                             p.billing_period_to || p.billing?.billing_period_to
                           )}
                         </td>
                         <td className="py-5 text-center">
                           <StatusBadge size="xs">
-                            {p.voided_at ? "voided" : (p.status || "posted")}
+                            {p.voided_at ? 'voided' : p.status || 'posted'}
                           </StatusBadge>
                         </td>
                         <td className="pr-8 py-5 text-right">
@@ -778,7 +990,8 @@ export default function ContractDetailsPage() {
           <div className="mt-8 flex items-center gap-3 rounded-2xl bg-stone-50 p-6 text-stone-500">
             <ShieldCheck size={20} className="text-stone-300" />
             <p className="text-xs font-bold uppercase tracking-widest leading-relaxed">
-              Administrative actions (Void/Move-out) require professional-level clearance.
+              Administrative actions (Void/Move-out) require professional-level
+              clearance.
             </p>
           </div>
         )}
@@ -801,32 +1014,37 @@ export default function ContractDetailsPage() {
           />
         )}
       </SideSheetOverlay>
-       <SideSheetOverlay
+      <SideSheetOverlay
         isOpen={showPaymentSheet}
         onClose={() => setShowPaymentSheet(false)}
         title="Record Onboarding Payment"
         size="lg"
       >
         <div className="p-6 pt-0">
-          {(!contract || !billData) ? (
+          {!contract || !billData ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <div className="h-10 w-10 border-4 border-teal-600/20 border-t-teal-600 rounded-full animate-spin" />
-              <p className="text-xs font-black uppercase tracking-widest text-stone-400">Syncing Ledger...</p>
+              <p className="text-xs font-black uppercase tracking-widest text-stone-400">
+                Syncing Ledger...
+              </p>
             </div>
           ) : (
-            <PaymentWizard 
+            <PaymentWizard
               contract={contract}
               isInitialSettlement={contract?.status === 'pending_payment'}
               initialValues={{
                 contract_id: contractId,
-                billing_id: contract?.latest_billing?.billing_id || normalizePaginatedList(billData).rows[0]?.billing_id,
-                rent_amount: contract?.monthly_rate_override || contract?.monthly_rate,
+                billing_id:
+                  contract?.latest_billing?.billing_id ||
+                  normalizePaginatedList(billData).rows[0]?.billing_id,
+                rent_amount:
+                  contract?.monthly_rate_override || contract?.monthly_rate,
                 deposit_amount: contract?.deposit_amount,
-                payment_category: "billing"
+                payment_category: 'billing',
               }}
               onSuccess={() => {
                 setShowPaymentSheet(false);
-                showToast("Payment recorded successfully.", "success");
+                showToast('Payment recorded successfully.', 'success');
                 refetchContract();
                 refetchBills();
                 refetchPayments();

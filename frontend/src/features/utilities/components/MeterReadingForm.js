@@ -1,23 +1,31 @@
-"use client";
-import { useState, useMemo } from "react";
-import { useToasts } from "@/context/ToastContext";
-import { Zap, Droplet, AlertTriangle } from "lucide-react";
-import { apiRequest } from "@/lib/api";
-import { applyServerFieldErrors } from "@/lib/forms";
-import { Field, Input } from "@/components/ui/Fields";
-import { QuickEditFormShell } from "@/components/ui/QuickEditFormShell";
-import { useForm } from "react-hook-form";
+'use client';
+import { useState, useMemo } from 'react';
+import { useToasts } from '@/context/ToastContext';
+import { Zap, Droplet, AlertTriangle } from 'lucide-react';
+import { apiRequest } from '@/lib/api';
+import { applyServerFieldErrors } from '@/lib/forms';
+import { Field, Input } from '@/components/ui/Fields';
+import { QuickEditFormShell } from '@/components/ui/QuickEditFormShell';
+import { useForm } from 'react-hook-form';
 export function MeterReadingForm({ meter, onSuccess, onCancel }) {
-  const { register, handleSubmit, formState: { errors }, setError, watch } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    setError,
+    watch,
+  } = useForm({
     defaultValues: {
       reading_date: new Date().toISOString().split('T')[0],
-      reading_value: "",
-      is_rollover: false
-    }
+      reading_value: '',
+      is_rollover: false,
+    },
   });
   const { showToast } = useToasts();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const isElectric = meter?.utility?.name?.toLowerCase().includes("electric") || meter?.utility_type === "electric";
+  const isElectric =
+    meter?.utility?.name?.toLowerCase().includes('electric') ||
+    meter?.utility_type === 'electric';
   const latestR = meter?.readings?.[0]; // Assumes readings are sorted desc
   const latestValue = latestR ? Number(latestR.reading_value) : 0;
   const onFormSubmit = async (data) => {
@@ -25,19 +33,25 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
 
     // Monotonicity Check (BR-MET-004) vs Rollover (BR-MET-005)
     if (!data.is_rollover && val < latestValue) {
-      showToast(`Reading must be ≥ the last recorded value (${latestValue}) unless this is a rollover event.`, "error");
+      showToast(
+        `Reading must be ≥ the last recorded value (${latestValue}) unless this is a rollover event.`,
+        'error'
+      );
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await apiRequest(`/api/meters/${meter.meter_id}/readings`, {
-        method: "POST",
-        body: JSON.stringify({
-          ...data,
-          reading_value: val,
-        })
-      });
+      const response = await apiRequest(
+        `/api/meters/${meter.meter_id}/readings`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            ...data,
+            reading_value: val,
+          }),
+        }
+      );
       // Pass the new reading back for auto-selection in the wizard
       onSuccess(response);
     } catch (err) {
@@ -55,33 +69,52 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
     >
       <div className="space-y-6">
         <div className="flex items-start gap-4 p-6 bg-stone-50 rounded-2xl border border-stone-100">
-          <div className={`flex size-12 shrink-0 items-center justify-center rounded-2xl shadow-sm ${isElectric ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>
-            {isElectric ? <Zap size={24} strokeWidth={2.5} /> : <Droplet size={24} strokeWidth={2.5} />}
+          <div
+            className={`flex size-12 shrink-0 items-center justify-center rounded-2xl shadow-sm ${isElectric ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}
+          >
+            {isElectric ? (
+              <Zap size={24} strokeWidth={2.5} />
+            ) : (
+              <Droplet size={24} strokeWidth={2.5} />
+            )}
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Last Recorded</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">
+              Last Recorded
+            </p>
             <p className="text-xl font-black text-stone-900 font-mono tabular-nums tracking-tight">
-              {latestValue} <span className="text-xs font-bold text-stone-400">{isElectric ? 'kWh' : 'm³'}</span>
+              {latestValue}{' '}
+              <span className="text-xs font-bold text-stone-400">
+                {isElectric ? 'kWh' : 'm³'}
+              </span>
             </p>
           </div>
         </div>
-        <Field label="Reading Date" required error={errors.reading_date?.message}>
+        <Field
+          label="Reading Date"
+          required
+          error={errors.reading_date?.message}
+        >
           <Input
             type="date"
-            {...register("reading_date", { required: "Date is required." })}
+            {...register('reading_date', { required: 'Date is required.' })}
             className="font-bold cursor-pointer"
           />
         </Field>
-        <Field label="Reading Value" required error={errors.reading_value?.message}>
+        <Field
+          label="Reading Value"
+          required
+          error={errors.reading_value?.message}
+        >
           <div className="relative">
             <Input
               type="number"
               step="0.0001"
               autoFocus
-              placeholder={latestValue ? `≥ ${latestValue}` : "Current reading"}
-              {...register("reading_value", {
-                required: "Reading value is required.",
-                min: { value: 0, message: "Reading cannot be negative." }
+              placeholder={latestValue ? `≥ ${latestValue}` : 'Current reading'}
+              {...register('reading_value', {
+                required: 'Reading value is required.',
+                min: { value: 0, message: 'Reading cannot be negative.' },
               })}
               className="!h-16 px-8 text-xl font-black tabular-nums border-stone-200 focus:border-teal-500"
             />
@@ -95,7 +128,7 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
             <div className="relative flex items-center">
               <input
                 type="checkbox"
-                {...register("is_rollover")}
+                {...register('is_rollover')}
                 className="size-5 rounded border-stone-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
               />
             </div>
@@ -104,36 +137,47 @@ export function MeterReadingForm({ meter, onSuccess, onCancel }) {
                 Dial Rollover Event
               </p>
               <p className="text-[10px] font-medium text-stone-400 mt-1 uppercase leading-tight">
-                Check this if the meter has reached its maximum capacity (9,999.9999) and reset to zero.
+                Check this if the meter has reached its maximum capacity
+                (9,999.9999) and reset to zero.
               </p>
             </div>
           </label>
         </div>
-        {!watch("is_rollover") && (
+        {!watch('is_rollover') && (
           <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-100 flex gap-3">
             <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-[10px] font-medium text-amber-800 leading-relaxed uppercase">
-              Meter readings must be monotonic. Dropping below the last record will cause an error.
+              Meter readings must be monotonic. Dropping below the last record
+              will cause an error.
             </p>
           </div>
         )}
 
         {/* Month Guard Warning */}
         {(() => {
-          const selectedDate = watch("reading_date");
+          const selectedDate = watch('reading_date');
           if (!selectedDate || !meter?.readings) return null;
           const selectedMonth = selectedDate.substring(0, 7); // YYYY-MM
-          const hasExisting = meter.readings.some(r => r.reading_date.substring(0, 7) === selectedMonth);
+          const hasExisting = meter.readings.some(
+            (r) => r.reading_date.substring(0, 7) === selectedMonth
+          );
 
           if (hasExisting) {
             return (
               <div className="p-4 rounded-xl bg-rose-50 border border-rose-100 flex gap-3 animate-in shake duration-500">
                 <AlertTriangle className="size-4 text-rose-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-[10px] font-black text-rose-800 uppercase tracking-tight">Existing Month Reading</p>
+                  <p className="text-[10px] font-black text-rose-800 uppercase tracking-tight">
+                    Existing Month Reading
+                  </p>
                   <p className="text-[9px] font-medium text-rose-600 mt-1 uppercase leading-tight">
-                    A reading for {new Date(selectedDate).toLocaleString('default', { month: 'long', year: 'numeric' })} already exists.
-                    Recording this will create a second reading for the same cycle.
+                    A reading for{' '}
+                    {new Date(selectedDate).toLocaleString('default', {
+                      month: 'long',
+                      year: 'numeric',
+                    })}{' '}
+                    already exists. Recording this will create a second reading
+                    for the same cycle.
                   </p>
                 </div>
               </div>

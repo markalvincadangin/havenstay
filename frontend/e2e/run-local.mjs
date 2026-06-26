@@ -5,13 +5,13 @@
  *   php artisan serve --host=127.0.0.1 --port=8000
  *   npm run test:e2e:local
  */
-import { spawnSync } from "node:child_process";
+import { spawnSync } from 'node:child_process';
 
-process.env.PLAYWRIGHT_BASE_URL ??= "http://127.0.0.1:3001";
-process.env.PLAYWRIGHT_API_BASE_URL ??= "http://127.0.0.1:8000";
+process.env.PLAYWRIGHT_BASE_URL ??= 'http://127.0.0.1:3001';
+process.env.PLAYWRIGHT_API_BASE_URL ??= 'http://127.0.0.1:8000';
 
-const r = spawnSync("npx", ["playwright", "test", "e2e/smoke.spec.js"], {
-  stdio: "inherit",
+const r = spawnSync('npx', ['playwright', 'test', 'e2e/smoke.spec.js'], {
+  stdio: 'inherit',
   shell: true,
   env: process.env,
 });

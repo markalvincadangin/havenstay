@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { motion, useReducedMotion } from "framer-motion";
-import { ROOM_UNIT_OFFLINE_BED_HINT } from "@/lib/constants";
+import { motion, useReducedMotion } from 'framer-motion';
+import { ROOM_UNIT_OFFLINE_BED_HINT } from '@/lib/constants';
 
 /**
  * OccupancyBar — Visualizes bed-level occupancy within a room.
@@ -10,16 +10,17 @@ import { ROOM_UNIT_OFFLINE_BED_HINT } from "@/lib/constants";
 export default function OccupancyBar({ bedSpaces, capacity, roomStatus }) {
   const shouldReduceMotion = useReducedMotion();
   const bedList = Array.isArray(bedSpaces) ? bedSpaces : [];
-  const occupied = bedList.filter((b) => b.status === "occupied").length;
-  const vacant = bedList.filter((b) => b.status === "vacant").length;
-  
+  const occupied = bedList.filter((b) => b.status === 'occupied').length;
+  const vacant = bedList.filter((b) => b.status === 'vacant').length;
+
   /** Prefer room capacity; fall back to bed row count. */
   const total = Math.max(Number(capacity) || 0, bedList.length);
   const pct = total > 0 ? Math.round((occupied / total) * 100) : 0;
 
-  const rs = String(roomStatus ?? "").toLowerCase();
-  const unitOffline = rs === "maintenance";
-  const offlineHint = rs === "maintenance" ? ROOM_UNIT_OFFLINE_BED_HINT[rs] : null;
+  const rs = String(roomStatus ?? '').toLowerCase();
+  const unitOffline = rs === 'maintenance';
+  const offlineHint =
+    rs === 'maintenance' ? ROOM_UNIT_OFFLINE_BED_HINT[rs] : null;
 
   return (
     <div className="mt-2">
@@ -35,7 +36,7 @@ export default function OccupancyBar({ bedSpaces, capacity, roomStatus }) {
           ) : (
             vacant > 0 && (
               <p className="text-[9px] font-medium text-teal-600">
-                {vacant} {vacant === 1 ? "bed" : "beds"} available
+                {vacant} {vacant === 1 ? 'bed' : 'beds'} available
               </p>
             )
           )}
@@ -60,7 +61,11 @@ export default function OccupancyBar({ bedSpaces, capacity, roomStatus }) {
           className="h-full rounded-full bg-teal-600"
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.6, ease: "easeOut" }}
+          transition={
+            shouldReduceMotion
+              ? { duration: 0 }
+              : { duration: 0.6, ease: 'easeOut' }
+          }
         />
       </div>
     </div>

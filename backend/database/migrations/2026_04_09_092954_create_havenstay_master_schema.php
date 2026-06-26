@@ -286,7 +286,7 @@ return new class extends Migration
             $table->index('request_id', 'idx_audit_request');
         });
 
-        // Removed: transaction_logs (Consolidated into audit_logs per CCR-007 retirement)
+        // Removed: transaction_logs (Consolidated into audit_logs per Audit Log consolidation)
     }
 
     private function createViews(): void

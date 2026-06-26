@@ -1,0 +1,8 @@
+# HavenStay — Code Ownership
+# NOTE: Purely scaffolding until a second contributor is added.
+# GitHub only enforces differential ownership when multiple owners exist.
+/backend/    @markalvincadangin
+/frontend/   @markalvincadangin
+/db/         @markalvincadangin
+/docker/     @markalvincadangin
+*            @markalvincadangin

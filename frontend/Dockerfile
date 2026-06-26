@@ -6,7 +6,11 @@ RUN apk add --no-cache libc6-compat
 # Stage 2: Dependencies - Install node_modules
 FROM base AS deps
 COPY package*.json ./
-RUN npm install
+# Set long timeouts to prevent ECONNRESET during Docker build on Linux
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm install
 
 # Stage 3: Development - Hot-reloading environment
 # node_modules are installed in deps, then the bind mount in docker-compose
@@ -15,8 +19,6 @@ FROM base AS development
 ENV NODE_ENV=development
 COPY . .
 COPY --from=deps /app/node_modules ./node_modules
-# Polling required for file-change detection on Windows/WSL2 hosts
-ENV WATCHPACK_POLLING=true
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
 

@@ -20,7 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Reports — traceability: docs/SRS.md FR-028–032, docs/API_REFERENCE.md Reporting & Exports, CCR-005 (six reporting views).
+ * Reports — traceability: docs/SRS.md FR-028–032, docs/API_REFERENCE.md Reporting & Exports, six reporting views.
  */
 class ReportsExportTest extends TestCase
 {

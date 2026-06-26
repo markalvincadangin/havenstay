@@ -1,13 +1,13 @@
-import React from "react";
-import { RefreshCw, AlertCircle } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import Alert from "./Alert";
-import EmptyState from "./EmptyState";
+import React from 'react';
+import { RefreshCw, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Alert from './Alert';
+import EmptyState from './EmptyState';
 
 /**
- * ResourceView — A unified, reusable component for managing loading, 
+ * ResourceView — A unified, reusable component for managing loading,
  * error, and empty states across the application.
- * 
+ *
  * @param {boolean} isLoading - Whether the resource is currently fetching (Initial load).
  * @param {boolean} isSyncing - Background re-validation (SWR isValidating).
  * @param {any} error - If truthy, shows an error state.
@@ -25,7 +25,7 @@ export default function ResourceView({
   skeleton,
   onRetry,
   emptyProps = {},
-  children
+  children,
 }) {
   // Optimization: Only show the syncing 'blur' if the request takes longer than 150ms.
   // This prevents the 'hardcoded blur' feeling for fast, optimized database queries.
@@ -45,18 +45,23 @@ export default function ResourceView({
 
   // 1. Initial Loading State (Skeleton)
   if (isLoading) {
-    return skeleton || (
-      <div className="w-full space-y-4 p-6">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="flex items-center justify-between gap-4 animate-pulse">
-            <div className="space-y-2 flex-1">
-              <div className="h-2.5 w-32 rounded bg-stone-100" />
-              <div className="h-2 w-20 rounded bg-stone-50" />
+    return (
+      skeleton || (
+        <div className="w-full space-y-4 p-6">
+          {[...Array(3)].map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 animate-pulse"
+            >
+              <div className="space-y-2 flex-1">
+                <div className="h-2.5 w-32 rounded bg-stone-100" />
+                <div className="h-2 w-20 rounded bg-stone-50" />
+              </div>
+              <div className="h-6 w-16 rounded-lg bg-stone-50" />
             </div>
-            <div className="h-6 w-16 rounded-lg bg-stone-50" />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )
     );
   }
 
@@ -73,7 +78,11 @@ export default function ResourceView({
         >
           <div className="flex flex-col gap-2">
             <p>We could not load this data right now. Please try again.</p>
-            {error && <code className="rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-red-800 font-mono tracking-tighter">{String(error)}</code>}
+            {error && (
+              <code className="rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-red-800 font-mono tracking-tighter">
+                {String(error)}
+              </code>
+            )}
           </div>
         </Alert>
         {onRetry && (
@@ -101,13 +110,13 @@ export default function ResourceView({
       {/* Progress Bar (CSS Indeterminate) */}
       <AnimatePresence>
         {isSyncing && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scaleY: 0 }}
             animate={{ opacity: 1, scaleY: 1 }}
             exit={{ opacity: 0, scaleY: 0 }}
-            transition={{ 
+            transition={{
               duration: 0.1, // Quick entry
-              exit: { duration: 0 } // Instant exit when data is ready
+              exit: { duration: 0 }, // Instant exit when data is ready
             }}
             className="absolute left-0 top-0 z-50 h-[3px] w-full overflow-hidden bg-teal-600/10 pointer-events-none origin-top"
           >
@@ -118,9 +127,9 @@ export default function ResourceView({
 
       <div
         className={[
-          "h-full transition-all duration-300",
-          showSyncingEffect ? "hs-resource-syncing" : ""
-        ].join(" ")}
+          'h-full transition-all duration-300',
+          showSyncingEffect ? 'hs-resource-syncing' : '',
+        ].join(' ')}
       >
         {children}
       </div>

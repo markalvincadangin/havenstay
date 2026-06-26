@@ -1,48 +1,63 @@
-"use client";
+'use client';
 import {
-  User, Phone, Mail, MapPin,
-  History, Edit2, ArrowUpRight,
-  Calendar, FileCheck, _AlertTriangle
-} from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { useState, useMemo } from "react";
-import useSWR from "swr";
-import { apiRequest, fetcher } from "@/lib/api";
-import { flattenApiErrors } from "@/lib/errors";
-import { canManageBilling, canManageTenants } from "@/lib/auth";
-import { formatDateString, formatTenantDirectoryName, formatPII } from "@/lib/formatters";
-import { Card } from "@/components/ui/Card";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import { Table } from "@/components/ui/Table";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { secondaryOutlineLinkClass } from "@/components/ui/LinkTokens";
-import LifecycleActions from "@/components/ui/LifecycleActions";
-import RecordStateAlert from "@/components/ui/RecordStateAlert";
-import StandardPage from "@/components/ui/StandardPage";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import Avatar from "@/components/ui/Avatar";
-import Alert from "@/components/ui/Alert";
-import { useAuth } from "@/context/AuthContext";
-import { useToasts } from "@/context/ToastContext";
-import { interactiveTableRowClass, stopRowClick } from "@/lib/tableRows";
-import PageHeaderActions from "@/components/ui/PageHeaderActions";
-import { normalizePaginatedList } from "@/lib/pagination";
-import { FormSection } from "@/components/ui/FormSection";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
-import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
-import MetricItem from "@/components/ui/MetricItem";
-import DetailRow from "@/components/ui/DetailRow";
-import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  History,
+  Edit2,
+  ArrowUpRight,
+  Calendar,
+  FileCheck,
+  _AlertTriangle,
+} from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
+import { apiRequest, fetcher } from '@/lib/api';
+import { flattenApiErrors } from '@/lib/errors';
+import { canManageBilling, canManageTenants } from '@/lib/auth';
+import {
+  formatDateString,
+  formatTenantDirectoryName,
+  formatPII,
+} from '@/lib/formatters';
+import { Card } from '@/components/ui/Card';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { Table } from '@/components/ui/Table';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { secondaryOutlineLinkClass } from '@/components/ui/LinkTokens';
+import LifecycleActions from '@/components/ui/LifecycleActions';
+import RecordStateAlert from '@/components/ui/RecordStateAlert';
+import StandardPage from '@/components/ui/StandardPage';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import Avatar from '@/components/ui/Avatar';
+import Alert from '@/components/ui/Alert';
+import { useAuth } from '@/context/AuthContext';
+import { useToasts } from '@/context/ToastContext';
+import { interactiveTableRowClass, stopRowClick } from '@/lib/tableRows';
+import PageHeaderActions from '@/components/ui/PageHeaderActions';
+import { normalizePaginatedList } from '@/lib/pagination';
+import { FormSection } from '@/components/ui/FormSection';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
+import MetricItem from '@/components/ui/MetricItem';
+import DetailRow from '@/components/ui/DetailRow';
+import { SideSheetOverlay } from '@/components/ui/SideSheetOverlay';
 import { TenantQuickEditForm } from '@/features/tenants/components/TenantQuickEditForm';
-import DetailHeader from "@/components/ui/DetailHeader";
+import DetailHeader from '@/components/ui/DetailHeader';
 export default function TenantDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const tenantId = params?.id;
   const { user: currentUser } = useAuth();
   const { showToast } = useToasts();
-  const { data: tenant, error: tenantError, mutate: mutateTenant } = useSWR(
+  const {
+    data: tenant,
+    error: tenantError,
+    mutate: mutateTenant,
+  } = useSWR(
     currentUser && tenantId ? `/api/tenants/${tenantId}` : null,
     fetcher
   );
@@ -54,70 +69,70 @@ export default function TenantDetailsPage() {
     return normalizePaginatedList(contractData).rows;
   }, [contractData]);
   const loading = !tenant && !tenantError;
-  const [actionError, setActionError] = useState("");
+  const [actionError, setActionError] = useState('');
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
-  const [busyAction, setBusyAction] = useState("");
+  const [busyAction, setBusyAction] = useState('');
   const [editingTenant, setEditingTenant] = useState(null);
-  const fullName = tenant ? formatTenantDirectoryName(tenant) : "Profile";
-  const activeContract = contracts.find(c => c.status === 'active');
+  const fullName = tenant ? formatTenantDirectoryName(tenant) : 'Profile';
+  const activeContract = contracts.find((c) => c.status === 'active');
   const canManage = canManageTenants(currentUser);
   const hasActiveContract = Boolean(activeContract);
   const handleArchiveTenant = async () => {
     if (!tenant) return;
-    setActionError("");
-    setBusyAction("archive");
+    setActionError('');
+    setBusyAction('archive');
     try {
-      await apiRequest(`/api/tenants/${tenantId}/archive`, { method: "POST" });
-      showToast(`${fullName} archived successfully.`, "success");
+      await apiRequest(`/api/tenants/${tenantId}/archive`, { method: 'POST' });
+      showToast(`${fullName} archived successfully.`, 'success');
       setShowArchiveModal(false);
-      router.push("/tenants");
+      router.push('/tenants');
     } catch (error) {
       setActionError(flattenApiErrors(error));
       setShowArchiveModal(false);
     } finally {
-      setBusyAction("");
+      setBusyAction('');
     }
   };
   const handleRestoreTenant = async () => {
     if (!tenant) return;
-    setActionError("");
-    setBusyAction("restore");
+    setActionError('');
+    setBusyAction('restore');
     try {
-      await apiRequest(`/api/tenants/${tenantId}/restore`, { method: "POST" });
-      showToast(`${fullName} restored successfully.`, "success");
+      await apiRequest(`/api/tenants/${tenantId}/restore`, { method: 'POST' });
+      showToast(`${fullName} restored successfully.`, 'success');
       setShowRestoreModal(false);
       await mutateTenant();
     } catch (error) {
       setActionError(flattenApiErrors(error));
       setShowRestoreModal(false);
     } finally {
-      setBusyAction("");
+      setBusyAction('');
     }
   };
   const runLifecycleAction = async (action, path) => {
-    setActionError("");
+    setActionError('');
     setBusyAction(action);
     try {
-      await apiRequest(path, { method: "POST" });
-      showToast(`Tenant status updated to ${action}.`, "success");
+      await apiRequest(path, { method: 'POST' });
+      showToast(`Tenant status updated to ${action}.`, 'success');
       await mutateTenant();
     } catch (error) {
       setActionError(flattenApiErrors(error));
     } finally {
-      setBusyAction("");
+      setBusyAction('');
     }
   };
   const header = DetailHeader({
-    type: "tenant",
+    type: 'tenant',
     id: tenantId,
     title: fullName,
     subtitle: "Complete tenant's profile information",
     status: tenant?.status,
     loading: loading,
-    listHref: "/tenants",
-    listLabel: "Tenant Directory",
-    detailLabel: "Profile"
+    listHref: '/tenants',
+    listLabel: 'Tenant Directory',
+    detailLabel: 'Profile',
   });
 
   return (
@@ -137,7 +152,7 @@ export default function TenantDetailsPage() {
               <button
                 type="button"
                 onClick={() => setEditingTenant(tenant)}
-                className={secondaryOutlineLinkClass + " px-6"}
+                className={secondaryOutlineLinkClass + ' px-6'}
               >
                 <Edit2 size={16} aria-hidden />
                 Update Details
@@ -147,7 +162,12 @@ export default function TenantDetailsPage() {
                 status={tenant?.status}
                 hasActiveContract={hasActiveContract}
                 busyAction={busyAction}
-                onDeactivate={() => runLifecycleAction("deactivate", `/api/tenants/${tenantId}/deactivate`)}
+                onDeactivate={() =>
+                  runLifecycleAction(
+                    'deactivate',
+                    `/api/tenants/${tenantId}/deactivate`
+                  )
+                }
                 onRestore={() => setShowRestoreModal(true)}
                 onArchive={() => setShowArchiveModal(true)}
               />
@@ -162,29 +182,44 @@ export default function TenantDetailsPage() {
         description={`Are you sure you want to archive ${fullName}? Their profile will be moved to historical records, but all past contracts and payments will be preserved for review.`}
         confirmLabel="Archive Tenant"
         isDanger
-        isLoading={busyAction === "archive"}
+        isLoading={busyAction === 'archive'}
         onConfirm={handleArchiveTenant}
-        onCancel={() => busyAction !== "archive" && setShowArchiveModal(false)}
+        onCancel={() => busyAction !== 'archive' && setShowArchiveModal(false)}
       />
       <ConfirmationDialog
         open={showRestoreModal}
         title="Restore Tenant Record"
         description={`You are about to restore ${fullName} from archives. This will allow the tenant to be assigned to new contracts and appear in active directories.`}
         confirmLabel="Restore Tenant"
-        isLoading={busyAction === "restore"}
+        isLoading={busyAction === 'restore'}
         onConfirm={handleRestoreTenant}
-        onCancel={() => busyAction !== "restore" && setShowRestoreModal(false)}
+        onCancel={() => busyAction !== 'restore' && setShowRestoreModal(false)}
       />
       {tenant ? (
         <div className="space-y-6">
-          <RecordStateAlert show={Boolean(actionError)} variant="error" title="Action blocked">
+          <RecordStateAlert
+            show={Boolean(actionError)}
+            variant="error"
+            title="Action blocked"
+          >
             {actionError}
           </RecordStateAlert>
-          <RecordStateAlert show={hasActiveContract && canManage} variant="info" title="Active contract found">
-            Tenant lifecycle changes are restricted while an active contract exists. Process move-out first.
+          <RecordStateAlert
+            show={hasActiveContract && canManage}
+            variant="info"
+            title="Active contract found"
+          >
+            Tenant lifecycle changes are restricted while an active contract
+            exists. Process move-out first.
           </RecordStateAlert>
-          <RecordStateAlert show={tenant?.status === 'archived'} variant="warning" title="Archived Record">
-            This profile is currently archived in the historical registry. Restoration is required before this tenant can be assigned to new lease agreements.
+          <RecordStateAlert
+            show={tenant?.status === 'archived'}
+            variant="warning"
+            title="Archived Record"
+          >
+            This profile is currently archived in the historical registry.
+            Restoration is required before this tenant can be assigned to new
+            lease agreements.
           </RecordStateAlert>
           <div className="grid gap-6 lg:grid-cols-12">
             {/* --- Left Column: Overview --- */}
@@ -195,27 +230,44 @@ export default function TenantDetailsPage() {
                   <h2 className="mt-4 text-xl font-black text-stone-900 tracking-tight flex items-center gap-2">
                     {fullName}
                     {tenant?.correlation_id && (
-                      <span className="font-mono text-[10px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-2 py-0.5" title={`Workflow ID: ${tenant.correlation_id.toUpperCase()}`}>
+                      <span
+                        className="font-mono text-[10px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-2 py-0.5"
+                        title={`Workflow ID: ${tenant.correlation_id.toUpperCase()}`}
+                      >
                         #WF-{tenant.correlation_id.slice(0, 5).toUpperCase()}
                       </span>
                     )}
                   </h2>
                   <div className="mt-2">
-                    <StatusBadge size="sm">{tenant?.status || "active"}</StatusBadge>
+                    <StatusBadge size="sm">
+                      {tenant?.status || 'active'}
+                    </StatusBadge>
                   </div>
                 </div>
                 <div className="flex justify-center border-b border-stone-100 bg-stone-50/30 px-4 py-3">
-                  <span className="text-xs font-bold uppercase tracking-widest text-stone-400">Quick Profile</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-stone-400">
+                    Quick Profile
+                  </span>
                 </div>
                 <div className="p-8 space-y-2">
                   <MetricItem
                     label="Room / Bed"
-                    value={activeContract ? (activeContract.room?.room_code ? `Room ${activeContract.room.room_code}` : "—") : "—"}
+                    value={
+                      activeContract
+                        ? activeContract.room?.room_code
+                          ? `Room ${activeContract.room.room_code}`
+                          : '—'
+                        : '—'
+                    }
                     icon={MapPin}
                   />
                   <MetricItem
                     label="Move-in Date"
-                    value={activeContract ? formatDateString(activeContract.move_in_date) : "—"}
+                    value={
+                      activeContract
+                        ? formatDateString(activeContract.move_in_date)
+                        : '—'
+                    }
                     icon={Calendar}
                   />
                   <MetricItem
@@ -233,8 +285,17 @@ export default function TenantDetailsPage() {
                 bodyClassName="p-8 space-y-4"
               >
                 <div className="space-y-4">
-                  <DetailRow label="Emergency Contact Name" value={tenant?.emergency_contact_name} icon={User} />
-                  <DetailRow label="Emergency Number" value={tenant?.emergency_contact_number} icon={Phone} mono />
+                  <DetailRow
+                    label="Emergency Contact Name"
+                    value={tenant?.emergency_contact_name}
+                    icon={User}
+                  />
+                  <DetailRow
+                    label="Emergency Number"
+                    value={tenant?.emergency_contact_number}
+                    icon={Phone}
+                    mono
+                  />
                 </div>
               </FormSection>
             </aside>
@@ -247,12 +308,37 @@ export default function TenantDetailsPage() {
                 bodyClassName="p-8"
               >
                 <div className="grid gap-x-12 gap-y-2 md:grid-cols-2">
-                  <DetailRow label="First Name" value={tenant?.first_name} icon={User} />
-                  <DetailRow label="Last Name" value={tenant?.last_name} icon={User} />
-                  <DetailRow label="Mobile Number" value={formatPII(tenant?.contact_number, "phone", canManage)} icon={Phone} mono />
-                  <DetailRow label="Email" value={formatPII(tenant?.email, "email", canManage)} icon={Mail} />
+                  <DetailRow
+                    label="First Name"
+                    value={tenant?.first_name}
+                    icon={User}
+                  />
+                  <DetailRow
+                    label="Last Name"
+                    value={tenant?.last_name}
+                    icon={User}
+                  />
+                  <DetailRow
+                    label="Mobile Number"
+                    value={formatPII(
+                      tenant?.contact_number,
+                      'phone',
+                      canManage
+                    )}
+                    icon={Phone}
+                    mono
+                  />
+                  <DetailRow
+                    label="Email"
+                    value={formatPII(tenant?.email, 'email', canManage)}
+                    icon={Mail}
+                  />
                   <div className="md:col-span-2">
-                    <DetailRow label="Home Address" value={tenant?.address} icon={MapPin} />
+                    <DetailRow
+                      label="Home Address"
+                      value={tenant?.address}
+                      icon={MapPin}
+                    />
                   </div>
                 </div>
               </FormSection>
@@ -262,7 +348,9 @@ export default function TenantDetailsPage() {
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-100 text-stone-600">
                       <History size={14} aria-hidden />
                     </div>
-                    <h2 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">Contract History</h2>
+                    <h2 className="hs-strip-title text-stone-400 tracking-[0.2em] uppercase font-black text-[10px]">
+                      Contract History
+                    </h2>
                   </div>
                 </div>
                 <div className="p-0">
@@ -270,23 +358,39 @@ export default function TenantDetailsPage() {
                     embedded
                     caption="History of tenant contracts"
                     columns={[
-                      { key: "contract_id", label: "CONTRACT ID" },
-                      { key: "room", label: "ASSIGNED ROOM" },
-                      { key: "dates", label: "CONTRACT PERIOD", className: "text-center" },
-                      { key: "status", label: "STATUS", className: "text-center" },
-                      { key: "actions", label: "", className: "text-right" },
+                      { key: 'contract_id', label: 'CONTRACT ID' },
+                      { key: 'room', label: 'ASSIGNED ROOM' },
+                      {
+                        key: 'dates',
+                        label: 'CONTRACT PERIOD',
+                        className: 'text-center',
+                      },
+                      {
+                        key: 'status',
+                        label: 'STATUS',
+                        className: 'text-center',
+                      },
+                      { key: 'actions', label: '', className: 'text-right' },
                     ]}
                     rows={contracts.map((c) => (
                       <tr
                         key={c.contract_id}
                         className={interactiveTableRowClass}
-                        onClick={() => router.push(`/contracts/${c.contract_id}`)}
+                        onClick={() =>
+                          router.push(`/contracts/${c.contract_id}`)
+                        }
                       >
                         <td className="px-8 py-5">
                           <div className="flex flex-col gap-1.5 items-start">
-                            <ResourceIdCell id={c.contract_id} type="contract" />
+                            <ResourceIdCell
+                              id={c.contract_id}
+                              type="contract"
+                            />
                             {c.correlation_id && (
-                              <div className="font-mono text-[8px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-1.5 py-0.5 tracking-widest leading-none block" title={`Workflow ID: ${c.correlation_id.toUpperCase()}`}>
+                              <div
+                                className="font-mono text-[8px] font-black text-stone-300 bg-stone-50 border border-stone-100 rounded px-1.5 py-0.5 tracking-widest leading-none block"
+                                title={`Workflow ID: ${c.correlation_id.toUpperCase()}`}
+                              >
                                 #WF-{c.correlation_id.slice(0, 5).toUpperCase()}
                               </div>
                             )}
@@ -294,7 +398,9 @@ export default function TenantDetailsPage() {
                         </td>
                         <td className="py-5">
                           <div className="font-bold text-sm text-stone-800 leading-tight">
-                            {c.room?.room_code ? `Room ${c.room.room_code}` : "—"}
+                            {c.room?.room_code
+                              ? `Room ${c.room.room_code}`
+                              : '—'}
                           </div>
                           {c.bed_space?.bed_label && (
                             <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest mt-1">
@@ -304,14 +410,18 @@ export default function TenantDetailsPage() {
                         </td>
                         <td className="py-5 text-center">
                           <div className="text-xs text-stone-600 leading-tight">
-                            {formatDateString(c.move_in_date)} — {c.expected_move_out_date ? formatDateString(c.expected_move_out_date) : "Present"}
+                            {formatDateString(c.move_in_date)} —{' '}
+                            {c.expected_move_out_date
+                              ? formatDateString(c.expected_move_out_date)
+                              : 'Present'}
                           </div>
                         </td>
                         <td className="py-5 text-center">
                           <StatusBadge size="xs">{c.status}</StatusBadge>
                         </td>
                         <td className="px-8 py-5 text-right">
-                          {c.status === "active" && canManageBilling(currentUser) ? (
+                          {c.status === 'active' &&
+                          canManageBilling(currentUser) ? (
                             <Link
                               href={`/billing?contract_id=${c.contract_id}`}
                               className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 bg-white text-stone-400 transition-[border-color,box-shadow,colors] group-hover:border-teal-200 group-hover:bg-teal-50 group-hover:text-teal-600 shadow-sm"
@@ -334,7 +444,8 @@ export default function TenantDetailsPage() {
         </div>
       ) : !loading && !tenantError ? (
         <Alert variant="warning" title="Profile Not Found">
-          The requested tenant profile could not be found in the system registry.
+          The requested tenant profile could not be found in the system
+          registry.
         </Alert>
       ) : null}
       <SideSheetOverlay

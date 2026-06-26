@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import Button from "./Button";
+import Button from './Button';
 
 export default function ReportHeaderActions({
   user,
@@ -8,7 +8,7 @@ export default function ReportHeaderActions({
   exporting = false,
   exportDisabled = false,
   showExport = true,
-  exportLabel = "Export CSV",
+  exportLabel = 'Export CSV',
 }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">

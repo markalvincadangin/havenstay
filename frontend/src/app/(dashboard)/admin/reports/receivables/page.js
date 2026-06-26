@@ -1,2 +1,1 @@
-export { default } from "../outstanding-balances/page";
-
+export { default } from '../outstanding-balances/page';

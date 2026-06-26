@@ -53,6 +53,9 @@ testsprite_tests/
 !**/.env.example
 db/replica_daily_start.env
 
+# Docker Compose local override (copy from docker-compose.override.yml.example)
+docker-compose.override.yml
+
 # OS/editor artifacts
 .DS_Store
 Thumbs.db

@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import React from "react";
-import { ArrowLeft, Check } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Card } from "./Card";
-import Button from "./Button";
+import React from 'react';
+import { ArrowLeft, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Card } from './Card';
+import Button from './Button';
 
 /**
  * Enhanced WizardFrame — Centralized multi-step flow controller.
@@ -21,16 +21,19 @@ export function WizardFrame({
   isSubmitting = false,
   isNextDisabled = false,
   isSubmitDisabled = false,
-  cancelLabel = "Cancel",
-  nextLabel = "Next Step",
-  submitLabel = "Confirm & Save",
+  cancelLabel = 'Cancel',
+  nextLabel = 'Next Step',
+  submitLabel = 'Confirm & Save',
   extraActions = null,
   hideNavigation = false,
   isLastStepOverride = null,
-  children
+  children,
 }) {
   const isFirstStep = currentStepIndex === 0;
-  const isLastStep = isLastStepOverride !== null ? isLastStepOverride : currentStepIndex === steps.length - 1;
+  const isLastStep =
+    isLastStepOverride !== null
+      ? isLastStepOverride
+      : currentStepIndex === steps.length - 1;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-8">
@@ -49,14 +52,13 @@ export function WizardFrame({
                   <ArrowLeft size={16} strokeWidth={2.5} />
                 </button>
               )}
-              <h2 className="hs-strip-title text-stone-400">
-                {title}
-              </h2>
+              <h2 className="hs-strip-title text-stone-400">{title}</h2>
             </div>
-            
+
             {/* Step Counter */}
             <div className="font-mono text-[10px] font-black uppercase tracking-widest text-stone-300">
-              Step {currentStepIndex + 1} <span className="mx-1">/</span> {steps.length}
+              Step {currentStepIndex + 1} <span className="mx-1">/</span>{' '}
+              {steps.length}
             </div>
           </div>
 
@@ -66,27 +68,38 @@ export function WizardFrame({
               const isActive = idx === currentStepIndex;
               const isPast = idx < currentStepIndex;
               return (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   className={`flex-1 relative py-3 px-4 flex items-center justify-center gap-2 border-r border-stone-100/50 last:border-r-0 transition-colors duration-300 ${isActive ? 'bg-white' : ''}`}
                 >
-                  <div className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black transition-all duration-500 ${
-                    isPast ? 'bg-emerald-500 text-white' : 
-                    isActive ? 'bg-teal-600 text-white scale-110 shadow-md' : 'bg-stone-100 text-stone-400'
-                  }`}>
+                  <div
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black transition-all duration-500 ${
+                      isPast
+                        ? 'bg-emerald-500 text-white'
+                        : isActive
+                          ? 'bg-teal-600 text-white scale-110 shadow-md'
+                          : 'bg-stone-100 text-stone-400'
+                    }`}
+                  >
                     {isPast ? <Check size={10} strokeWidth={3} /> : idx + 1}
                   </div>
-                  <span className={`hidden sm:inline text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${
-                    isPast ? 'text-stone-900' : isActive ? 'text-teal-700' : 'text-stone-300'
-                  }`}>
+                  <span
+                    className={`hidden sm:inline text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${
+                      isPast
+                        ? 'text-stone-900'
+                        : isActive
+                          ? 'text-teal-700'
+                          : 'text-stone-300'
+                    }`}
+                  >
                     {step.label}
                   </span>
-                  
+
                   {/* Active Indicator Bar */}
                   {isActive && (
-                    <motion.div 
+                    <motion.div
                       layoutId="wizard-active-bar"
-                      className="absolute bottom-0 left-0 h-0.5 w-full bg-teal-500" 
+                      className="absolute bottom-0 left-0 h-0.5 w-full bg-teal-500"
                     />
                   )}
                 </div>
@@ -103,7 +116,7 @@ export function WizardFrame({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
             >
               {children}
             </motion.div>
@@ -115,10 +128,10 @@ export function WizardFrame({
       {!hideNavigation && (
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end sm:items-center">
           {!isFirstStep && (
-            <Button 
-              variant="secondary" 
-              onClick={onBack} 
-              disabled={isSubmitting} 
+            <Button
+              variant="secondary"
+              onClick={onBack}
+              disabled={isSubmitting}
               type="button"
               className="h-12 px-8 rounded-xl font-bold text-sm text-stone-600 hover:text-stone-900 border-stone-200"
             >
@@ -127,12 +140,12 @@ export function WizardFrame({
           )}
 
           {extraActions}
-          
+
           {isLastStep ? (
-            <Button 
-              variant="primary" 
-              onClick={onSubmit} 
-              disabled={isSubmitting || isSubmitDisabled} 
+            <Button
+              variant="primary"
+              onClick={onSubmit}
+              disabled={isSubmitting || isSubmitDisabled}
               isLoading={isSubmitting}
               className="h-12 px-10 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-500/20 active:scale-95 transition-transform"
               type="button"
@@ -140,9 +153,9 @@ export function WizardFrame({
               {submitLabel}
             </Button>
           ) : (
-            <Button 
-              variant="primary" 
-              onClick={onNext} 
+            <Button
+              variant="primary"
+              onClick={onNext}
               disabled={isNextDisabled}
               className="h-12 px-10 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-teal-500/20 active:scale-95 transition-transform"
               type="button"

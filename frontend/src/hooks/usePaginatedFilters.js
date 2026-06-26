@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { buildPaginationQuery, readStoredPerPage, writeStoredPerPage } from "@/lib/pagination";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  buildPaginationQuery,
+  readStoredPerPage,
+  writeStoredPerPage,
+} from '@/lib/pagination';
 
 export function usePaginatedFilters({
   initialFilters,
-  initialSort = { by: "id", dir: "desc" },
+  initialSort = { by: 'id', dir: 'desc' },
   debounceKeys = [],
   debounceMs = 300,
   buildExtraParams,
@@ -14,7 +18,10 @@ export function usePaginatedFilters({
   const [perPageState, setPerPageState] = useState(() => readStoredPerPage());
 
   const [debouncedValues, setDebouncedValues] = useState(() =>
-    debounceKeys.reduce((acc, key) => ({ ...acc, [key]: initialFilters[key] }), {})
+    debounceKeys.reduce(
+      (acc, key) => ({ ...acc, [key]: initialFilters[key] }),
+      {}
+    )
   );
 
   useEffect(() => {
@@ -32,17 +39,20 @@ export function usePaginatedFilters({
     writeStoredPerPage(next);
   }, []);
 
-  const updateFilter = useCallback((key, value, options = { resetPage: true }) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-    if (options.resetPage !== false) setPage(1);
-  }, []);
+  const updateFilter = useCallback(
+    (key, value, options = { resetPage: true }) => {
+      setFilters((prev) => ({ ...prev, [key]: value }));
+      if (options.resetPage !== false) setPage(1);
+    },
+    []
+  );
 
   const onSortChange = useCallback((by, dir) => {
     setSort((prev) => {
       // If dir is explicitly provided (e.g. from a select dropdown), use it.
       // Otherwise, toggle direction if the same column is clicked, or reset to 'asc'.
       const finalDir =
-        dir || (prev.by === by && prev.dir === "asc" ? "desc" : "asc");
+        dir || (prev.by === by && prev.dir === 'asc' ? 'desc' : 'asc');
       return { by, dir: finalDir };
     });
     setPage(1);
@@ -56,7 +66,7 @@ export function usePaginatedFilters({
 
   const queryString = useMemo(() => {
     const extra =
-      typeof buildExtraParams === "function"
+      typeof buildExtraParams === 'function'
         ? buildExtraParams({ filters, debounced: debouncedValues })
         : { ...filters, ...debouncedValues };
 
@@ -65,7 +75,15 @@ export function usePaginatedFilters({
     extra.sort_dir = sort.dir;
 
     return buildPaginationQuery(page, perPage, extra);
-  }, [buildExtraParams, debouncedValues, filters, page, perPage, sort.by, sort.dir]);
+  }, [
+    buildExtraParams,
+    debouncedValues,
+    filters,
+    page,
+    perPage,
+    sort.by,
+    sort.dir,
+  ]);
 
   return {
     filters,

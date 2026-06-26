@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 /**
  * Button — variants per design-system/havenstay/MASTER.md Section 5.5.
@@ -14,13 +14,13 @@ import React from "react";
  * @param {React.ReactNode} children
  */
 export default function Button({
-  type = "button",
-  variant = "primary",
-  size = "md",
+  type = 'button',
+  variant = 'primary',
+  size = 'md',
   loading = false,
   isLoading = false, // Support both aliases
   disabled = false,
-  className = "",
+  className = '',
   children,
   asChild = false,
   fullWidth = false,
@@ -29,56 +29,57 @@ export default function Button({
   const isActuallyLoading = loading || isLoading;
   const isDisabled = disabled || isActuallyLoading;
   // "outline" is a legacy alias — maps to secondary per MASTER.md Section 5.5
-  const resolvedVariant = variant === "outline" ? "secondary" : variant;
+  const resolvedVariant = variant === 'outline' ? 'secondary' : variant;
   const variantClasses = {
     /** Primary: teal fill — one per page section max */
     primary:
-      "bg-[var(--color-primary)] text-white " +
-      "hover:bg-[var(--color-primary-dark)] " +
-      "active:scale-[0.98] " +
-      "focus:outline-none focus:shadow-[0_0_0_3px_rgba(13,148,136,0.3)]",
+      'bg-[var(--color-primary)] text-white ' +
+      'hover:bg-[var(--color-primary-dark)] ' +
+      'active:scale-[0.98] ' +
+      'focus:outline-none focus:shadow-[0_0_0_3px_rgba(13,148,136,0.3)]',
     /** Secondary: transparent with border — cancel / back actions */
     secondary:
-      "border border-[var(--color-border-strong)] bg-transparent text-[var(--color-text)] " +
-      "hover:bg-[var(--color-bg)] hover:border-[var(--color-text-secondary)] " +
-      "focus:outline-none focus:shadow-[0_0_0_3px_rgba(13,148,136,0.3)]",
+      'border border-[var(--color-border-strong)] bg-transparent text-[var(--color-text)] ' +
+      'hover:bg-[var(--color-bg)] hover:border-[var(--color-text-secondary)] ' +
+      'focus:outline-none focus:shadow-[0_0_0_3px_rgba(13,148,136,0.3)]',
     /** Danger: red outline — destructive actions (Void, Delete) */
     danger:
-      "bg-red-600 text-white " +
-      "hover:bg-red-700 " +
-      "active:scale-[0.98] " +
-      "focus:outline-none focus:shadow-[0_0_0_3px_rgba(220,38,38,0.3)]",
+      'bg-red-600 text-white ' +
+      'hover:bg-red-700 ' +
+      'active:scale-[0.98] ' +
+      'focus:outline-none focus:shadow-[0_0_0_3px_rgba(220,38,38,0.3)]',
     /** Ghost: subtle — tertiary actions */
     ghost:
-      "bg-transparent text-[var(--color-text)] " +
-      "hover:bg-[var(--color-bg)]",
+      'bg-transparent text-[var(--color-text)] ' + 'hover:bg-[var(--color-bg)]',
     /** DangerGhost: alias kept for compatibility */
     dangerGhost:
-      "border border-[#FECACA] bg-transparent text-[#991B1B] " +
-      "hover:bg-[#FEF2F2] hover:border-[#FCA5A5]",
+      'border border-[#FECACA] bg-transparent text-[#991B1B] ' +
+      'hover:bg-[#FEF2F2] hover:border-[#FCA5A5]',
   };
   const sizeClasses = {
-    sm: "h-8 px-4 text-xs",
-    md: "h-10 px-5 text-sm",
-    lg: "h-12 px-8 text-base",
+    sm: 'h-8 px-4 text-xs',
+    md: 'h-10 px-5 text-sm',
+    lg: 'h-12 px-8 text-base',
   };
 
   const finalClassName = [
-    "inline-flex items-center justify-center gap-2 rounded-lg font-medium",
-    "transition-[background-color,border-color,box-shadow] duration-150",
-    "cursor-pointer",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2",
-    "disabled:cursor-not-allowed disabled:opacity-50",
+    'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
+    'transition-[background-color,border-color,box-shadow] duration-150',
+    'cursor-pointer',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2',
+    'disabled:cursor-not-allowed disabled:opacity-50',
     variantClasses[resolvedVariant] ?? variantClasses.primary,
     sizeClasses[size] ?? sizeClasses.md,
-    fullWidth ? "w-full" : "",
+    fullWidth ? 'w-full' : '',
     className,
-  ].join(" ");
+  ].join(' ');
 
   if (asChild && React.isValidElement(children)) {
     return React.cloneElement(children, {
       ...props,
-      className: [finalClassName, children.props.className].filter(Boolean).join(" "),
+      className: [finalClassName, children.props.className]
+        .filter(Boolean)
+        .join(' '),
     });
   }
 
@@ -97,7 +98,9 @@ export default function Button({
           />
           <span className="opacity-70">Processing...</span>
         </span>
-      ) : children}
+      ) : (
+        children
+      )}
     </button>
   );
 }

@@ -1,8 +1,8 @@
-"use client";
-import { useState } from "react";
-import useSWR from "swr";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+'use client';
+import { useState } from 'react';
+import useSWR from 'swr';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   DoorOpen,
   Edit2,
@@ -14,113 +14,125 @@ import {
   UserCheck,
   ShieldCheck,
   Activity,
-} from "lucide-react";
-import { apiRequest, fetcher } from "@/lib/api";
-import { canManageRooms } from "@/lib/auth";
-import { formatDateString, formatTenantDirectoryName } from "@/lib/formatters";
-import Alert from "@/components/ui/Alert";
-import RecordStateAlert from "@/components/ui/RecordStateAlert";
-import LifecycleActions from "@/components/ui/LifecycleActions";
-import { Card } from "@/components/ui/Card";
-import Breadcrumbs from "@/components/ui/Breadcrumbs";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Table } from "@/components/ui/Table";
-import { secondaryOutlineLinkClass } from "@/components/ui/LinkTokens";
-import { ROOM_UNIT_OFFLINE_BED_HINT } from "@/lib/constants";
-import StandardPage from "@/components/ui/StandardPage";
-import ResourceIdCell from "@/components/ui/ResourceIdCell";
-import { useAuth } from "@/context/AuthContext";
-import { useToasts } from "@/context/ToastContext";
-import PageHeaderActions from "@/components/ui/PageHeaderActions";
-import { FormSection } from "@/components/ui/FormSection";
-import { SkeletonDetailPage } from "@/components/ui/Skeleton";
-import MetricItem from "@/components/ui/MetricItem";
-import { SideSheetOverlay } from "@/components/ui/SideSheetOverlay";
+} from 'lucide-react';
+import { apiRequest, fetcher } from '@/lib/api';
+import { canManageRooms } from '@/lib/auth';
+import { formatDateString, formatTenantDirectoryName } from '@/lib/formatters';
+import Alert from '@/components/ui/Alert';
+import RecordStateAlert from '@/components/ui/RecordStateAlert';
+import LifecycleActions from '@/components/ui/LifecycleActions';
+import { Card } from '@/components/ui/Card';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Table } from '@/components/ui/Table';
+import { secondaryOutlineLinkClass } from '@/components/ui/LinkTokens';
+import { ROOM_UNIT_OFFLINE_BED_HINT } from '@/lib/constants';
+import StandardPage from '@/components/ui/StandardPage';
+import ResourceIdCell from '@/components/ui/ResourceIdCell';
+import { useAuth } from '@/context/AuthContext';
+import { useToasts } from '@/context/ToastContext';
+import PageHeaderActions from '@/components/ui/PageHeaderActions';
+import { FormSection } from '@/components/ui/FormSection';
+import { SkeletonDetailPage } from '@/components/ui/Skeleton';
+import MetricItem from '@/components/ui/MetricItem';
+import { SideSheetOverlay } from '@/components/ui/SideSheetOverlay';
 import { RoomQuickEditForm } from '@/features/rooms/components/RoomQuickEditForm';
-import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
-import DetailHeader from "@/components/ui/DetailHeader";
+import ConfirmationDialog from '@/components/ui/ConfirmationDialog';
+import DetailHeader from '@/components/ui/DetailHeader';
 export default function RoomDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const roomId = params?.id;
   const { user: currentUser } = useAuth();
   const { showToast } = useToasts();
-  const { data: room, error: roomError, mutate: mutateRoom } = useSWR(
-    currentUser && roomId ? `/api/rooms/${roomId}` : null,
-    fetcher
-  );
+  const {
+    data: room,
+    error: roomError,
+    mutate: mutateRoom,
+  } = useSWR(currentUser && roomId ? `/api/rooms/${roomId}` : null, fetcher);
   const loading = !room && !roomError;
   const [showDecommissionModal, setShowDecommissionModal] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
-  const [busyAction, setBusyAction] = useState("");
+  const [busyAction, setBusyAction] = useState('');
   const [editingRoom, setEditingRoom] = useState(null);
-  const title = room ? `Room ${room.room_code}` : "Room";
+  const title = room ? `Room ${room.room_code}` : 'Room';
   const bedSpaces = room?.bed_spaces ?? [];
-  const roomStatusLower = String(room?.status ?? "").toLowerCase();
-  const hasOccupiedBeds = room?.has_occupied_beds ?? bedSpaces.some((bed) => bed?.status === "occupied");
+  const roomStatusLower = String(room?.status ?? '').toLowerCase();
+  const hasOccupiedBeds =
+    room?.has_occupied_beds ??
+    bedSpaces.some((bed) => bed?.status === 'occupied');
   const hasActiveContracts = room?.has_active_contracts ?? false;
   const archiveBlockReason = hasActiveContracts
-    ? "Room cannot be decommissioned while active contracts are linked to its bed spaces."
+    ? 'Room cannot be decommissioned while active contracts are linked to its bed spaces.'
     : hasOccupiedBeds
-      ? "Room cannot be decommissioned while one or more bed spaces are occupied."
-      : "";
-  const canArchiveRoom = canManageRooms(currentUser) && !archiveBlockReason && room?.status !== 'decommissioned';
+      ? 'Room cannot be decommissioned while one or more bed spaces are occupied.'
+      : '';
+  const canArchiveRoom =
+    canManageRooms(currentUser) &&
+    !archiveBlockReason &&
+    room?.status !== 'decommissioned';
   const unitOfflineBedHint =
-    room && roomStatusLower === "maintenance"
+    room && roomStatusLower === 'maintenance'
       ? ROOM_UNIT_OFFLINE_BED_HINT[roomStatusLower]
       : null;
   const handleDecommissionRoom = async () => {
     if (!roomId) return;
-    setBusyAction("decommission");
+    setBusyAction('decommission');
     try {
-      await apiRequest(`/api/rooms/${roomId}/archive`, { method: "POST" });
-      showToast(`Room ${room?.room_code} decommissioned successfully.`, "success");
+      await apiRequest(`/api/rooms/${roomId}/archive`, { method: 'POST' });
+      showToast(
+        `Room ${room?.room_code} decommissioned successfully.`,
+        'success'
+      );
       setShowDecommissionModal(false);
-      router.push("/rooms");
+      router.push('/rooms');
     } catch (err) {
-      showToast(err?.message || "Failed to decommission room.", "error");
+      showToast(err?.message || 'Failed to decommission room.', 'error');
       setShowDecommissionModal(false);
     } finally {
-      setBusyAction("");
+      setBusyAction('');
     }
   };
   const handleRestoreRoom = async () => {
     if (!roomId) return;
-    setBusyAction("restore");
+    setBusyAction('restore');
     try {
-      await apiRequest(`/api/rooms/${roomId}/restore`, { method: "POST" });
-      showToast(`Room ${room?.room_code} restored to active inventory.`, "success");
+      await apiRequest(`/api/rooms/${roomId}/restore`, { method: 'POST' });
+      showToast(
+        `Room ${room?.room_code} restored to active inventory.`,
+        'success'
+      );
       setShowRestoreModal(false);
       await mutateRoom();
     } catch (err) {
-      showToast(err?.message || "Failed to restore room.", "error");
+      showToast(err?.message || 'Failed to restore room.', 'error');
       setShowRestoreModal(false);
     } finally {
-      setBusyAction("");
+      setBusyAction('');
     }
   };
   const runLifecycleAction = async (action, path) => {
     setBusyAction(action);
     try {
-      await apiRequest(path, { method: "POST" });
-      showToast(`Room status updated: ${action}.`, "success");
+      await apiRequest(path, { method: 'POST' });
+      showToast(`Room status updated: ${action}.`, 'success');
       await mutateRoom();
     } catch (error) {
-      showToast(error?.message || `Failed to ${action} room.`, "error");
+      showToast(error?.message || `Failed to ${action} room.`, 'error');
     } finally {
-      setBusyAction("");
+      setBusyAction('');
     }
   };
   const header = DetailHeader({
-    type: "room",
+    type: 'room',
     id: roomId,
-    title: room ? `Room ${room.room_code}` : "Room",
-    subtitle: "Room details — beds, status, and meters.",
+    title: room ? `Room ${room.room_code}` : 'Room',
+    subtitle: 'Room details — beds, status, and meters.',
     status: room?.status,
     loading: loading,
-    listHref: "/rooms",
-    listLabel: "Room Inventory",
-    detailLabel: "Room Profile"
+    listHref: '/rooms',
+    listLabel: 'Room Inventory',
+    detailLabel: 'Room Profile',
   });
 
   return (
@@ -140,7 +152,7 @@ export default function RoomDetailsPage() {
               <button
                 type="button"
                 onClick={() => setEditingRoom(room)}
-                className={secondaryOutlineLinkClass + " px-6"}
+                className={secondaryOutlineLinkClass + ' px-6'}
               >
                 <Edit2 size={16} aria-hidden />
                 Update Details
@@ -165,18 +177,20 @@ export default function RoomDetailsPage() {
         description={`Are you sure you want to decommission Room ${room?.room_code}? This will remove the room from active inventory and prevent new bookings. All historical forensic data, including previous tenant contracts and payment records, will be preserved for auditing.`}
         confirmLabel="Decommission Room"
         isDanger
-        isLoading={busyAction === "decommission"}
+        isLoading={busyAction === 'decommission'}
         onConfirm={handleDecommissionRoom}
-        onCancel={() => busyAction !== "decommission" && setShowDecommissionModal(false)}
+        onCancel={() =>
+          busyAction !== 'decommission' && setShowDecommissionModal(false)
+        }
       />
       <ConfirmationDialog
         open={showRestoreModal}
         title="Restore Room"
         description={`You are about to restore Room ${room?.room_code} to active inventory. This will allow the room and its bed spaces to be assigned to new tenant contracts.`}
         confirmLabel="Restore Room"
-        isLoading={busyAction === "restore"}
+        isLoading={busyAction === 'restore'}
         onConfirm={handleRestoreRoom}
-        onCancel={() => busyAction !== "restore" && setShowRestoreModal(false)}
+        onCancel={() => busyAction !== 'restore' && setShowRestoreModal(false)}
       />
       {room ? (
         <div className="space-y-6">
@@ -190,8 +204,14 @@ export default function RoomDetailsPage() {
               {unitOfflineBedHint}
             </Alert>
           ) : null}
-          <RecordStateAlert show={room?.status === 'decommissioned'} variant="warning" title="Room Decommissioned">
-            This room is currently decommissioned from active inventory. It will not appear in occupancy reports or booking availability until restored.
+          <RecordStateAlert
+            show={room?.status === 'decommissioned'}
+            variant="warning"
+            title="Room Decommissioned"
+          >
+            This room is currently decommissioned from active inventory. It will
+            not appear in occupancy reports or booking availability until
+            restored.
           </RecordStateAlert>
           <div className="grid gap-8 lg:grid-cols-12">
             <aside className="space-y-6 lg:col-span-4">
@@ -200,7 +220,9 @@ export default function RoomDetailsPage() {
                   <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-stone-200 bg-white text-teal-600 shadow-sm">
                     <DoorOpen size={32} aria-hidden />
                   </div>
-                  <h2 className="text-xl font-black tracking-tight text-stone-900">{room?.room_code}</h2>
+                  <h2 className="text-xl font-black tracking-tight text-stone-900">
+                    {room?.room_code}
+                  </h2>
                   <div className="mt-2">
                     <StatusBadge size="sm">{room?.status}</StatusBadge>
                   </div>
@@ -211,26 +233,35 @@ export default function RoomDetailsPage() {
                   </span>
                 </div>
                 <div className="space-y-2 p-8">
-                  <MetricItem label="Monthly Rent" value={room?.monthly_rate} currency={true} icon={Receipt} />
+                  <MetricItem
+                    label="Monthly Rent"
+                    value={room?.monthly_rate}
+                    currency={true}
+                    icon={Receipt}
+                  />
                   <MetricItem
                     label="Capacity"
-                    value={`${room?.capacity ?? "—"} ${Number(room?.capacity) === 1 ? "Bed" : "Beds"}`}
+                    value={`${room?.capacity ?? '—'} ${Number(room?.capacity) === 1 ? 'Bed' : 'Beds'}`}
                     icon={UserCheck}
                   />
                   <MetricItem
                     label="Room Type"
                     value={
                       room?.room_type
-                        ? (room.room_type === 'private' ? 'Private Room' : 'Shared Room')
-                        : "—"
+                        ? room.room_type === 'private'
+                          ? 'Private Room'
+                          : 'Shared Room'
+                        : '—'
                     }
                     icon={Columns2}
                   />
                   <MetricItem
                     label="Billing Type"
-                    value={room?.is_metered ? "Metered" : "All-Inclusive"}
+                    value={room?.is_metered ? 'Metered' : 'All-Inclusive'}
                     icon={Receipt}
-                    className={room?.is_metered ? "text-amber-600" : "text-emerald-600"}
+                    className={
+                      room?.is_metered ? 'text-amber-600' : 'text-emerald-600'
+                    }
                   />
                 </div>
               </Card>
@@ -240,7 +271,7 @@ export default function RoomDetailsPage() {
                 className="hs-glass-effect"
               >
                 <p className="text-sm font-medium leading-relaxed text-stone-600">
-                  {room?.amenities || "No amenities on file for this room."}
+                  {room?.amenities || 'No amenities on file for this room.'}
                 </p>
               </FormSection>
               <FormSection
@@ -252,7 +283,8 @@ export default function RoomDetailsPage() {
                   {room?.is_metered ? (
                     <>
                       <p className="text-xs font-medium text-stone-500 leading-relaxed">
-                        Sub-meter tracking for electric and water consumption is active for this room.
+                        Sub-meter tracking for electric and water consumption is
+                        active for this room.
                       </p>
                       <Link
                         href={`/rooms/${roomId}/meters`}
@@ -267,9 +299,12 @@ export default function RoomDetailsPage() {
                       <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-teal-600 mb-2 shadow-sm border border-teal-100">
                         <ShieldCheck size={20} />
                       </div>
-                      <p className="text-[10px] font-black text-stone-900 uppercase tracking-widest mb-1">All-Inclusive Unit</p>
+                      <p className="text-[10px] font-black text-stone-900 uppercase tracking-widest mb-1">
+                        All-Inclusive Unit
+                      </p>
                       <p className="text-[10px] font-medium text-stone-500 leading-relaxed">
-                        Utilities are bundled into the base rent. No meter readings required.
+                        Utilities are bundled into the base rent. No meter
+                        readings required.
                       </p>
                     </div>
                   )}
@@ -281,28 +316,49 @@ export default function RoomDetailsPage() {
                 title="Bed Inventory"
                 icon={ShieldCheck}
                 className="hs-glass-effect"
-                rightElement={(
+                rightElement={
                   <span className="font-mono text-[10px] font-bold uppercase tracking-tighter text-stone-400">
-                    {bedSpaces.length} {bedSpaces.length === 1 ? "bed" : "beds"}
+                    {bedSpaces.length} {bedSpaces.length === 1 ? 'bed' : 'beds'}
                   </span>
-                )}
+                }
               >
                 <div className="mx-[-2rem] mb-[-2rem]">
                   <Table
                     embedded
                     columns={[
-                      { key: "registry_id", label: "BED ID", className: "pl-8" },
-                      { key: "bed_label", label: "BED LABEL", className: "text-center" },
-                      { key: "status", label: "STATUS", className: "text-center" },
-                      { key: "tenant", label: "TENANT" },
-                      { key: "move_in", label: "MOVE-IN DATE", className: "text-right pr-8" },
+                      {
+                        key: 'registry_id',
+                        label: 'BED ID',
+                        className: 'pl-8',
+                      },
+                      {
+                        key: 'bed_label',
+                        label: 'BED LABEL',
+                        className: 'text-center',
+                      },
+                      {
+                        key: 'status',
+                        label: 'STATUS',
+                        className: 'text-center',
+                      },
+                      { key: 'tenant', label: 'TENANT' },
+                      {
+                        key: 'move_in',
+                        label: 'MOVE-IN DATE',
+                        className: 'text-right pr-8',
+                      },
                     ]}
                     rows={bedSpaces.map((bed) => (
-                      <tr key={bed.bed_space_id} className="transition-colors hover:bg-stone-50">
+                      <tr
+                        key={bed.bed_space_id}
+                        className="transition-colors hover:bg-stone-50"
+                      >
                         <td className="pl-8 py-5">
                           <ResourceIdCell id={bed.bed_space_id} type="bed" />
                         </td>
-                        <td className="py-5 text-center text-sm font-bold text-stone-900 font-mono tracking-tight">{bed.bed_label}</td>
+                        <td className="py-5 text-center text-sm font-bold text-stone-900 font-mono tracking-tight">
+                          {bed.bed_label}
+                        </td>
                         <td className="py-5 text-center">
                           <StatusBadge size="xs">{bed.status}</StatusBadge>
                         </td>
@@ -312,16 +368,18 @@ export default function RoomDetailsPage() {
                               href={`/tenants/${bed.active_contract.tenant.tenant_id}`}
                               className="text-teal-600 transition-colors hover:text-teal-700 hover:underline"
                             >
-                              {formatTenantDirectoryName(bed.active_contract.tenant)}
+                              {formatTenantDirectoryName(
+                                bed.active_contract.tenant
+                              )}
                             </Link>
                           ) : (
-                            "—"
+                            '—'
                           )}
                         </td>
                         <td className="pr-8 py-5 text-right text-sm text-stone-600 leading-tight">
                           {bed.active_contract?.move_in_date
                             ? formatDateString(bed.active_contract.move_in_date)
-                            : "—"}
+                            : '—'}
                         </td>
                       </tr>
                     ))}
@@ -336,7 +394,7 @@ export default function RoomDetailsPage() {
                 className="hs-glass-effect"
               >
                 <p className="text-sm font-medium leading-relaxed text-stone-600">
-                  {room?.description || "No description on file."}
+                  {room?.description || 'No description on file.'}
                 </p>
               </FormSection>
             </div>
