@@ -76,5 +76,5 @@ lint_output.txt
 test-results/
 coverage/
 playwright-report/
-blob-report/
-
+# Graphify
+graphify-out/
