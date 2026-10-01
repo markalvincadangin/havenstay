@@ -1,16 +1,15 @@
 <div align="center">
 
-# 🏢 HavenStay BHMS
-### Enterprise-Grade Boarding House & Bed-Level Property Management System
+# HavenStay
 
-An end-to-end property management and forensic auditing platform engineered for granular bed-level occupancy tracking, contract lifecycles, and metered utility billing with a zero-trust database audit engine.
+**Boarding house and bed-level property management system**, built to handle student dormitories and rental housing near universities with bed-space vacancy tracking, shared utility sub-metering, and database-level audit logging.
 
 [![Backend](https://img.shields.io/badge/Backend-Laravel%2013%20(PHP%208.4%2B)-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com)
 [![Frontend](https://img.shields.io/badge/Frontend-Next.js%2016%20(React%2019)-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
 [![Database](https://img.shields.io/badge/Database-MySQL%208.4%20Primary--Replica-4479A1?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![Styling](https://img.shields.io/badge/Styling-Tailwind%20CSS%20v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![Container](https://img.shields.io/badge/DevOps-Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Audit](https://img.shields.io/badge/Forensics-45%20Database%20Triggers-008080?style=for-the-badge)](docs/DATABASE.md)
+[![Audit](https://img.shields.io/badge/Audit-45%20Database%20Triggers-008080?style=for-the-badge)](docs/DATABASE.md)
 [![License](https://img.shields.io/badge/License-Proprietary%20%2F%20Portfolio%20Review-lightgrey?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -21,27 +20,32 @@ An end-to-end property management and forensic auditing platform engineered for 
 
 ---
 
-## 📌 Executive Summary & Problem Solved
+## About the Project
 
-Traditional property management systems operate on whole-unit or apartment-level abstractions, failing to model shared living spaces such as boarding houses, student dormitories, and co-living hubs. 
+Near universities like West Visayas State University (WVSU), most student accommodations are not standalone apartments or single-family houses. They are boarding houses where multiple students share rooms and rent individual bed spaces.
 
-**HavenStay** solves the operational, billing, and integrity challenges inherent in multi-tenant shared residences:
-1. **Bed-Level Allocation**: Manages granular individual bed spaces within shared rooms with atomic reservation and occupancy states.
-2. **Metered Utility Rollover Engine**: Handles shared and sub-metered water and electricity billing, prorating consumption across occupants with automated meter rollover calculation.
-3. **Trigger-Based Forensic Auditing**: Mitigates administrative fraud and maintains compliance through an immutable database trigger layer capturing before-and-after JSON state diffs independently of application code.
+Standard property management tools assume one lease per house or apartment unit. This breaks down in boarding house setups because:
+1. **Vacancies happen per bed, not per room**: A 4-person room might have 1 bed available and 3 occupied. Landlords need to track individual bed-space availability and rent contracts without treating the entire room as vacant or occupied.
+2. **Shared utility sub-metering**: Electricity and water are frequently split among roommates or measured using mechanical sub-meters. Monthly billing requires prorating shared usage and handling dial rollovers (when a mechanical meter ticks over from 99999 to 00001).
+3. **Disputed payment records**: Verbal agreements and manual paper notes between students and landlords often cause disputes about payments, security deposits, or room reassignments.
+
+I developed **HavenStay** as a solo coursework project to build a full-stack system specifically modeled for these multi-tenant student housing workflows.
+
+**Project status:** Coursework prototype with a containerized Docker Compose environment and a deployed live demonstration.  
+**Live Demo:** [havenstay-theta.vercel.app](https://havenstay-theta.vercel.app)
 
 ---
 
-## ⚡ Core Engineering Highlights
+## System Architecture
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                          HavenStay Architecture                        │
 │                                                                        │
-│   Next.js 16 Client (React 19, Tailwind v4, Optimistic UI, RBAC)       │
-│                                  │ (REST + Idempotency Tokens)         │
+│   Next.js 16 Client (React 19, Tailwind CSS v4, Server Components)     │
+│                                  │ (REST API / Bearer Token)           │
 │                                  ▼                                     │
-│   Laravel 13 API Core (PHP 8.4+, Service Layer, Form Requests)         │
+│   Laravel 13 API Core (PHP 8.4+, Service Layer, Policies, Form Requests)│
 │               │                                          │             │
 │      (Writes & Mutations)                       (Read Queries/Reports) │
 │               ▼                                          ▼             │
@@ -53,35 +57,38 @@ Traditional property management systems operate on whole-unit or apartment-level
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1. 🛡️ 45-Trigger Zero-Trust Forensic Audit Layer
-- **Engine-Level Change Tracking**: Rather than relying strictly on application-level middleware (which can be bypassed by direct queries or scripts), HavenStay implements **45 MySQL database triggers** across all operational tables.
-- **Immutable JSON Diffs**: Captures actor ID, IP address, timestamp, action (`INSERT`, `UPDATE`, `DELETE`), and complete `before`/`after` snapshots.
-- **Visual Audit Explorer**: An integrated administrative diff modal renders granular attribute-level changes with humanized visual indicators.
+---
 
-### 2. 🛏️ Finite State Bed-Level Occupancy Machine
-- Hierarchical partitioning: `Room` $\rightarrow$ `BedSpace` $\rightarrow$ `Contract` $\rightarrow$ `Tenant`.
-- Manages state transitions (`Available`, `Reserved`, `Occupied`, `Maintenance`, `Archived`) with strict invariant guards preventing double-booking and invalid lease state transitions.
+## Key Features
 
-### 3. ⚡ Metered Utility Apportionment & Rollover Protection
-- Multi-occupant sub-metering algorithm calculating consumption across shared rooms.
-- **Dial Rollover Handling**: Corrects for mechanical and digital meter overflows (e.g. rollbacks from `99999` to `00001`) preventing anomalous billing spikes.
-- Automated invoice line-item generation factoring in tiered municipal rates and base rental fees.
+### 1. Bed-Level Inventory & Lease Contracts
+- Hierarchical structure: `Property` → `Room` → `Bed Space` → `Lease Contract` → `Tenant`.
+- Tracks individual bed space statuses (`Available`, `Reserved`, `Occupied`, `Maintenance`) to prevent double-booking while rooms remain partially occupied.
+- Manages security deposits, contract durations, payment due dates, and tenant move-outs.
 
-### 4. 🔀 Primary-Replica Read/Write Database Splitting
-- Optimized for analytical reporting workloads (`ActiveContracts`, `BillingSummary`, `CollectionsPerformance`).
-- Read-heavy queries and export jobs are isolated to replica nodes to eliminate lock contention on primary transactional tables.
+### 2. 45 Database Triggers for Change Auditing
+- Implemented **45 MySQL database triggers** (`AFTER INSERT`, `AFTER UPDATE`, `AFTER DELETE`) across all operational tables.
+- Each trigger automatically captures the record ID, timestamp, action, and full before/after JSON diffs into an `audit_logs` table.
+- Because audit tracking lives in the database storage engine, every mutation is recorded even if data is updated through database migrations, raw SQL queries, or administrative artisan scripts.
+- An in-app audit explorer renders structured attribute-level diffs so staff can see who modified a record and what fields changed.
 
-### 5. 🔒 Comprehensive RBAC & Idempotency Protection
-- Strict Role-Based Access Control (`Admin`, `Staff`, `Viewer`) enforced across route gates, controller policies, and UI actions.
-- Dual authentication support: **Google OAuth 2.0** and **Sanctum session-based tokens**.
-- Idempotency key middleware prevents duplicate financial transactions and duplicate contract commits under flaky network conditions.
+### 3. Sub-Metered Utility Billing & Dial Rollover Calculation
+- Supports room-level sub-meter inputs for water and electricity.
+- Prorates shared consumption across active occupants in each room during the billing period.
+- **Dial rollover handling**: Detects when mechanical sub-meters roll over (e.g. from 99999 back to 00001) to prevent erroneous astronomical bills.
 
-### 6. 🧪 Architectural Invariant & Quality Convention Tests
-- Automated Pest & PHPUnit architectural tests (`BillingPaymentArchitectureConventionTest`, `ControllerAuthorizationConsistencyTest`, `ReportingSecurityConventionTest`) continuously enforce authorization uniformity and layer boundaries.
+### 4. Primary-Replica Database Topology
+- Configured with a **MySQL 8.4 primary-replica setup** via Docker Compose.
+- Write operations (tenant check-in, contract signing, payments) execute against the primary database instance.
+- Analytical reporting queries (occupancy metrics, revenue summaries, collection histories) are routed to the read replica to avoid locking transactional tables during heavy reads.
+
+### 5. Role-Based Access Control & Invariant Testing
+- Built with three user roles (`Admin`, `Staff`, `Viewer`) with route guards, Laravel policies, and UI permission gates.
+- Automated Pest & PHPUnit convention tests enforce authorization consistency and verify that architectural boundaries between controllers and services remain intact.
 
 ---
 
-## 🏛️ System Architecture & Design
+## Architecture Diagram
 
 <div align="center">
   <img src="assets/diagrams/System Architecture Diagram.png" alt="HavenStay System Architecture Diagram" width="90%" style="border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);" />
@@ -89,90 +96,111 @@ Traditional property management systems operate on whole-unit or apartment-level
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
-| Layer | Technologies | Key Responsibilities |
+| Layer | Technologies | Role in System |
 | :--- | :--- | :--- |
-| **Frontend** | **Next.js 16** (App Router), **React 19**, **Tailwind CSS v4** | Server components, optimistic state UI, responsive tables, audit diff visualization |
-| **Backend API** | **Laravel 13**, **PHP 8.4+ / 8.5** | RESTful endpoints, service architecture, policy gates, form request validation |
-| **Database** | **MySQL 8.4** (Primary-Replica Topology) | ACID transactions, read/write splitting, 45 forensic triggers, stored views |
-| **Authentication** | **Laravel Sanctum**, **Google OAuth 2.0** | Secure bearer token management, social login, session validation |
-| **DevOps & Infra** | **Docker Compose**, **GitHub Actions**, **Makefile** | Multi-container orchestration, automated CI linting & test suites, zero-drift builds |
-| **Cloud Deployment** | **Render** (API) + **Vercel** (UI) + **Aiven** (MySQL) | Highly available decoupled cloud deployment topology |
+| **Frontend** | **Next.js 16**, **React 19**, **Tailwind CSS v4** | App Router, Server Components, responsive data tables, audit diff modal |
+| **Backend API** | **Laravel 13**, **PHP 8.4+** | RESTful API, service layer, authorization policies, form request validation |
+| **Database** | **MySQL 8.4** (Primary-Replica Topology) | ACID transactions, read/write splitting, 45 database triggers, JSON diffs |
+| **Authentication** | **Laravel Sanctum**, **Google OAuth 2.0** | Token-based API authentication and social login |
+| **DevOps & Infra** | **Docker Compose**, **GitHub Actions**, **Makefile** | Multi-container local orchestration, automated CI test suites |
 
 ---
 
-## 🚀 Quick Start (Docker Environment)
+## Quick Start (Docker Environment)
 
 ### Prerequisites
-- [Docker Engine](https://docs.docker.com/engine/install/) & [Docker Compose](https://docs.docker.com/compose/)
-- `make` utility (optional, for convenience shortcuts)
+- [Docker Engine](https://docs.docker.com/engine/install/) (v24+) & [Docker Compose v2](https://docs.docker.com/compose/)
+- `make` utility (or bash shell on Linux / macOS / WSL2)
 
-### 1. Clone & Setup Environment
+### Automated Setup
 ```bash
+# 1. Clone the repository
 git clone https://github.com/markalvincadangin/havenstay.git
 cd havenstay
-make env-docker
+
+# 2. Run automated setup (generates .env, builds images, starts containers, runs migrations)
+./scripts/setup.sh
+# (or use Makefile: make setup && make up)
+
+# 3. Verify endpoints and database replication
+make smoke-test
 ```
 
-### 2. Build & Launch Containers
-```bash
-make build
-make up
-```
+### Local Services
 
-### 3. Initialize & Seed Database
-```bash
-make refresh
-```
-
-### 4. Access Local Services
-- **Web Application**: [http://localhost:3000](http://localhost:3000)
-- **API Health Check**: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+| Service | Address | Default Credentials | Description |
+| :--- | :--- | :--- | :--- |
+| **Frontend Web App** | [http://localhost:3000](http://localhost:3000) | *(See Seeded Accounts below)* | Next.js 16 interface with bed management and audit viewer |
+| **Backend API** | [http://localhost:8000/api/health](http://localhost:8000/api/health) | N/A | Laravel 13 REST API |
+| **MySQL Primary** | `localhost:3306` | User: `root` / Pass: `changeme_root_password` | Master transactional database node (45 triggers) |
+| **MySQL Read Replica** | `localhost:3307` | User: `root` / Pass: `changeme_root_password` | Read-only analytics node with GTID replication |
 
 ---
 
-## 👥 Seeded Demo Accounts
+## Seeded Demo Accounts
 
-The database seeder provisions pre-configured role accounts for immediate testing:
+The database seeder provisions accounts for testing role-based permissions:
 
 | Role | Email | Password | Access Scope |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `havenstay.admin@havenstay.com` | `HavenStay123!` | Full administrative control, system settings, user provisioning, raw audit trail |
-| **Staff** | `havenstay.staff@havenstay.com` | `HavenStay123!` | Room allocation, tenant check-in/out, utility billing, payment processing |
-| **Viewer** | `viewer@havenstay.com` | `HavenStay123!` | Read-only analytics, occupancy reports, and read-replica dashboards |
+| **Admin** | `havenstay.admin@havenstay.com` | `HavenStay123!` | System settings, user management, full operational control, raw audit logs |
+| **Staff** | `havenstay.staff@havenstay.com` | `HavenStay123!` | Room and bed allocation, tenant intake, utility billing, payment entry |
+| **Viewer** | `viewer@havenstay.com` | `HavenStay123!` | Read-only access to occupancy dashboards and analytical reports |
 
 ---
 
-## 📚 Technical Documentation Hub
+## Automated Tests & Verification
 
-Comprehensive engineering and architectural specifications are maintained in [`docs/`](docs/):
+```bash
+# Run both backend and frontend test suites in containers
+make test
 
-### Specifications & System Design
-- [**SRS (Software Requirements Specification)**](docs/SRS.md) — Functional and non-functional requirements matrix
-- [**SDD (Software Design Document)**](docs/SDD.md) — Architectural patterns, sequence flows, and component design
-- [**Database & Trigger Schema**](docs/DATABASE.md) — Complete ERD, trigger definitions, and stored views
-- [**Business Rules Specification**](docs/BUSINESS_RULES.md) — Canonical rules governing billing, contracts, and penalties
+# Run backend unit & feature tests (Pest / PHPUnit)
+make test-backend
 
-### Developer & Operational Blueprints
-- [**API Reference Guide**](docs/API_REFERENCE.md) — Complete endpoint catalog with request/response contracts
-- [**Frontend Coding Blueprint**](docs/FRONTEND_CODING_BLUEPRINT.md) — Next.js conventions, UI design system, and state rules
-- [**Backend Coding Blueprint**](docs/BACKEND_CODING_BLUEPRINT.md) — Service patterns, strict typing, and layer standards
-- [**Operations Runbook**](docs/OPERATIONS_RUNBOOK.md) — Maintenance procedures, cron cycles, and temporal logic
-- [**CI/CD Pipeline Guide**](docs/CI_CD.md) — GitHub Actions workflows and deployment pipelines
+# Run frontend test suite (Vitest + Testing Library)
+make test-frontend
 
----
-
-## 👨‍💻 Author & Contact
-
-**Mark Alvin Cadangin**
-* **GitHub**: [@markalvincadangin](https://github.com/markalvincadangin)
-* **Project Repository**: [https://github.com/markalvincadangin/havenstay](https://github.com/markalvincadangin/havenstay)
+# Run code style and static analysis (PHPStan + ESLint)
+make lint
+```
 
 ---
 
-## 📄 Portfolio License & Terms of Use
+## Why I Built It This Way
 
-This repository is a personal portfolio piece developed by **Mark Alvin Cadangin**. 
+- **Why database triggers instead of Laravel Model Observers?**  
+  In Laravel applications, Model Observers only fire when mutations pass through the Eloquent ORM. If anyone runs a direct SQL query, an administrative `artisan` script, or a raw bulk update, observers never trigger. Placing 45 triggers directly inside MySQL ensures that every row insertion, update, or deletion captures before-and-after snapshots regardless of how the database is touched.
 
-**All Rights Reserved.** The source code, database architecture, design assets, and documentation are made publicly available exclusively for **evaluation, review, and demonstration purposes**. No permission is granted to reproduce, distribute, deploy, sublicense, or utilize any part of this software commercially or privately without prior written consent from the author. See [LICENSE](LICENSE) for details.
+- **Why primary-replica replication for a boarding house system?**  
+  While a single boarding house does not generate petabytes of data, multi-tenant student dorms generate frequent reporting queries (e.g. historical billing reconciliation, occupancy trends, tenant ledger summaries). Running replication in Docker Compose gave me hands-on experience structuring read/write splitting at the application and infrastructure layer.
+
+- **Why bed-level tracking instead of room-level?**  
+  A student boarding house sells bed spaces, not rooms. If a system only models rooms, landlords have to use awkward workarounds like creating "Room 101-A", "Room 101-B" as separate rooms in the database. Modeling `BedSpace` as a first-class entity under `Room` directly matches how the real-world facility operates.
+
+---
+
+## Documentation Index
+
+Detailed design documents are maintained in [`docs/`](docs/):
+- [**Database & Trigger Schema**](docs/DATABASE.md) — ERD diagrams, 45 trigger definitions, and stored views
+- [**SRS (Requirements Specification)**](docs/SRS.md) — Functional and non-functional requirements
+- [**SDD (System Design Document)**](docs/SDD.md) — Architectural patterns and data flow sequences
+- [**Business Rules Specification**](docs/BUSINESS_RULES.md) — Utility billing calculations, contract terms, and penalties
+- [**Deployment Runbook**](docs/DEPLOYMENT.md) — Containerized deployment guide
+
+---
+
+## Author
+
+**Mark Alvin Cadangin**  
+Software Development Technologies — West Visayas State University  
+GitHub: [@markalvincadangin](https://github.com/markalvincadangin)
+
+---
+
+## License
+
+This repository is a personal coursework project made available for portfolio evaluation and demonstration purposes. See [LICENSE](LICENSE) for details.
