@@ -91,7 +91,6 @@ export const CONTRACT_STATUS_LABELS = {
   completed: 'Completed',
   terminated: 'Terminated',
   voided: 'Voided',
-  archived: 'Archived',
 };
 
 /**

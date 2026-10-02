@@ -2,6 +2,9 @@
 
 namespace Tests\Unit\Services;
 
+use App\Enums\BillingStatus;
+use App\Enums\PaymentMethod;
+use App\Enums\RoleEnum;
 use App\Models\BedSpace;
 use App\Models\Billing;
 use App\Models\BillingLineItem;
@@ -11,8 +14,6 @@ use App\Models\Role;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Enums\BillingStatus;
-use App\Enums\RoleEnum;
 use App\Services\Operations\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -54,17 +55,18 @@ class BillingServiceTest extends TestCase
             'billing_period_from' => now()->subMonth()->toDateString(),
             'billing_period_to' => now()->toDateString(),
         ]);
-        
+
         BillingLineItem::create(['billing_id' => $billing->billing_id, 'amount' => 1000, 'item_description' => 'Rent', 'item_type' => 'base_rent']);
         Payment::create([
-            'billing_id' => $billing->billing_id, 
-            'amount_paid' => 1000, 
+            'billing_id' => $billing->billing_id,
+            'amount_paid' => 1000,
             'payment_date' => now()->toDateString(),
+            'payment_method' => PaymentMethod::CASH->value,
             'processed_by' => $admin->user_id,
         ]);
-        
+
         BillingService::syncBillingStatus($admin, $billing);
-        $this->assertEquals(BillingStatus::PAID->value, $billing->status);
+        $this->assertEquals(BillingStatus::PAID, $billing->status);
     }
 
     public function test_it_reconciles_status_as_overdue_if_past_due_and_not_fully_paid()
@@ -94,17 +96,18 @@ class BillingServiceTest extends TestCase
             'billing_period_from' => now()->subMonth()->toDateString(),
             'billing_period_to' => now()->toDateString(),
         ]);
-        
+
         BillingLineItem::create(['billing_id' => $billing->billing_id, 'amount' => 1000, 'item_description' => 'Rent', 'item_type' => 'base_rent']);
         Payment::create([
-            'billing_id' => $billing->billing_id, 
+            'billing_id' => $billing->billing_id,
             'amount_paid' => 500,
             'payment_date' => now()->toDateString(),
+            'payment_method' => PaymentMethod::CASH->value,
             'processed_by' => $admin->user_id,
         ]);
-        
+
         BillingService::syncBillingStatus($admin, $billing);
-        $this->assertEquals(BillingStatus::OVERDUE->value, $billing->status);
+        $this->assertEquals(BillingStatus::OVERDUE, $billing->status);
     }
 
     public function test_it_reconciles_status_as_partial_if_paid_but_not_due_yet()
@@ -134,17 +137,18 @@ class BillingServiceTest extends TestCase
             'billing_period_from' => now()->toDateString(),
             'billing_period_to' => now()->addMonth()->toDateString(),
         ]);
-        
+
         BillingLineItem::create(['billing_id' => $billing->billing_id, 'amount' => 1000, 'item_description' => 'Rent', 'item_type' => 'base_rent']);
         Payment::create([
-            'billing_id' => $billing->billing_id, 
+            'billing_id' => $billing->billing_id,
             'amount_paid' => 500,
             'payment_date' => now()->toDateString(),
+            'payment_method' => PaymentMethod::CASH->value,
             'processed_by' => $admin->user_id,
         ]);
-        
+
         BillingService::syncBillingStatus($admin, $billing);
-        $this->assertEquals(BillingStatus::PARTIAL->value, $billing->status);
+        $this->assertEquals(BillingStatus::PARTIAL, $billing->status);
     }
 
     public function test_it_reconciles_status_as_unpaid_if_no_payments_and_not_due_yet()
@@ -174,10 +178,10 @@ class BillingServiceTest extends TestCase
             'billing_period_from' => now()->toDateString(),
             'billing_period_to' => now()->addMonth()->toDateString(),
         ]);
-        
+
         BillingLineItem::create(['billing_id' => $billing->billing_id, 'amount' => 1000, 'item_description' => 'Rent', 'item_type' => 'base_rent']);
-        
+
         BillingService::syncBillingStatus($admin, $billing);
-        $this->assertEquals(BillingStatus::UNPAID->value, $billing->status);
+        $this->assertEquals(BillingStatus::UNPAID, $billing->status);
     }
 }

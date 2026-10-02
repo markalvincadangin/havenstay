@@ -4,6 +4,7 @@ namespace Tests\Unit\Services;
 
 use App\Enums\ContractStatus;
 use App\Enums\ContractType;
+use App\Enums\RoleEnum;
 use App\Models\BedSpace;
 use App\Models\Contract;
 use App\Models\Role;
@@ -33,7 +34,7 @@ class ContractServiceTest extends TestCase
             'username' => 'admin',
             'email' => 'admin@example.com',
             'password_hash' => bcrypt('password'),
-            'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+            'role_id' => Role::where('role_name', RoleEnum::ADMIN->value)->first()->role_id,
         ]);
         $tenant = Tenant::create($this->tenantAttributes());
         $room = Room::create($this->roomAttributes(['monthly_rate' => 10000]));
@@ -60,7 +61,7 @@ class ContractServiceTest extends TestCase
             'username' => 'admin2',
             'email' => 'admin2@example.com',
             'password_hash' => bcrypt('password'),
-            'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+            'role_id' => Role::where('role_name', RoleEnum::ADMIN->value)->first()->role_id,
         ]);
         $tenant = Tenant::create($this->tenantAttributes());
         $room = Room::create($this->roomAttributes(['monthly_rate' => 10000]));
@@ -86,7 +87,7 @@ class ContractServiceTest extends TestCase
             'username' => 'admin3',
             'email' => 'admin3@example.com',
             'password_hash' => bcrypt('password'),
-            'role_id' => Role::where('role_name', Role::ADMIN)->first()->role_id,
+            'role_id' => Role::where('role_name', RoleEnum::ADMIN->value)->first()->role_id,
         ]);
         $tenant = Tenant::create($this->tenantAttributes());
         $room = Room::create($this->roomAttributes(['monthly_rate' => 5000]));

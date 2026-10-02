@@ -4,7 +4,7 @@ set -e
 # Ensure Laravel storage and bootstrap cache directories exist with writable permissions
 mkdir -p /var/www/html/storage/framework/{sessions,views,cache} /var/www/html/storage/logs /var/www/html/bootstrap/cache
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
-chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
+chmod -R 777 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
 
 # If a custom CLI command was passed (e.g. php artisan test, composer, bash), execute it immediately
 if [ "$#" -gt 0 ] && [ "$1" != "apache2-foreground" ]; then

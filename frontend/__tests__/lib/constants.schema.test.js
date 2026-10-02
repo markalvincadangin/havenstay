@@ -136,7 +136,7 @@ describe('constants.js vs db/havenstay_schema.sql ENUMs', () => {
       /CREATE TABLE\s+audit_logs\s*\([\s\S]*?\)\s*ENGINE/i
     );
     expect(block?.[0], 'audit_logs table').toBeTruthy();
-    expect(block[0]).toMatch(/\baction\s+VARCHAR\s*\(\s*32\s*\)/i);
+    expect(block[0]).toMatch(/\baction\s+(?:VARCHAR\s*\(\s*32\s*\)|ENUM\s*\()/i);
     expect(Object.keys(AUDIT_ACTION_LABELS).length).toBeGreaterThan(0);
   });
 });

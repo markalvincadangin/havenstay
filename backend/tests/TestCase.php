@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Enums\BedSpaceStatus;
 use App\Enums\ContractStatus;
+use App\Enums\ContractType;
 use App\Enums\RoomStatus;
 use App\Enums\RoomType;
 use App\Enums\TenantStatus;
@@ -51,6 +52,7 @@ abstract class TestCase extends BaseTestCase
             'room_type' => RoomType::SHARED->value,
             'monthly_rate' => 5000,
             'status' => RoomStatus::AVAILABLE->value,
+            'is_metered' => false,
         ], $overrides);
     }
 
@@ -66,9 +68,11 @@ abstract class TestCase extends BaseTestCase
     {
         return array_merge([
             'move_in_date' => now()->toDateString(),
+            'monthly_rate' => 5000,
             'monthly_rate_override' => null,
             'deposit_amount' => 5000,
             'status' => ContractStatus::PENDING_PAYMENT->value,
+            'contract_type' => ContractType::FIXED_TERM->value,
         ], $overrides);
     }
 
