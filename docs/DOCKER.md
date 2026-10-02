@@ -1,192 +1,266 @@
-# HavenStay — Docker Development Guide
+# HavenStay BHMS — Docker Engineering & Operations Guide
 
-**Version:** 1.0
-**Last Updated:** June 26, 2026
+**Infrastructure Reference for Contributors & Technical Reviewers**  
+*Covers Multi-Container Orchestration, GTID Replication, Multi-Stage Builds, and Operations*
 
 ---
 
 ## Table of Contents
 
-1. [Prerequisites](#1-prerequisites)
-2. [Quick Start](#2-quick-start)
-3. [Makefile Command Reference](#3-makefile-command-reference)
-4. [Override File](#4-override-file)
-5. [Primary/Replica Topology](#5-primaryreplica-topology)
-6. [Troubleshooting](#6-troubleshooting)
-7. [Hybrid Dev Mode (Native Ubuntu)](#7-hybrid-dev-mode-native-ubuntu)
+1. [Prerequisites & System Architecture](#1-prerequisites--system-architecture)
+2. [Quick Start (One-Command Onboarding)](#2-quick-start-one-command-onboarding)
+3. [Environment Configuration Reference](#3-environment-configuration-reference)
+4. [Makefile Command Reference](#4-makefile-command-reference)
+5. [Scripts & Tooling Architecture (`scripts/`)](#5-scripts--tooling-architecture-scripts)
+6. [Development vs. Production Topology](#6-development-vs-production-topology)
+7. [MySQL 8.4 Primary/Replica GTID Replication](#7-mysql-84-primaryreplica-gtid-replication)
+8. [Automated Smoke Tests & Verification](#8-automated-smoke-tests--verification)
+9. [Troubleshooting & Diagnostics](#9-troubleshooting--diagnostics)
+10. [Hybrid Dev Mode (Optional Native Run)](#10-hybrid-dev-mode-optional-native-run)
 
 ---
 
-## 1. Prerequisites
+## 1. Prerequisites & System Architecture
 
-- **Docker Desktop** (v4.x+) with Docker Compose v2
-- **WSL2** (Windows only) — recommended for bind mount performance
-- **Make** — pre-installed on Linux/macOS; on Windows use WSL2 or `choco install make`
+- **Docker Engine** (v24.x+) & **Docker Compose v2** (included with Docker Desktop)
+- **Make** (pre-installed on Linux/macOS; on Windows use WSL2 or `choco install make`)
+- Minimum recommended hardware: 4 GB available RAM, 10 GB disk space
 
-## 2. Quick Start
+### Container Topology
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Docker Bridge Network                           │
+│                                                                        │
+│   havenstay-frontend (Next.js 16 SPA, Port 3000)                       │
+│           │                                                            │
+│           ▼ (Reverse Proxy rewrite: /api/*)                            │
+│   havenstay-backend (Laravel 13 API, Port 8000, PHP 8.4, Apache)       │
+│           │                                                            │
+│     ┌─────┴────────────────────────┐                                   │
+│     ▼ (Writes & Mutations)         ▼ (Read Queries)                    │
+│   havenstay-db-primary           havenstay-db-replica                  │
+│   (MySQL 8.4, Port 3306)  ─────► (MySQL 8.4, Port 3307)                │
+│   [45 Forensic Triggers]  GTID   [Read-Only Replica Node]              │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Quick Start (One-Command Onboarding)
 
 ```bash
-# 1. Clone and enter
+# 1. Clone repository
 git clone https://github.com/markalvincadangin/havenstay.git
 cd havenstay
 
-# 2. Create environment files from templates
-cp .env.example .env                  # Root orchestrator vars (Docker Compose, passwords, host ports)
-cp backend/.env.example backend/.env  # Laravel-specific app vars (APP_KEY, logging, mail config)
-#    ⚠ Edit .env and change all 'changeme_*' passwords
+# 2. Automated setup (creates .env from templates, verifies tools, builds & starts stack)
+./scripts/setup.sh
+# Alternatively: make setup && make up
 
-# 3. Enable local hot-reloading (optional but recommended)
-cp docker-compose.override.yml.example docker-compose.override.yml
-
-# 4. Start all services
-make up
-
-# 5. Verify
-make logs
+# 3. Verify health & replication
+make smoke-test
 ```
 
-| Service | URL |
-|:---|:---|
-| Frontend | [http://localhost:3000](http://localhost:3000) |
-| Backend API | [http://localhost:8000/api/health](http://localhost:8000/api/health) |
-| MySQL Primary | `localhost:3306` |
-| MySQL Replica | `localhost:3307` |
-
-## 3. Makefile Command Reference
-
-All team members should use `make` commands instead of raw `docker compose` to ensure consistent flags and behavior.
-
-| Command | Description |
-|:---|:---|
-| `make up` | Start all containers in detached mode |
-| `make down` | Stop and remove containers |
-| `make build` | Rebuild all images from scratch (no cache) |
-| `make logs` | Follow live logs from all services |
-| `make clean` | Stop containers, remove volumes, and prune unused Docker resources |
-| `make config` | Render and validate the merged `docker-compose` configuration |
-| `make test-backend` | Run `php artisan test` inside the backend container |
-| `make test-frontend` | Run `npm test` inside the frontend container |
-
-## 4. Override File
-
-The project uses Docker Compose's [override mechanism](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) to separate stable infrastructure from local development tweaks.
-
-| File | Committed | Purpose |
-|:---|:---|:---|
-| `docker-compose.yml` | ✅ Yes | Base config — services, ports, healthchecks, dependencies |
-| `docker-compose.override.yml` | ❌ No (gitignored) | Local dev — bind mounts, hot-reload polling |
-| `docker-compose.prod.yml` | ✅ Yes | Production overrides — optimized build targets |
-
-**How it works:** Docker Compose automatically merges `docker-compose.override.yml` on top of `docker-compose.yml` when you run any `docker compose` command. No extra flags needed.
-- **Backend**: Set `APP_ENV=local` inside `docker-compose.yml`.
-- **Frontend**: The `frontend/Dockerfile` was optimized for native Linux. Note that WSL2/Windows users may need to manually re-add `ENV WATCHPACK_POLLING=true` if hot-reloading fails, but for Native Linux this is omitted to drastically save CPU.
-
-**To customize:** Copy the example and edit as needed:
-```bash
-cp docker-compose.override.yml.example docker-compose.override.yml
-```
-
-## 5. Primary/Replica Topology
-
-> ⚠ **Do not remove the `db-primary` and `db-replica` services from `docker-compose.yml`.**
-
-The primary/replica MySQL architecture is a core design feature of the application. It is intentionally part of the base compose file — not an optional override — so that the topology is always present and demonstrable.
-
-**How it works:**
-- The **Primary** (`db-primary`, port 3306) handles all write operations.
-- The **Replica** (`db-replica`, port 3307) receives changes via GTID-based replication and handles read queries.
-- Laravel's read/write split in `config/database.php` routes `SELECT` queries to `DB_READ_HOST` (the replica) and writes to `DB_WRITE_HOST` (the primary).
-
-**CI vs Manual Verification:**
-- **CI (`smart-build.yml`)** verifies topology *presence* — `make config` confirms both database services render correctly in the compose output.
-- **Replication *behavior*** (data flowing from primary → replica, `Replica_IO_Running: Yes`) is verified **manually/locally** per the steps in `docs/DISTRIBUTED_DB_SETUP.md`. This is a deliberate scope boundary: fast CI tests run against SQLite for speed, while the full replication demonstration is a local/demo exercise.
-
-For detailed setup instructions, see [docs/DISTRIBUTED_DB_SETUP.md](docs/DISTRIBUTED_DB_SETUP.md).
-
-## 6. Troubleshooting
-
-### Port Conflicts
-
-If `make up` fails with "address already in use":
-```bash
-# Check what's using the port
-lsof -i :3306  # or :3307, :8000, :3000
-
-# Stop the conflicting process, or change the port mapping in docker-compose.override.yml
-```
-
-### WSL2 File Watching / High CPU
-
-If hot-reload causes high CPU usage, your project is likely on the Windows filesystem (`/mnt/c/...`). Move it to the native WSL2 filesystem:
-```bash
-# Move to WSL2 native path (much faster I/O)
-mv /mnt/c/projects/havenstay ~/projects/havenstay
-```
-
-Then disable polling in your `docker-compose.override.yml`:
-```yaml
-environment:
-  - WATCHPACK_POLLING=false
-  - CHOKIDAR_USEPOLLING=false
-```
-
-### Replica Lag / Replication Errors
-
-If the replica falls behind or shows `Error 1236`:
-1. Check replication status: `docker compose exec db-replica mysql -uroot -p -e "SHOW REPLICA STATUS\G"`
-2. If binary logs are purged, follow the recovery steps in [docs/DISTRIBUTED_DB_SETUP.md § Troubleshooting](docs/DISTRIBUTED_DB_SETUP.md#6-troubleshooting-error-1236).
-
-### Backend Won't Start (Database Connection Timeout)
-
-The backend entrypoint waits up to 60 seconds for the database. If it times out:
-```bash
-# Check if the database is actually healthy
-docker compose ps
-make logs
-```
-
-## 7. Hybrid Dev Mode (Native Ubuntu)
-
-For faster local iteration without Docker filesystem overhead, you can run only the databases in Docker and run the Laravel backend and Next.js frontend natively.
-
-> [!IMPORTANT]
-> This mode is for **development speed only**. The full containerized setup (`make up`) remains the authoritative source of truth for full environment parity and CI testing.
-
-### Setup
-
-1. Configure your `.env` for native development:
-   ```bash
-   make env-native
-   # Ensures backend/.env expects the DB at 127.0.0.1:3306 and 3307
-   ```
-
-2. Start only the databases:
-   ```bash
-   make db-up
-   ```
-
-3. Run the development servers in separate terminals:
-   ```bash
-   make dev-backend
-   make dev-frontend
-   ```
-
-### Switching Back to Full-Container Mode
-
-If you need to verify the full distributed setup before pushing code:
-
-1. Stop hybrid servers and reset your `.env`:
-   ```bash
-   make db-down
-   make env-docker
-   # Points the backend/.env back to `db-primary` and `db-replica` hostnames
-   ```
-
-2. Start the full cluster:
-   ```bash
-   make up
-   ```
+### Service Access Table
+| Service | Local URL | Container Target | Healthcheck |
+| :--- | :--- | :--- | :--- |
+| **Frontend UI** | [http://localhost:3000](http://localhost:3000) | `development` (Hot-Reload) | `wget http://127.0.0.1:3000` |
+| **Backend API** | [http://localhost:8000/api/health](http://localhost:8000/api/health) | `development` (Apache/PHP 8.4) | `curl http://127.0.0.1/api/health` |
+| **MySQL Primary** | `localhost:3306` | MySQL 8.4 (GTID Binlog ON) | `mysqladmin ping` |
+| **MySQL Replica** | `localhost:3307` | MySQL 8.4 (Read-Only) | `mysqladmin ping` |
 
 ---
 
-*Document Author: HavenStay Infrastructure*
+## 3. Environment Configuration Reference
+
+The repository maintains standardized `.env.example` templates:
+
+| File | Scope | Description |
+| :--- | :--- | :--- |
+| `.env` (root) | Docker Compose Orchestration | Global service ports, DB passwords, shared network config |
+| `backend/.env` | Laravel Application Config | App key, DB host routing (`db-primary` vs `db-replica`), log drivers |
+| `frontend/.env.local` | Next.js Client Overrides | Optional tunnel dev origins (`ALLOWED_DEV_ORIGINS`) |
+
+To reset configs to the Docker standard:
+```bash
+make setup
+```
+
+---
+
+## 4. Makefile Command Reference
+
+All daily development workflows are standardized through `make`:
+
+```bash
+make help  # Displays formatted color-coded command menu
+```
+
+| Command | Action | Execution Target |
+| :--- | :--- | :--- |
+| `make setup` | Initialize `.env` and `backend/.env` from templates | Local host |
+| `make up` | Start development stack in detached mode | Docker Compose |
+| `make down` | Stop and remove development containers | Docker Compose |
+| `make restart` | Gracefully restart running containers | Docker Compose |
+| `make build` | Rebuild images from scratch (no cache) | Docker Compose |
+| `make logs` | Follow aggregated real-time container logs | Docker Compose |
+| `make ps` | Inspect running container health statuses | Docker Compose |
+| `make clean` | Stop containers, remove named volumes, prune caches | Docker Compose |
+| `make smoke-test` | Execute automated 6-point verification suite | `./scripts/smoke-test.sh` |
+| `make test` | Run both backend (PHPUnit) and frontend (Vitest) suites | Container internal |
+| `make test-backend` | Run backend test suite with in-memory SQLite parity | Backend container |
+| `make test-frontend`| Run frontend Vitest suite (JSDOM environment) | Frontend container |
+| `make format` | Code formatting with Laravel Pint and Prettier | Container internal |
+| `make lint` | Static analysis with PHPStan and ESLint | Container internal |
+| `make refresh` | Destructive wipe, re-migrate, and seed demo records | `./scripts/refresh.sh` |
+| `make share` | Launch secure Cloudflare Tunnel for live remote demo | `./scripts/share.sh` |
+| `make prod-up` | Launch standalone isolated production cluster | `docker-compose.prod.yml` |
+| `make prod-down` | Stop and tear down production cluster | `docker-compose.prod.yml` |
+
+---
+
+## 5. Scripts & Tooling Architecture (`scripts/`)
+
+All automation scripts are centralized in `scripts/` with backward-compatible wrappers in the project root:
+
+```
+scripts/
+├── setup.sh       # Automated zero-friction onboarding script
+├── smoke-test.sh  # Comprehensive 6-point endpoint and replication test
+├── refresh.sh     # Database purge and demo seeding with replica-bypass
+└── share.sh       # Cloudflare Tunnel for live portfolio demonstration
+```
+
+---
+
+## 6. Development vs. Production Topology
+
+HavenStay provides two fully distinct, purpose-built compose specifications:
+
+### 6.1 Development (`docker-compose.yml`)
+- **Target**: `target: development`
+- **Hot-Reloading**: Source code bind-mounted (`./backend:/var/www/html`, `./frontend:/app`).
+- **Cache Isolation**: Anonymous volumes `/app/node_modules`, `/app/.next`, and `/var/www/html/vendor` protect container dependencies from host filesystem conflicts.
+- **Developer Tolerances**: MySQL buffer pool tuned for WSL2/Docker memory efficiency.
+
+### 6.2 Production (`docker-compose.prod.yml`)
+- **Target**: `target: production` (Backend) & `target: runner` (Frontend).
+- **Zero Bind Mounts**: Images are 100% self-contained and immutable.
+- **Unprivileged Security**: Frontend runs as non-root `nextjs:nodejs` (UID 1001).
+- **OPcache Enabled**: Production PHP OPcache active with precompiled opcode caching.
+- **Isolated Storage**: Uses dedicated production volumes (`prod-db-primary-data`, `prod-db-replica-data`).
+
+To launch production locally:
+```bash
+make prod-up
+```
+
+---
+
+## 7. MySQL 8.4 Primary/Replica GTID Replication
+
+### 7.1 Replication Architecture
+1. **Primary (`db-primary`)**:
+   - `server-id=1`, `log-bin=mysql-bin`, `gtid-mode=ON`, `enforce-gtid-consistency=ON`.
+   - Provisions `replica_user` with modern `caching_sha2_password` authentication via `docker/primary-init.sql`.
+2. **Replica (`db-replica`)**:
+   - `server-id=2`, `read-only=ON`, `relay-log-recovery=ON`.
+   - Auto-connects to `db-primary` using GTID auto-positioning via `docker/replica-init.sql`.
+3. **Application Routing**:
+   - Laravel routes `SELECT` statements to `DB_READ_HOST` (`db-replica`, port 3307).
+   - Laravel routes mutations/writes to `DB_WRITE_HOST` (`db-primary`, port 3306).
+   - `DB_STICKY=true` guarantees that read-after-write requests in the same request lifecycle read from the primary.
+
+### 7.2 Inspecting Live Replication
+```bash
+docker compose exec db-replica mysql -uroot -pchangeme_root_password -e "SHOW REPLICA STATUS\G"
+```
+
+Expected output:
+```
+Replica_IO_Running: Yes
+Replica_SQL_Running: Yes
+Seconds_Behind_Source: 0
+```
+
+---
+
+## 8. Automated Smoke Tests & Verification
+
+Verify the entire multi-container environment with one command:
+
+```bash
+make smoke-test
+```
+
+Output:
+```
+======================================================
+🧪 HavenStay BHMS — Production & Dev Smoke Tests
+======================================================
+
+  [PASS] Backend API Direct Health (http://127.0.0.1:8000/api/health -> 200 OK)
+  [PASS] Frontend Next.js Server (http://127.0.0.1:3000 -> 200 OK)
+  [PASS] Next.js API Rewrite Proxy (http://127.0.0.1:3000/api/health -> proxied successfully)
+  [PASS] MySQL Primary Connectivity (Port 3306 mysqld alive)
+  [PASS] MySQL Replica Connectivity (Port 3307 mysqld alive)
+  [PASS] MySQL GTID Replication (IO: Yes, SQL: Yes, Lag: 0s)
+
+------------------------------------------------------
+Total Tests: 6 | Passed: 6 | Failed: 0
+------------------------------------------------------
+```
+
+---
+
+## 9. Troubleshooting & Diagnostics
+
+### 9.1 Port Conflicts (3306, 3307, 8000, 3000)
+If local MySQL or web servers occupy standard ports, override ports in `.env`:
+```dotenv
+FRONTEND_PORT=3001
+BACKEND_PORT=8001
+DB_PORT=3308
+DB_REPLICA_PORT=3309
+```
+Then run `docker compose up -d`.
+
+### 9.2 WSL2 / Windows High CPU File Watching
+If hot-reload causes high CPU on Windows, ensure the project lives in native WSL2 (`~/projects/havenstay`, not `/mnt/c/...`). Optionally enable polling in `docker-compose.override.yml`:
+```yaml
+services:
+  frontend:
+    environment:
+      - WATCHPACK_POLLING=true
+```
+
+### 9.3 Permissions on Storage / Logs
+The entrypoint (`backend/docker-entrypoint.sh`) automatically enforces `www-data` ownership on `storage` and `bootstrap/cache` at container startup. If host file editing causes permission issues:
+```bash
+docker compose exec backend chown -R www-data:www-data storage bootstrap/cache
+```
+
+---
+
+## 10. Hybrid Dev Mode (Optional Native Run)
+
+If you prefer running PHP and Next.js directly on your host machine while keeping MySQL in Docker:
+
+```bash
+# 1. Switch backend environment to native ports (127.0.0.1:3306 and 3307)
+make env-native
+
+# 2. Start only databases
+make db-up
+
+# 3. Launch native servers in separate terminals
+make dev-backend
+make dev-frontend
+```
+
+To switch back to full container mode:
+```bash
+make db-down
+make env-docker
+make up
+```

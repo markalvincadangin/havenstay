@@ -1,36 +1,43 @@
-# Dependencies - rebuilt inside the container
+# Dependencies - rebuilt inside container
 vendor
 
-# Environment files - injected at runtime via docker-compose
+# Environment files - injected at runtime via docker-compose / secrets
 .env
 .env.local
 .env.testing
+.env.docker
 
-# Testing artifacts
-tests
-testsprite_tests
+# Local database artifacts (never bake host sqlite files into container)
+database/*.sqlite
+database/*.sqlite-journal
+database/*.sqlite3
+database/*.sqlite3-journal
+
+# Temporary test caches
 .phpunit.result.cache
-phpunit.xml
-phpunit.mysql.xml
 
-# Dev/tooling artifacts
+# Dev / tooling artifacts
 .git
 .gitignore
 *.md
 debug_output.txt
-scratch_debug_meters.php
+scratch_debug_*.php
 
-# Node artifacts (backend has a package.json for Vite)
+# Node artifacts
 node_modules
 
-# Laravel storage artifacts (logs, cache, sessions)
-storage/logs
-storage/framework/cache
-storage/framework/sessions
-storage/framework/views
+# Laravel runtime storage artifacts
+storage/logs/*
+!storage/logs/.gitignore
+storage/framework/cache/*
+!storage/framework/cache/.gitignore
+storage/framework/sessions/*
+!storage/framework/sessions/.gitignore
+storage/framework/views/*
+!storage/framework/views/.gitignore
 storage/debugbar
 
-# IDE
+# IDE / Editor configs
 .idea
 .vscode
 .phpstorm.meta.php

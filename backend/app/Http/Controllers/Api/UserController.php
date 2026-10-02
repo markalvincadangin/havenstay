@@ -43,10 +43,32 @@ class UserController extends Controller
     }
 
     /**
+     * Determine if a user identity is a protected demo account.
+     */
+    private function isProtectedDemoUser(User $user): bool
+    {
+        if (! config('app.demo_mode', false)) {
+            return false;
+        }
+
+        $protectedEmails = [
+            'havenstay.admin@havenstay.com',
+            'havenstay.staff@havenstay.com',
+            'viewer@havenstay.com',
+        ];
+
+        return in_array($user->email, $protectedEmails, true);
+    }
+
+    /**
      * Update an existing user.
      */
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
+        if ($this->isProtectedDemoUser($user)) {
+            return $this->error('Forbidden: Core demo accounts cannot be modified in sandbox mode.', 403);
+        }
+
         $user = UserService::update($request->user(), $user, $request->validated());
 
         return $this->success('User updated successfully.', new UserResource($user->load('role')));
@@ -57,6 +79,10 @@ class UserController extends Controller
      */
     public function deactivate(ManageUserRequest $request, User $user): JsonResponse
     {
+        if ($this->isProtectedDemoUser($user)) {
+            return $this->error('Forbidden: Core demo accounts cannot be deactivated in sandbox mode.', 403);
+        }
+
         // Safety: Prevent self-deactivation
         if ($user->user_id === $request->user()->user_id) {
             return $this->error('Conflict: You cannot deactivate your own account.', 400);
@@ -82,6 +108,10 @@ class UserController extends Controller
      */
     public function assignRole(AssignUserRoleRequest $request, User $user): JsonResponse
     {
+        if ($this->isProtectedDemoUser($user)) {
+            return $this->error('Forbidden: Core demo account roles cannot be modified in sandbox mode.', 403);
+        }
+
         $validated = $request->validated();
 
         $user = UserService::assignRole($request->user(), $user, (int) $validated['role_id']);

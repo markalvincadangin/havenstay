@@ -201,6 +201,8 @@ function StatusBadgeComponent({ children }) {
     ...PAYMENT_STATUS_LABELS,
     ...ROOM_TYPE_LABELS,
     ...AUDIT_ACTION_LABELS,
+    partial: 'Partial Payment',
+    partially_occupied: 'Partially Occupied',
     inactive: 'Inactive',
     voided: 'Voided',
     voided_contract: 'Voided',
@@ -212,7 +214,11 @@ function StatusBadgeComponent({ children }) {
     cleared: 'Deposit Cleared',
   };
 
-  const displayLabel = labelMap[normalizedValue] || children;
+  const humanizedFallback = normalizedValue
+    ? normalizedValue.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    : children;
+
+  const displayLabel = labelMap[normalizedValue] || humanizedFallback;
 
   const indicatorMap = {
     'badge-success': 'bg-emerald-500',

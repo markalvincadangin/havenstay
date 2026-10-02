@@ -119,13 +119,12 @@ class SchemaEnumAlignmentTest extends TestCase
 
     public function test_audit_log_action_matches_audit_logs_table(): void
     {
-        // audit_logs.action is VARCHAR(32) in schema, not ENUM.
-        // We match against the set of actions allowed in the Controller validation.
-        $schemaActions = ['INSERT', 'UPDATE', 'DELETE', 'login', 'logout', 'access_denied', 'status_change', 'archive', 'restore'];
+        // audit_logs.action is VARCHAR(32) in schema, validated against the canonical AuditAction enum.
+        $schemaActions = array_map(fn (\App\Enums\AuditAction $case) => $case->value, \App\Enums\AuditAction::cases());
         sort($schemaActions);
 
         $this->assertFileInRuleMatches(
-            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'User'.DIRECTORY_SEPARATOR.'IndexAuditLogRequest.php',
+            'app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'AuditLog'.DIRECTORY_SEPARATOR.'IndexAuditLogRequest.php',
             "/'action'\s*=>\s*\[[^\]]*'in:([^']+)'/",
             $schemaActions
         );

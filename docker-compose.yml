@@ -1,12 +1,16 @@
+name: havenstay
+
 services:
-  # Primary Database (3306)
+  # Primary Database (3306 - Read/Write)
   db-primary:
     image: mysql:8.4
     container_name: havenstay-db-primary
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-havenstay_db}
+      MYSQL_USER: ${MYSQL_USER:-replica_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-replica_pass}
     command:
       - --server-id=1
       - --log-bin=mysql-bin
@@ -14,30 +18,29 @@ services:
       - --enforce-gtid-consistency=ON
       - --log-replica-updates=ON
       - --binlog-expire-logs-seconds=604800
-      - --mysql-native-password=ON
-      # PERFORMANCE: Development tuning for Windows/Docker overhead
+      # Development tuning for performance on Docker/WSL2
       - --innodb_flush_log_at_trx_commit=2
       - --innodb_doublewrite=0
       - --innodb_buffer_pool_size=512M
     ports:
-      - "3306:3306"
+      - "${DB_PORT:-3306}:3306"
     volumes:
       - db-primary-data:/var/lib/mysql
       - ./docker/primary-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p${MYSQL_ROOT_PASSWORD} || exit 1" ]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 30s
 
-  # Replica Database (3307) 
+  # Replica Database (3307 - Read-Only)
   db-replica:
     image: mysql:8.4
     container_name: havenstay-db-replica
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_password}
     command:
       - --server-id=2
       - --gtid-mode=ON
@@ -45,9 +48,8 @@ services:
       - --log-replica-updates=ON
       - --relay-log-recovery=ON
       - --read-only=ON
-      - --mysql-native-password=ON
     ports:
-      - "3307:3306"
+      - "${DB_REPLICA_PORT:-3307}:3306"
     depends_on:
       db-primary:
         condition: service_healthy
@@ -55,13 +57,13 @@ services:
       - db-replica-data:/var/lib/mysql
       - ./docker/replica-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p${MYSQL_ROOT_PASSWORD} || exit 1" ]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 30s
 
-  # Backend (Laravel)
+  # Backend (Laravel 13 API)
   backend:
     build:
       context: ./backend
@@ -69,13 +71,13 @@ services:
     container_name: havenstay-backend
     restart: always
     ports:
-      - "8000:80"
+      - "${BACKEND_PORT:-8000}:80"
     healthcheck:
-      test: [ "CMD-SHELL", "curl -fsS http://127.0.0.1/api/health >/dev/null || exit 1" ]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 10s
-      timeout: 15s
+      timeout: 5s
       retries: 5
-      start_period: 90s
+      start_period: 30s
     env_file: .env
     volumes:
       - ./backend:/var/www/html
@@ -86,25 +88,33 @@ services:
       db-replica:
         condition: service_healthy
 
-  # Frontend (Next.js)
+  # Frontend (Next.js 16 App Router)
   frontend:
     build:
       context: ./frontend
       target: development
       args:
         NEXT_PUBLIC_API_BASE_URL: ""
-        BACKEND_INTERNAL_URL: "http://backend"
+        BACKEND_INTERNAL_URL: "http://backend:80"
     container_name: havenstay-frontend
     restart: always
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     env_file: .env
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     environment:
       - BACKEND_INTERNAL_URL=http://backend:80
       - NEXT_PUBLIC_API_BASE_URL=
+      - NEXT_PUBLIC_ENABLE_DEMO_MODE=${NEXT_PUBLIC_ENABLE_DEMO_MODE:-true}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       backend:
         condition: service_healthy

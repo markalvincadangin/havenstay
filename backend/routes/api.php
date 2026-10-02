@@ -55,7 +55,6 @@ Route::middleware(['auth:sanctum', 'auth.check', 'audit.context'])->prefix('tena
     Route::post('existence-check', [TenantController::class, 'existenceCheck']);
     Route::get('{tenant}', [TenantController::class, 'show'])->withTrashed();
     Route::put('{tenant}', [TenantController::class, 'update'])->withTrashed();
-    Route::post('{tenant}/reactivate', [TenantController::class, 'reactivate'])->withTrashed();
     Route::post('{tenant}/archive', [TenantController::class, 'archive'])->withTrashed();
     Route::post('{id}/restore', [TenantController::class, 'restore']);
 });

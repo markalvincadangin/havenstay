@@ -29,9 +29,35 @@ class TenantArchitectureConventionTest extends TestCase
 
         $this->assertMatchesRegularExpression('/public static function create\(User \$actor, array \$data\): Tenant/', $content);
         $this->assertMatchesRegularExpression('/public static function update\(User \$actor, Tenant \$tenant, array \$data\): Tenant/', $content);
-        $this->assertMatchesRegularExpression('/public static function reactivate\(User \$actor, Tenant \$tenant\): Tenant/', $content);
         $this->assertMatchesRegularExpression('/public static function archive\(User \$actor, Tenant \$tenant\): Tenant/', $content);
-        $this->assertMatchesRegularExpression('/public static function restore\(User \$actor, int \$tenantId\): Tenant/', $content);
+        $this->assertMatchesRegularExpression('/public static function restore\(User \$actor, int \$id\): Tenant/', $content);
+
+        // Guard against reintroducing obsolete reactivate method (ADR-004)
+        $this->assertFalse(
+            method_exists(\App\Services\Operations\TenantService::class, 'reactivate'),
+            'TenantService must not define obsolete reactivate method.'
+        );
+    }
+
+    public function test_tenant_controller_and_form_requests_enforce_authorization_contract(): void
+    {
+        $controllerPath = $this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Controllers'.DIRECTORY_SEPARATOR.'Api'.DIRECTORY_SEPARATOR.'TenantController.php');
+        $this->assertFileExists($controllerPath);
+        $controllerContent = (string) file_get_contents($controllerPath);
+
+        // 1. Controller receives appropriate Form Requests
+        $this->assertStringContainsString('IndexTenantRequest $request', $controllerContent);
+        $this->assertStringContainsString('ViewTenantRequest $request', $controllerContent);
+        $this->assertStringContainsString('StoreTenantRequest $request', $controllerContent);
+        $this->assertStringContainsString('UpdateTenantRequest $request', $controllerContent);
+        $this->assertStringContainsString('ManageTenantRequest $request', $controllerContent);
+
+        // 2. Form Requests invoke AuthorizationService in authorize()
+        $viewRequest = (string) file_get_contents($this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'Tenant'.DIRECTORY_SEPARATOR.'ViewTenantRequest.php'));
+        $this->assertStringContainsString('AuthorizationService::ensureCanViewTenants(', $viewRequest);
+
+        $manageRequest = (string) file_get_contents($this->backendPath('app'.DIRECTORY_SEPARATOR.'Http'.DIRECTORY_SEPARATOR.'Requests'.DIRECTORY_SEPARATOR.'Tenant'.DIRECTORY_SEPARATOR.'ManageTenantRequest.php'));
+        $this->assertStringContainsString('AuthorizationService::ensureCanManageTenants(', $manageRequest);
     }
 
     public function test_tenant_service_does_not_depend_on_auth_facade(): void
