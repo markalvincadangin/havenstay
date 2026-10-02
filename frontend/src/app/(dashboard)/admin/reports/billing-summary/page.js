@@ -13,6 +13,7 @@ import Alert from '@/components/ui/Alert';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import Button from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import FilterChips from '@/components/ui/FilterChips';
 import FilterPanelCard from '@/components/ui/FilterPanelCard';
 import { Field, Input } from '@/components/ui/Fields';
 import { SkeletonListPage } from '@/components/ui/Skeleton';

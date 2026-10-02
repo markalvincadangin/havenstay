@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Briefcase, Eye, Sparkles, ArrowRight, Loader2 } from 'lucide-react';
+import { ShieldCheck, Briefcase, Eye, Info, ArrowRight, Loader2 } from 'lucide-react';
 
 const DEMO_ROLES = [
   {
     id: 'admin',
     roleName: 'System Administrator',
     scopeBadge: 'Full Access',
-    description: 'System settings, user management, and raw trigger audit trails',
+    description: 'System settings, staff accounts, and database audit logs',
     username: 'havenstay.admin@havenstay.com',
     password: 'HavenStay123!',
     icon: ShieldCheck,
@@ -24,7 +24,7 @@ const DEMO_ROLES = [
     id: 'staff',
     roleName: 'Staff Operator',
     scopeBadge: 'Operational',
-    description: 'Bed space assignment, utility sub-metering, and payment records',
+    description: 'Room and bed space allocations, meter readings, and payments',
     username: 'havenstay.staff@havenstay.com',
     password: 'HavenStay123!',
     icon: Briefcase,
@@ -39,7 +39,7 @@ const DEMO_ROLES = [
     id: 'viewer',
     roleName: 'Auditor & Analyst',
     scopeBadge: 'Read-Only',
-    description: 'Read-only financial summaries, occupancy metrics, and analytics',
+    description: 'Occupancy reports, financial summaries, and read-only ledgers',
     username: 'viewer@havenstay.com',
     password: 'HavenStay123!',
     icon: Eye,
@@ -66,19 +66,19 @@ export default function DemoRoleSelector({ onSelectRole, isSubmitting = false })
       <div className="flex items-center justify-between pb-3 border-b border-stone-200/60">
         <div className="flex items-center gap-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-teal-600/10 text-teal-700">
-            <Sparkles size={14} strokeWidth={2.5} />
+            <Info size={14} strokeWidth={2.5} />
           </div>
           <div>
-            <h3 className="text-xs font-black uppercase tracking-wider text-stone-800">
-              Demo Sandbox Access
+            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-800">
+              Demo Accounts
             </h3>
             <p className="text-[11px] font-medium text-stone-500">
-              Select an authorized identity to sign in with one click
+              Sign in with a preconfigured role to evaluate system workflows:
             </p>
           </div>
         </div>
-        <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-teal-700">
-          Portfolio Mode
+        <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-teal-700">
+          Demo Mode
         </span>
       </div>
 
@@ -115,7 +115,7 @@ export default function DemoRoleSelector({ onSelectRole, isSubmitting = false })
                       {role.roleName}
                     </span>
                     <span
-                      className={`inline-block rounded-md border px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider ${role.theme.badge}`}
+                      className={`inline-block rounded-md border px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider ${role.theme.badge}`}
                     >
                       {role.scopeBadge}
                     </span>
@@ -127,7 +127,7 @@ export default function DemoRoleSelector({ onSelectRole, isSubmitting = false })
               </div>
 
               <div className="flex items-center pl-2 text-stone-400 group-hover:text-teal-600 transition-colors">
-                <ArrowRight size={14} strokeWidth={2.5} className="transition-transform group-hover:translate-x-0.5" />
+                <ArrowRight size={14} strokeWidth={2.2} className="transition-transform group-hover:translate-x-0.5" />
               </div>
             </motion.button>
           );

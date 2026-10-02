@@ -1,6 +1,6 @@
 'use client';
 
-import { Sparkles, ArrowRight, ShieldCheck, Briefcase, Eye } from 'lucide-react';
+import { Info, ArrowRight, ShieldCheck, Briefcase, Eye } from 'lucide-react';
 
 export default function DemoModeBanner({ user, onSwitchRole }) {
   if (process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE !== 'true') {
@@ -17,20 +17,20 @@ export default function DemoModeBanner({ user, onSwitchRole }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white shadow-xs">
-            <Sparkles size={16} strokeWidth={2.2} />
+            <Info size={16} strokeWidth={2.2} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-teal-950">
-                Portfolio Sandbox
+              <span className="text-[11px] font-bold uppercase tracking-wider text-teal-950">
+                Demo Environment
               </span>
-              <span className="inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-100/60 px-2 py-0.5 text-[10px] font-bold text-teal-800">
+              <span className="inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-100/60 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
                 <RoleIcon size={12} strokeWidth={2.2} />
                 <span className="capitalize">{roleName}</span>
               </span>
             </div>
             <p className="text-[11px] font-medium text-stone-500">
-              Interactive portfolio environment with pre-populated demo data and forensic database audit tracking.
+              Loaded with sample records for evaluation. Database state resets periodically.
             </p>
           </div>
         </div>
@@ -38,10 +38,10 @@ export default function DemoModeBanner({ user, onSwitchRole }) {
         <button
           type="button"
           onClick={onSwitchRole}
-          className="inline-flex items-center justify-center gap-1.5 self-start sm:self-center rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-700 shadow-2xs hover:bg-stone-50 hover:border-stone-300 hover:text-teal-700 transition-all cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center gap-1.5 self-start sm:self-center rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-700 shadow-2xs hover:bg-stone-50 hover:border-stone-300 hover:text-teal-700 transition-all cursor-pointer shrink-0"
         >
-          <span>Switch Identity</span>
-          <ArrowRight size={12} strokeWidth={2.5} />
+          <span>Switch Account</span>
+          <ArrowRight size={12} strokeWidth={2.2} />
         </button>
       </div>
     </div>

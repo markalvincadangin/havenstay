@@ -19,20 +19,6 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
   const { showToast } = useToasts();
   const readOnly = !canManageRooms(currentUser);
 
-  if (room.status === 'decommissioned') {
-    return (
-      <div className="p-8 space-y-6">
-        <RecordStateAlert show variant="warning" title="Room Decommissioned">
-          This room has been decommissioned from active inventory and is locked
-          for editing. Restore the room via the Profile page if you need to
-          modify its properties.
-        </RecordStateAlert>
-        <Button variant="secondary" onClick={onCancel} className="w-full">
-          Close
-        </Button>
-      </div>
-    );
-  }
   const {
     register,
     handleSubmit,
@@ -56,11 +42,28 @@ export function RoomQuickEditForm({ room, currentUser, onSuccess, onCancel }) {
       is_metered: !!room.is_metered,
     },
   });
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: 'bed_spaces',
   });
+
   const roomType = useWatch({ control, name: 'room_type' });
+
+  if (room.status === 'decommissioned') {
+    return (
+      <div className="p-8 space-y-6">
+        <RecordStateAlert show variant="warning" title="Room Decommissioned">
+          This room has been decommissioned from active inventory and is locked
+          for editing. Restore the room via the Profile page if you need to
+          modify its properties.
+        </RecordStateAlert>
+        <Button variant="secondary" onClick={onCancel} className="w-full">
+          Close
+        </Button>
+      </div>
+    );
+  }
   const onSubmit = async (values) => {
     if (readOnly) return;
     try {
