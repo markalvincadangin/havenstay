@@ -1,19 +1,39 @@
 <div align="center">
 
-# HavenStay
-### Coursework for Information Management · West Visayas State University
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="frontend/public/brand/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="frontend/public/brand/logo-light.svg">
+  <img alt="HavenStay Brand Mark" src="frontend/public/brand/logo-light.svg" width="140">
+</picture>
 
-**Boarding house and bed-level property management system**, built to handle student dormitories and rental housing near universities with bed-space vacancy tracking, shared utility sub-metering, and database-level audit logging.
+### Multi-Tenant Student Housing & Bed-Level Property Management System
+**Full-Stack Coursework Capstone (CC 206) · Information Management · West Visayas State University**
 
-[![Backend](https://img.shields.io/badge/Backend-Laravel%2013%20(PHP%208.4%2B)-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com)
-[![Frontend](https://img.shields.io/badge/Frontend-Next.js%2016%20(React%2019)-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
-[![Database](https://img.shields.io/badge/Database-MySQL%208.4%20Primary--Replica-4479A1?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
-[![Styling](https://img.shields.io/badge/Styling-Tailwind%20CSS%20v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
-[![Container](https://img.shields.io/badge/DevOps-Docker%20Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Audit](https://img.shields.io/badge/Audit-45%20Database%20Triggers-008080?style=for-the-badge)](docs/DATABASE.md)
-[![License](https://img.shields.io/badge/License-Proprietary%20%2F%20Portfolio%20Review-lightgrey?style=for-the-badge)](LICENSE)
+*Designed for student boarding houses and dormitories in Iloilo City with bed vacancy tracking, utility sub-metering, and database-level audit logs.*
+
+[![Backend](https://img.shields.io/badge/Backend-Laravel%2013%20%7C%20PHP%208.4%2B-FF2D20?style=flat-square&logo=laravel&logoColor=white)](backend/)
+[![Frontend](https://img.shields.io/badge/Frontend-Next.js%2016%20%7C%20React%2019-000000?style=flat-square&logo=next.js&logoColor=white)](frontend/)
+[![Database](https://img.shields.io/badge/Database-MySQL%208.4%20(Primary--Replica)-4479A1?style=flat-square&logo=mysql&logoColor=white)](docs/DATABASE.md)
+[![Styling](https://img.shields.io/badge/Styling-Tailwind%20CSS%20v4-38B2AC?style=flat-square&logo=tailwindcss&logoColor=white)](frontend/)
+[![DevOps](https://img.shields.io/badge/DevOps-Docker%20Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](docker-compose.yml)
+[![Audit](https://img.shields.io/badge/Audit-45%20Database%20Triggers-008080?style=flat-square)](docs/DATABASE.md)
+[![Tests](https://img.shields.io/badge/Tests-35%20Vitest%20Passed-059669?style=flat-square&logo=vitest&logoColor=white)](frontend/)
+[![License](https://img.shields.io/badge/License-Proprietary%20%2F%20Academic-6B7280?style=flat-square)](LICENSE)
+[![Case Study](https://img.shields.io/badge/Case_Study-markcadangin.me-0f172a?style=flat-square&logo=googlechrome&logoColor=white)](https://markcadangin.me/projects/havenstay)
+[![Live Demo](https://img.shields.io/badge/Demo-havenstay--theta.vercel.app-2563eb?style=flat-square&logo=vercel&logoColor=white)](https://havenstay-theta.vercel.app)
 
 <br/>
+
+<a href="#about-the-project">Overview</a> •
+<a href="#system-architecture">Architecture</a> •
+<a href="#key-features">Key Features</a> •
+<a href="#technology-stack">Tech Stack</a> •
+<a href="#quick-start-docker-environment">Quick Start</a> •
+<a href="#seeded-demo-accounts">Demo Accounts</a> •
+<a href="#why-i-built-it-this-way">Design Rationale</a> •
+<a href="https://markcadangin.me/projects/havenstay">Live Case Study</a>
+
+<br/><br/>
 
 <img src="assets/havenstay_dashboard.png" alt="HavenStay Dashboard Interface" width="95%" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);" />
 
@@ -194,11 +214,13 @@ Detailed design documents are maintained in [`docs/`](docs/):
 
 ---
 
-## Author
+## Author & Attribution
 
-**Mark Alvin Cadangin**  
-Software Development Technologies — West Visayas State University  
-GitHub: [@markalvincadangin](https://github.com/markalvincadangin)
+Developed and architected by **[Mark Alvin Cadangin](https://markcadangin.me)**  
+3rd-Year BSIT Student majoring in Software Development Technologies at West Visayas State University  
+DOST-SEI Scholar (Batch 2024) · Western Visayas, Philippines  
+Portfolio: [markcadangin.me](https://markcadangin.me) · Email: [markcadangin@gmail.com](mailto:markcadangin@gmail.com)  
+Coursework: Information Management (CC 206) · WVSU CICT
 
 ---
 
