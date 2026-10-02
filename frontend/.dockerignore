@@ -1,19 +1,17 @@
-# Dependencies - rebuilt inside the container
+# Dependencies - rebuilt inside container
 node_modules
 
-# Next.js build output - rebuilt inside the container
+# Next.js build output - generated inside container
 .next
 out
 
-# Environment files - injected at runtime via docker-compose
+# Environment files - injected at runtime via docker-compose / secrets
 .env
 .env.local
 .env.*.local
 
-# Testing artifacts
+# Test outputs & reports
 coverage
-__tests__
-e2e
 playwright-report
 test-results
 
@@ -23,12 +21,7 @@ test-results
 .eslintignore
 *.md
 
-# Vitest / Playwright config (not needed in image)
-vitest.config.mjs
-vitest.setup.js
-playwright.config.mjs
-
-# IDE / AI
+# IDE / Editor configs
 .idea
 .vscode
 CLAUDE.md

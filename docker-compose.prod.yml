@@ -1,18 +1,185 @@
-# Production-ready configuration for HavenStay
-# Use this with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ============================================================
+# HavenStay BHMS — Production Docker Compose Configuration
+# ============================================================
+# Standalone, isolated production cluster with:
+#   - Caddy reverse proxy with automated Let's Encrypt SSL
+#   - Next.js 16 standalone unprivileged runner
+#   - Laravel 13 PHP 8.4 Apache with OPcache
+#   - MySQL 8.4 Primary (Read/Write, 45 triggers)
+#   - MySQL 8.4 Replica (Read-Only, GTID replication)
+#
+# Launch production cluster:
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Or via Makefile:
+#   make prod-up
+# ============================================================
+
+name: havenstay-prod
 
 services:
+  # ── EDGE REVERSE PROXY (Caddy with Automated SSL) ──
+  caddy:
+    image: caddy:2-alpine
+    container_name: havenstay-prod-caddy
+    restart: always
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-:80}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@havenstay.local}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - prod-caddy-data:/data
+      - prod-caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - havenstay-prod-network
+
+  # ── PRIMARY DATABASE (MySQL 8.4 - Read/Write) ──
+  db-primary:
+    image: mysql:8.4
+    container_name: havenstay-prod-db-primary
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-havenstay_db}
+      MYSQL_USER: ${MYSQL_USER:-replica_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-replica_pass}
+    command:
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --log-replica-updates=ON
+      - --binlog-expire-logs-seconds=604800
+      - --innodb_flush_log_at_trx_commit=1
+      - --innodb_buffer_pool_size=512M
+    # Bind to localhost only for security in production (accessible via SSH tunnel if needed)
+    ports:
+      - "127.0.0.1:${PROD_DB_PRIMARY_PORT:-3306}:3306"
+    volumes:
+      - prod-db-primary-data:/var/lib/mysql
+      - ./docker/primary-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - havenstay-prod-network
+
+  # ── REPLICA DATABASE (MySQL 8.4 - Read-Only) ──
+  db-replica:
+    image: mysql:8.4
+    container_name: havenstay-prod-db-replica
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_password}
+    command:
+      - --server-id=2
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --log-replica-updates=ON
+      - --relay-log-recovery=ON
+      - --read-only=ON
+    # Bind to localhost only for security
+    ports:
+      - "127.0.0.1:${PROD_DB_REPLICA_PORT:-3307}:3306"
+    depends_on:
+      db-primary:
+        condition: service_healthy
+    volumes:
+      - prod-db-replica-data:/var/lib/mysql
+      - ./docker/replica-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - havenstay-prod-network
+
+  # ── BACKEND (Laravel 13 API - Optimized Production Target) ──
   backend:
     build:
+      context: ./backend
       target: production
-    volumes: [] # Remove dev volumes
+    container_name: havenstay-prod-backend
     restart: always
+    # Bind to localhost for internal container health check / debug
+    ports:
+      - "127.0.0.1:${PROD_BACKEND_PORT:-8000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - DB_CONNECTION=mysql
+      - DB_HOST=db-primary
+      - DB_WRITE_HOST=db-primary
+      - DB_READ_HOST=db-replica
+      - DB_STICKY=true
+      - DB_SEED=true
+      - DEMO_MODE=${DEMO_MODE:-true}
+    depends_on:
+      db-primary:
+        condition: service_healthy
+      db-replica:
+        condition: service_healthy
+    networks:
+      - havenstay-prod-network
 
+  # ── FRONTEND (Next.js 16 Standalone - Unprivileged Node.js Runner) ──
   frontend:
     build:
+      context: ./frontend
       target: runner
-    volumes: [] # Remove dev volumes
+      args:
+        BACKEND_INTERNAL_URL: http://backend:80
+        NEXT_PUBLIC_API_BASE_URL: ""
+        NEXT_PUBLIC_ENABLE_DEMO_MODE: ${NEXT_PUBLIC_ENABLE_DEMO_MODE:-true}
+    container_name: havenstay-prod-frontend
+    restart: always
+    # Bind to localhost for health check / debug
+    ports:
+      - "127.0.0.1:${PROD_FRONTEND_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     environment:
       - NODE_ENV=production
-      - WATCHPACK_POLLING=false
-    restart: always
+      - BACKEND_INTERNAL_URL=http://backend:80
+      - NEXT_PUBLIC_API_BASE_URL=
+      - NEXT_PUBLIC_ENABLE_DEMO_MODE=${NEXT_PUBLIC_ENABLE_DEMO_MODE:-true}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - havenstay-prod-network
+
+volumes:
+  prod-db-primary-data:
+  prod-db-replica-data:
+  prod-caddy-data:
+  prod-caddy-config:
+
+networks:
+  havenstay-prod-network:
+    driver: bridge

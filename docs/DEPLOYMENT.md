@@ -1,259 +1,315 @@
-# HavenStay — Deployment Guide
+# HavenStay BHMS — Production Deployment & Architecture Guide
 
-Covers production deployment to **Render** (backend) + **Vercel** (frontend)
-with **Aiven** as the managed MySQL database.
+**Platform Engineering & Deployment Reference**  
+*Optimized for Zero-Cost Cloud Hosting, High Availability, and Portfolio Demonstration*
 
 ---
 
 ## Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Database — Aiven MySQL](#database--aiven-mysql)
-3. [Backend — Render](#backend--render)
-4. [Frontend — Vercel](#frontend--vercel)
-5. [Environment Variables Reference](#environment-variables-reference)
-6. [First-Deploy Sequence](#first-deploy-sequence)
-7. [Subsequent Deploys](#subsequent-deploys)
-8. [Smoke Test Checklist](#smoke-test-checklist)
+1. [Architectural Overview & Topology](#1-architectural-overview--topology)
+2. [Free-Tier Deployment Strategies Comparison](#2-free-tier-deployment-strategies-comparison)
+3. [Strategy 1: Decoupled PaaS (Vercel + Render + Aiven)](#3-strategy-1-decoupled-paas-vercel--render--aiven)
+4. [Strategy 2: Always-On Free Cloud VPS (Oracle Cloud Always Free)](#4-strategy-2-always-on-free-cloud-vps-oracle-cloud-always-free)
+5. [Strategy 3: On-Demand Live Portfolio Showcase (Cloudflare Tunnel)](#5-strategy-3-on-demand-live-portfolio-showcase-cloudflare-tunnel)
+6. [Cold-Start Mitigation for Free PaaS](#6-cold-start-mitigation-for-free-paas)
+7. [Database Constraint: MySQL 8.4 & 45 Forensic Triggers](#7-database-constraint-mysql-84--45-forensic-triggers)
+8. [First-Deploy Execution Sequence](#8-first-deploy-execution-sequence)
+9. [Automated Verification & Smoke Testing](#9-automated-verification--smoke-testing)
+10. [Portfolio Presentation & Resume Playbook](#10-portfolio-presentation--resume-playbook)
 
 ---
 
-## Architecture Overview
+## 1. Architectural Overview & Topology
+
+HavenStay BHMS is designed as an enterprise decoupled multi-tier web application:
 
 ```
-Browser
-  └─► Vercel (Next.js)  ──/api/*──►  Render (Laravel API)
-                                           │
-                                    Aiven MySQL
-                                    ├── Primary  (read/write)
-                                    └── Replica  (read-only, optional)
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                 CLIENT LAYER                                    │
+│   Web Browser (Global HTTPS)                                                    │
+└────────────────────────┬────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                FRONTEND TIER                                    │
+│   Next.js 16 App Router (React 19, Tailwind v4, Lucide Icons, Standalone Node)  │
+│   • Edge caching & SSR                                                          │
+│   • Same-origin server-side rewrite: /api/:path* ──► Backend API                │
+└────────────────────────┬────────────────────────────────────────────────────────┘
+                         │ (Internal Server-to-Server REST + Bearer Token)
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                 BACKEND TIER                                    │
+│   Laravel 13 API (PHP 8.4+, Apache mod_rewrite, OPcache Enabled)                │
+│   • Form request validation & domain services                                   │
+│   • AuditService correlation context injection                                  │
+│   • Read/Write Connection Routing (DB_WRITE_HOST vs DB_READ_HOST)               │
+└──────────────┬──────────────────────────────────────────┬───────────────────────┘
+               │ (Mutations & Writes)                     │ (Read-Heavy Queries)
+               ▼                                          ▼
+┌──────────────────────────────────────┐  GTID    ┌───────────────────────────────┐
+│       MySQL 8.4 Primary Node         ├─────────►│     MySQL 8.4 Read Replica    │
+│   • 45 Database Forensic Triggers    │  Replic. │   • Analytics & Reporting     │
+│   • audit_logs before/after diffs    │          │   • Read-only enforcement     │
+│   • ACID Transactional Consistency   │          │   • Reduced primary locks     │
+└──────────────────────────────────────┘          └───────────────────────────────┘
 ```
 
-| Layer | Platform | Plan |
-|---|---|---|
-| Frontend | [Vercel](https://vercel.com) | Free (Hobby) |
-| Backend | [Render](https://render.com) | Free web service (Docker) |
-| Database | [Aiven](https://aiven.io) | Free trial / Startup MySQL |
+---
 
-> [!NOTE]
-> Render free-tier web services **spin down** after 15 minutes of inactivity.
-> The first request after sleep takes ~30 s. Upgrade to a paid plan for
-> always-on availability.
+## 2. Free-Tier Deployment Strategies Comparison
+
+HavenStay can be deployed 100% free using multiple architectures depending on your portfolio goals:
+
+| Strategy | Frontend | Backend | Database | Best For | Pros | Considerations |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Strategy 1: Decoupled PaaS** | **Vercel** (Hobby) | **Render** (Free Web Service) | **Aiven** / **Railway** (MySQL) | Quick portfolio link, zero server maintenance | • Automatic Git CI/CD<br/>• Global edge CDN on UI<br/>• Zero server maintenance | • Render sleeps after 15m inactivity (~30s cold start)<br/>• Read replica requires Aiven multi-node |
+| **Strategy 2: Always-On Free VPS** | **Docker** (Container) | **Docker** (Container) | **Docker** (Primary + Replica) | **Senior DevOps portfolio flex**, realistic production cluster | • **Zero cold starts** (runs 24/7)<br/>• Live MySQL read replica with GTID replication<br/>• Full Docker parity (`docker-compose.prod.yml`) | • Requires 1-time setup of Oracle Cloud VM or $4/mo VPS |
+| **Strategy 3: On-Demand Tunnel** | Local Next.js | Local Laravel | Local Primary/Replica | Live technical interview / client demo | • Zero cloud setup<br/>• 100% fidelity<br/>• Instant 1-command startup (`make share`) | • Only online while laptop/PC is running |
 
 ---
 
-## Database — Aiven MySQL
+## 3. Strategy 1: Decoupled PaaS (Vercel + Render + Aiven)
 
-### Create the service
+### 3.1 Database: Aiven Managed MySQL 8
+1. Register at [Aiven Console](https://console.aiven.io).
+2. Create service: **MySQL** -> Select region `asia-southeast1` (Singapore) to match Render Singapore.
+3. Collect credentials from Overview tab:
+   - Host (`DB_WRITE_HOST` / `DB_READ_HOST`)
+   - Port (default `3306`)
+   - User (`DB_USERNAME`)
+   - Password (`DB_PASSWORD`)
+   - Database name (`DB_DATABASE`)
 
-1. Log in to [Aiven Console](https://console.aiven.io).
-2. **Create service → MySQL → Free trial** (or Startup-4 for production).
-3. Choose region **asia-southeast1** (Singapore) to minimize latency with Render.
-4. Wait for status to become **Running**.
+### 3.2 Backend: Render Docker Web Service
+Render uses the repository root `render.yaml` blueprint or manual setup:
+- **Environment**: Docker
+- **Root Directory**: `backend`
+- **Dockerfile Path**: `Dockerfile`
+- **Docker Target**: `production`
+- **Health Check Path**: `/api/health`
 
-### Get connection details
-
-In the Aiven service page → **Overview → Connection information**:
-
-| Field | Where to copy |
-|---|---|
-| Host | `DB_WRITE_HOST` / `DB_READ_HOST` in Render |
-| Port | `DB_PORT` |
-| Database | `DB_DATABASE` |
-| User | `DB_USERNAME` |
-| Password | `DB_PASSWORD` |
-| SSL CA cert | Download `ca.pem` → paste into `DB_SSL_CA` if required |
-
-### Initialize the schema
-
-Aiven does not run Laravel migrations automatically. Trigger them via Render on
-first deploy using `DB_SEED=true` (see [First-Deploy Sequence](#first-deploy-sequence)).
-
----
-
-## Backend — Render
-
-### Service configuration
-
-Render reads `render.yaml` from the repository root. It defines a single web
-service (`havenstay-backend`) that builds the backend Docker image.
-
-If deploying manually via the Render dashboard:
-
-| Field | Value |
-|---|---|
-| **Name** | `havenstay-backend` |
-| **Environment** | Docker |
-| **Root directory** | `backend` |
-| **Dockerfile path** | `Dockerfile` |
-| **Docker target** | `production` |
-| **Health check path** | `/api/health` |
-| **Region** | Singapore (or nearest to Aiven) |
-
-### Required environment variables (set in Render dashboard)
-
-> [!CAUTION]
-> Set these in the Render dashboard → **Environment** tab. Never commit secrets.
-
+**Render Environment Variables:**
 ```dotenv
 APP_ENV=production
 APP_DEBUG=false
-APP_KEY=                          # Generate: php artisan key:generate --show
-APP_URL=https://havenstay-qhun.onrender.com
+APP_KEY=base64:hWXurcwNFyI1ySTdsK8mAxcYUn7VyB3P3fbcNXA8iQw=
+APP_URL=https://havenstay-backend.onrender.com
+FRONTEND_URL=https://havenstay.vercel.app
 
 DB_CONNECTION=mysql
-DB_HOST=<aiven-host>
-DB_PORT=<aiven-port>
-DB_DATABASE=<aiven-db-name>
-DB_USERNAME=<aiven-user>
-DB_PASSWORD=<aiven-password>
-
-# For Primary-Replica (if Aiven provides a read replica endpoint):
-DB_WRITE_HOST=<aiven-primary-host>
-DB_WRITE_PORT=<aiven-port>
-DB_READ_HOST=<aiven-replica-host>   # Same as primary if no replica
-DB_READ_PORT=<aiven-port>
+DB_HOST=<aiven-mysql-host>
+DB_PORT=<aiven-mysql-port>
+DB_DATABASE=havenstay_db
+DB_USERNAME=<aiven-mysql-user>
+DB_PASSWORD=<aiven-mysql-password>
+DB_WRITE_HOST=<aiven-mysql-host>
+DB_READ_HOST=<aiven-mysql-host>
 DB_STICKY=true
-
-# CORS — must match your Vercel deployment URL exactly
-FRONTEND_URL=https://havenstay-theta.vercel.app
 
 LOG_CHANNEL=errorlog
 SESSION_DRIVER=database
 CACHE_STORE=database
 
-# First deploy only — set to true to run migrate:fresh --seed, then flip to false
+# First deploy only: set to true to seed demo accounts, then change to false
 DB_SEED=false
 ```
 
-### Auto-deploy from GitHub
-
-In Render service settings → **Build & Deploy → Auto-Deploy: Yes**.
-Every push to `main` triggers a redeploy.
+### 3.3 Frontend: Vercel Next.js Deployment
+1. Import repository at [vercel.com/new](https://vercel.com/new).
+2. Set Root Directory to `frontend`.
+3. Set Environment Variable in Vercel Dashboard:
+   - `BACKEND_INTERNAL_URL`: `https://havenstay-backend.onrender.com`
+   - `NEXT_PUBLIC_API_BASE_URL`: `""` (empty string for same-origin proxying)
+4. Deploy. Vercel automatically builds the Next.js App Router standalone build.
 
 ---
 
-## Frontend — Vercel
+## 4. Strategy 2: Always-On Free Cloud VPS (Oracle Cloud Always Free) — Recommended
 
-### Import project
+For a portfolio that stands out to senior engineering leads and platform architects, running the entire stack via `docker-compose.prod.yml` on an **Oracle Cloud Always Free Ampere A1 VM** provides an always-on, cold-start-free production demonstration.
 
-1. [vercel.com/new](https://vercel.com/new) → Import Git repository → select `havenstay`.
-2. **Framework preset**: Next.js (auto-detected).
-3. **Root directory**: `frontend`.
-4. **Build command**: `npm run build` (default).
-5. **Output directory**: `.next` (default — Next.js standalone output is handled automatically).
+### 4.1 Oracle Cloud Free Tier Specs
+- **4 OCPU ARM Ampere A1 Compute cores**
+- **24 GB RAM**
+- **200 GB NVMe Storage**
+- **Free Public IPv4 Address**
+- **Cost**: $0.00 / month forever (No expiration or credit card drain)
 
-### Environment variables (set in Vercel dashboard)
+### 4.2 Step 1: Provision the Free Instance on OCI
+1. Register at [Oracle Cloud Infrastructure (OCI)](https://www.oracle.com/cloud/free/).
+2. Navigate to **Compute** -> **Instances** -> **Create Instance**:
+   - **Image**: Ubuntu 24.04 LTS (Minimal or Server)
+   - **Shape**: Change Shape -> **Ampere** -> `VM.Standard.A1.Flex` -> 2 to 4 OCPU, 12 to 24 GB RAM (Always Free Eligible).
+   - **Networking**: Select a public subnet and ensure **Assign a public IPv4 address** is checked.
+   - **SSH Keys**: Download your private key or upload your local public key (`~/.ssh/id_rsa.pub`).
+3. Click **Create** and copy the **Public IP Address**.
 
-> **Settings → Environment Variables → Production** (and optionally Preview/Development).
+### 4.3 Step 2: Open Ingress Ports in Oracle Cloud VCN
+Oracle Cloud blocks incoming ports 80 and 443 at the cloud virtual network layer by default:
+1. In the OCI Console, go to **Virtual Cloud Networks** -> Click your VCN -> Click your **Public Subnet** -> Click **Default Security List**.
+2. Click **Add Ingress Rules**:
+   - **Source CIDR**: `0.0.0.0/0`
+   - **IP Protocol**: TCP
+   - **Destination Port Range**: `80,443`
+   - **Description**: Allow HTTP and HTTPS web traffic
 
-```dotenv
-# Server-side: where Next.js proxies /api/* (must be accessible from Vercel's servers)
-BACKEND_INTERNAL_URL=https://havenstay-qhun.onrender.com
+### 4.4 Step 3: (Optional) Point a Domain or Free DuckDNS Subdomain
+For automated Let's Encrypt SSL:
+- **Custom Domain**: Create an `A` record pointing `havenstay.yourdomain.com` -> `<your-vps-ip>`.
+- **Free Subdomain**: Use [DuckDNS](https://www.duckdns.org/) to create a free domain `havenstay-portfolio.duckdns.org` pointing to `<your-vps-ip>`.
+- If you don't have a domain yet, Caddy will serve the site directly via your VPS IP on port 80.
 
-# Browser-side: leave empty to use same-origin /api/* rewrites (recommended)
-NEXT_PUBLIC_API_BASE_URL=
+### 4.5 Step 4: Automated 1-Command Deployment on VPS
+1. SSH into the VM:
+   ```bash
+   ssh -i /path/to/key.pem ubuntu@<your-vps-ip>
+   ```
+2. Clone repository:
+   ```bash
+   git clone https://github.com/markalvincadangin/havenstay.git
+   cd havenstay
+   ```
+3. Run the automated VPS deployment script:
+   ```bash
+   ./scripts/deploy-vps.sh
+   # Or via Makefile:
+   # make deploy
+   ```
+   *What this script does automatically:*
+   - Checks/installs Docker and Docker Compose v2.
+   - Configures the host firewall (`iptables` and `ufw` for ports 80, 443, 22).
+   - Auto-generates cryptographically strong database passwords and Laravel `APP_KEY`.
+   - Prompts for your domain (or defaults to port 80 HTTP).
+   - Launches Caddy, Next.js 16 standalone, Laravel 13, and MySQL 8.4 primary-replica cluster.
+   - Runs healthchecks and outputs your live portfolio URL.
+
+### 4.6 Step 5: Automated CI/CD via GitHub Actions
+To automatically deploy new commits from `main`:
+1. In your GitHub repository, go to **Settings** -> **Secrets and variables** -> **Actions**.
+2. Add the following repository secrets:
+   - `VPS_HOST`: `<your-vps-ip>`
+   - `VPS_USER`: `ubuntu`
+   - `VPS_SSH_KEY`: Content of your private SSH key (`id_rsa` or downloaded `.pem`)
+3. Every push to `main` will automatically trigger `.github/workflows/deploy-vps.yml` to test, pull changes, and rebuild containers with zero downtime.
+
+### 4.7 Production Operational Commands
+```bash
+# View live aggregated production logs
+make prod-logs
+
+# Check container health and GTID replication status
+make prod-ps
+./scripts/smoke-test.sh
+
+# Restart production cluster
+docker compose -f docker-compose.prod.yml restart
+
+# Stop production cluster
+make prod-down
 ```
 
-> [!IMPORTANT]
-> `BACKEND_INTERNAL_URL` is a **server-side** variable (no `NEXT_PUBLIC_` prefix).
-> It is never exposed to the browser. The browser always calls `/api/*` on the
-> same Vercel origin — Next.js rewrites it to Render server-to-server.
+---
 
-### Preview deployments
+## 5. Strategy 3: On-Demand Live Portfolio Showcase (Cloudflare Tunnel)
 
-Each PR gets a preview URL (e.g. `https://havenstay-git-feature-xyz.vercel.app`).
-These preview deployments also use the production `BACKEND_INTERNAL_URL` unless
-you override it per-branch in Vercel's environment variable settings.
+If you are demoing HavenStay live during an interview or presentation:
+
+1. Start your local cluster:
+   ```bash
+   make up
+   ```
+2. Start the Cloudflare Tunnel:
+   ```bash
+   make share
+   ```
+3. A public, secure HTTPS URL is automatically generated (e.g. `https://random-word.trycloudflare.com`).
+4. Share the URL with interviewers. The tunnel auto-configures Next.js hot-reloading and routes all API calls to your local MySQL primary and read replica!
 
 ---
 
-## Environment Variables Reference
+## 6. Cold-Start Mitigation for Free PaaS
 
-### Backend (Render)
+If you deploy using **Render Free Tier**, the web service spins down after 15 minutes of inactivity. When a reviewer visits your portfolio, the first request may take ~30 seconds to spin up.
 
-| Variable | Required | Notes |
-|---|---|---|
-| `APP_KEY` | ✅ | Generate with `php artisan key:generate --show` |
-| `APP_ENV` | ✅ | `production` |
-| `APP_DEBUG` | ✅ | `false` |
-| `APP_URL` | ✅ | Your Render service URL |
-| `FRONTEND_URL` | ✅ | Your Vercel deployment URL (for CORS) |
-| `DB_CONNECTION` | ✅ | `mysql` |
-| `DB_HOST` / `DB_WRITE_HOST` | ✅ | Aiven primary host |
-| `DB_READ_HOST` | ✅ | Aiven replica host (or same as primary) |
-| `DB_PORT` | ✅ | Aiven port (usually 3306) |
-| `DB_DATABASE` | ✅ | Aiven database name |
-| `DB_USERNAME` | ✅ | Aiven username |
-| `DB_PASSWORD` | ✅ | Aiven password |
-| `DB_STICKY` | ✅ | `true` |
-| `LOG_CHANNEL` | ✅ | `errorlog` (streams to Render logs) |
-| `SESSION_DRIVER` | ✅ | `database` |
-| `CACHE_STORE` | ✅ | `database` |
-| `DB_SEED` | ⚠️ | `true` first deploy only, then `false` |
-
-### Frontend (Vercel)
-
-| Variable | Required | Notes |
-|---|---|---|
-| `BACKEND_INTERNAL_URL` | ✅ | Render service URL — server-side only |
-| `NEXT_PUBLIC_API_BASE_URL` | ❌ | Leave empty unless doing direct cross-origin calls |
+### Automated Keep-Alive Heartbeat
+To keep your Render backend warm during job application cycles:
+1. Register a free account at [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com).
+2. Create a monitor to ping:
+   ```
+   GET https://havenstay-backend.onrender.com/api/health
+   ```
+3. Interval: Every 14 minutes.
+4. Result: Zero cold starts. The API stays warm 24/7 without incurring charges.
 
 ---
 
-## First-Deploy Sequence
+## 7. Database Constraint: MySQL 8.4 & 45 Forensic Triggers
 
-Follow this order exactly on initial deployment.
+HavenStay enforces forensic data integrity via **45 MySQL database triggers**:
+- 13 standard operational tables × 3 AFTER triggers (INSERT/UPDATE/DELETE) = 39 triggers
+- 1 meter assignments table × 4 triggers (3 AFTER + 1 BEFORE INSERT invariant guard) = 4 triggers
+- 1 audit logs table × 2 BEFORE triggers (UPDATE/DELETE immutability prevention) = 2 triggers
+- **Total Forensic Engine: 45 triggers**
 
-```
-1. Create Aiven MySQL service → note all connection credentials
-2. Deploy backend on Render:
-   a. Set all env vars including DB_SEED=true
-   b. Push to main → Render builds & deploys
-   c. entrypoint.sh runs: migrate:fresh --seed
-   d. Check /api/health → 200 OK
-   e. Change DB_SEED=false in Render env vars → Save (triggers redeploy)
-3. Deploy frontend on Vercel:
-   a. Import repo, set BACKEND_INTERNAL_URL to Render URL
-   b. Deploy → Vercel builds Next.js standalone
-   c. Visit production URL → login with havenstay.admin@havenstay.com
-4. Verify smoke tests (see below)
-```
+> [!WARNING]
+> Do NOT use Postgres, SQLite, or serverless MySQL abstractions (such as PlanetScale) that prohibit triggers or foreign key cascades. The database must run authentic MySQL 8.0 or 8.4 with InnoDB.
 
 ---
 
-## Subsequent Deploys
+## 8. First-Deploy Execution Sequence
 
-### Backend (Render)
+Follow this sequence for the initial deployment:
 
-Push to `main`. Render auto-rebuilds the Docker image and runs `entrypoint.sh`,
-which calls `php artisan migrate` (safe — no data loss) unless `DB_SEED=true`.
+1. **Deploy Database**: Provision MySQL 8 on Aiven or start `db-primary` and `db-replica` in Docker.
+2. **Deploy Backend**:
+   - Set environment variables.
+   - For the **first boot**, set `DB_SEED=true` to automatically execute `php artisan migrate --force` and `php artisan db:seed --force`.
+   - Verify `/api/health` returns `{"status":"ok","database":"connected"}`.
+   - Update `DB_SEED=false` for ongoing deploys to prevent re-seeding.
+3. **Deploy Frontend**:
+   - Connect GitHub repository to Vercel.
+   - Configure `BACKEND_INTERNAL_URL` pointing to backend.
+   - Test login with seeded admin credentials.
+
+---
+
+## 9. Automated Verification & Smoke Testing
+
+Run the automated smoke test script after any deployment:
 
 ```bash
-git push origin main   # triggers Render auto-deploy
+make smoke-test
 ```
 
-To force a manual deploy without a code push:
-**Render dashboard → Manual Deploy → Deploy latest commit**.
-
-### Frontend (Vercel)
-
-Push to `main`. Vercel auto-deploys and invalidates edge cache.
-
-```bash
-git push origin main   # triggers Vercel auto-deploy
-```
+**Verification Checklist:**
+- [x] Backend direct health check (`GET :8000/api/health` -> 200 OK)
+- [x] Frontend Next.js server (`GET :3000` -> 200 OK)
+- [x] Next.js API rewrite proxy (`GET :3000/api/health` -> proxied)
+- [x] MySQL Primary ping & write connection
+- [x] MySQL Read Replica ping
+- [x] GTID Replication status (`Replica_IO_Running: Yes`, `Replica_SQL_Running: Yes`, `Seconds_Behind_Source: 0`)
 
 ---
 
-## Smoke Test Checklist
+## 10. Portfolio Presentation & Resume Playbook
 
-After every production deployment:
+When featuring HavenStay on your developer portfolio or CV:
 
-| Check | Method | Expected |
-|---|---|---|
-| Backend health | `GET /api/health` | `200 OK` |
-| Login | `POST /api/auth/login` | Valid Sanctum token |
-| Dashboard loads | Visit `/dashboard` in browser | No 5xx, skeletons resolve |
-| Replica reads | Dashboard KPIs display | Data visible (not empty) |
-| Write operation | Create a test tenant | Saved successfully, audit log entry created |
+### Resume Bullet Points
+- **Architected Decoupled Full-Stack System**: Built an enterprise boarding house management platform with Laravel 13 REST API and Next.js 16 App Router using Docker Compose multi-stage builds.
+- **Engineered Zero-Trust Forensic Audit Layer**: Designed 45 database triggers capturing row-level before/after JSON diffs independently of application code with MySQL 8.4 primary-replica GTID replication.
+- **Containerized DevOps Pipeline**: Standardized isolated development and production Docker environments with automated healthchecks, non-root security contexts, and sub-2-second test execution.
+
+### Live Demo Presentation
+- **Live URL**: `https://havenstay.vercel.app` (or custom domain)
+- **Demo Credentials**:
+  - **Admin**: `havenstay.admin@havenstay.com` / `HavenStay123!`
+  - **Staff**: `havenstay.staff@havenstay.com` / `HavenStay123!`
+  - **Viewer**: `viewer@havenstay.com` / `HavenStay123!`
+- **Key Flow to Show Recruiters**:
+  1. Login as Admin.
+  2. Navigate to **Audit Logs** -> show real-time trigger-generated diffs.
+  3. Perform a room status update -> inspect the immediate before/after snapshot.
+  4. Show read-replica KPI queries on the main dashboard.

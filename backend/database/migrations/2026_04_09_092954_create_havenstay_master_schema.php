@@ -63,6 +63,7 @@ return new class extends Migration
             $table->timestamp('last_login_at')->nullable();
             $table->string('active_username', 100)->nullable()->unique();
             $table->string('active_email', 150)->nullable()->unique();
+            $table->text('avatar_url')->nullable();
             $table->timestamps();
             $table->softDeletes();
             $table->foreign('role_id')->references('role_id')->on('roles');
@@ -239,6 +240,7 @@ return new class extends Migration
             $table->timestamp('voided_at')->nullable();
             $table->unsignedInteger('voided_by')->nullable();
             $table->string('void_reason', 255)->nullable();
+            $table->string('remarks', 255)->nullable();
             $table->string('idempotency_key', 255)->nullable()->unique('uq_payments_idempotency');
             $table->timestamp('created_at')->useCurrent();
 

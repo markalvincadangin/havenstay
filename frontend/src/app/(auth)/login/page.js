@@ -21,6 +21,7 @@ import {
   History,
   ClipboardCheck,
 } from 'lucide-react';
+import DemoRoleSelector from '@/components/auth/DemoRoleSelector';
 
 /**
  * LoginPage — Professional Management Portal
@@ -76,6 +77,7 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm({
     defaultValues: {
@@ -340,6 +342,21 @@ export default function LoginPage() {
                   </Button>
                 </div>
               </form>
+
+              {/* Portfolio Demo Sandbox Quick Access (isolated by NEXT_PUBLIC_ENABLE_DEMO_MODE) */}
+              {process.env.NEXT_PUBLIC_ENABLE_DEMO_MODE === 'true' && (
+                <DemoRoleSelector
+                  isSubmitting={isSubmitting}
+                  onSelectRole={async (role) => {
+                    setValue('username', role.username, { shouldValidate: true });
+                    setValue('password', role.password, { shouldValidate: true });
+                    await onSubmit({
+                      username: role.username,
+                      password: role.password,
+                    });
+                  }}
+                />
+              )}
 
               <div className="mt-10 flex flex-col items-center gap-4 text-center opacity-40">
                 <div className="h-px w-8 bg-stone-200" />

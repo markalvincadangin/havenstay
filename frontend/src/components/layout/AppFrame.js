@@ -7,6 +7,7 @@ import MobileNav from '@/components/layout/MobileNav';
 import { useAuth } from '@/context/AuthContext';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import KeyboardHelpModal from '@/components/ui/KeyboardHelpModal';
+import DemoModeBanner from '@/components/ui/DemoModeBanner';
 import { Loader2 } from 'lucide-react';
 
 const AUTH_FREE_PAGES = new Set([
@@ -107,6 +108,7 @@ export default function AppFrame({ children }) {
 
         {/* Page Content */}
         <main className="mx-auto w-full max-w-[1200px] p-4 lg:p-8">
+          <DemoModeBanner user={user} onSwitchRole={logout} />
           {children}
         </main>
       </div>

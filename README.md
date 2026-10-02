@@ -1,6 +1,7 @@
 <div align="center">
 
 # HavenStay
+### Coursework for Information Management · West Visayas State University
 
 **Boarding house and bed-level property management system**, built to handle student dormitories and rental housing near universities with bed-space vacancy tracking, shared utility sub-metering, and database-level audit logging.
 
@@ -29,9 +30,9 @@ Standard property management tools assume one lease per house or apartment unit.
 2. **Shared utility sub-metering**: Electricity and water are frequently split among roommates or measured using mechanical sub-meters. Monthly billing requires prorating shared usage and handling dial rollovers (when a mechanical meter ticks over from 99999 to 00001).
 3. **Disputed payment records**: Verbal agreements and manual paper notes between students and landlords often cause disputes about payments, security deposits, or room reassignments.
 
-I developed **HavenStay** as a solo coursework project to build a full-stack system specifically modeled for these multi-tenant student housing workflows.
+I developed **HavenStay** as a solo coursework project for **Information Management** at West Visayas State University (WVSU) to build a database-driven full-stack system specifically modeled for these multi-tenant student housing workflows.
 
-**Project status:** Coursework prototype with a containerized Docker Compose environment and a deployed live demonstration.  
+**Project status:** Coursework prototype (Information Management) with a containerized Docker Compose environment and a deployed live demonstration.  
 **Live Demo:** [havenstay-theta.vercel.app](https://havenstay-theta.vercel.app)
 
 ---
@@ -63,7 +64,7 @@ I developed **HavenStay** as a solo coursework project to build a full-stack sys
 
 ### 1. Bed-Level Inventory & Lease Contracts
 - Hierarchical structure: `Property` → `Room` → `Bed Space` → `Lease Contract` → `Tenant`.
-- Tracks individual bed space statuses (`Available`, `Reserved`, `Occupied`, `Maintenance`) to prevent double-booking while rooms remain partially occupied.
+- Tracks individual bed space statuses (`Vacant`, `Occupied`, `Maintenance`) to prevent double-booking while rooms remain partially occupied.
 - Manages security deposits, contract durations, payment due dates, and tenant move-outs.
 
 ### 2. 45 Database Triggers for Change Auditing
@@ -75,7 +76,7 @@ I developed **HavenStay** as a solo coursework project to build a full-stack sys
 ### 3. Sub-Metered Utility Billing & Dial Rollover Calculation
 - Supports room-level sub-meter inputs for water and electricity.
 - Prorates shared consumption across active occupants in each room during the billing period.
-- **Dial rollover handling**: Detects when mechanical sub-meters roll over (e.g. from 99999 back to 00001) to prevent erroneous astronomical bills.
+- **Dial rollover handling**: Detects when mechanical sub-meters roll over (e.g. from 99999 back to 00001) to prevent erroneous billing spikes.
 
 ### 4. Primary-Replica Database Topology
 - Configured with a **MySQL 8.4 primary-replica setup** via Docker Compose.
