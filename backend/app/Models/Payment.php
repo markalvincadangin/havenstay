@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\DB;
  * @property Carbon|null $voided_at
  * @property int|null $voided_by
  * @property string|null $void_reason
+ * @property string|null $remarks
  */
 class Payment extends Model
 {
@@ -43,6 +44,7 @@ class Payment extends Model
         'payment_date',
         'payment_method',
         'reference_number',
+        'remarks',
         'processed_by',
         'voided_at',
         'voided_by',

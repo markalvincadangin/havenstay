@@ -5,25 +5,25 @@ echo -e "\n\033[1;36m[ACTION] Refreshing HavenStay Database...\033[0m"
 
 # Check if Docker containers are running
 if docker compose ps --services --filter "status=running" | grep -q "backend"; then
-    echo -e "\033[1;33m[INFO] Detected Docker environment. Executing inside container...\033[0m"
+    echo -e "\033[1;33m[INFO] Detected Docker environment. Executing inside backend container...\033[0m"
     
     echo -e "\033[1;30m[ACTION] Wiping and seeding database (using primary read-host bypass)...\033[0m"
-    docker compose exec -e DB_READ_HOST=db-primary backend php artisan migrate:fresh --seed
+    docker compose exec -e DB_READ_HOST=db-primary backend php -d memory_limit=-1 artisan migrate:fresh --seed --force
     
     echo -e "\033[1;30m[ACTION] Purging backend cache...\033[0m"
     docker compose exec backend php artisan config:clear
     docker compose exec backend php artisan route:clear
     docker compose exec backend php artisan cache:clear
     
-    echo -e "\033[1;30m[ACTION] Clearing old logs...\033[0m"
-    rm -f backend/storage/logs/*.log 2>/dev/null || true
+    echo -e "\033[1;30m[ACTION] Resetting log files...\033[0m"
+    docker compose exec backend sh -c 'rm -f storage/logs/*.log 2>/dev/null || true'
 else
     echo -e "\033[1;33m[INFO] No Docker container detected. Executing local PHP environment...\033[0m"
     
     if command -v php >/dev/null 2>&1; then
         cd backend
         echo -e "\033[1;30m[ACTION] Wiping and seeding database...\033[0m"
-        php artisan migrate:fresh --seed
+        php -d memory_limit=-1 artisan migrate:fresh --seed --force
         
         echo -e "\033[1;30m[ACTION] Purging backend cache...\033[0m"
         php artisan config:clear

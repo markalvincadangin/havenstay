@@ -78,10 +78,12 @@ class ApiWorkflowAndBoundaryTest extends TestCase
             'reference_number' => 'REF-'.uniqid(),
         ]);
 
-        $this->actingAs($this->staffUser)->deleteJson("/api/payments/{$payment->payment_id}", ['void_reason' => 'Test'])
+        $this->actingAs($this->staffUser)
+            ->postJson("/api/payments/{$payment->payment_id}/void", ['void_reason' => 'Mistaken duplicate entry'])
             ->assertOk();
 
-        $this->actingAs($this->staffUser)->deleteJson("/api/payments/{$payment->payment_id}", ['void_reason' => 'Test'])
+        $this->actingAs($this->staffUser)
+            ->postJson("/api/payments/{$payment->payment_id}/void", ['void_reason' => 'Mistaken duplicate entry'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['payment_id']);
     }

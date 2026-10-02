@@ -267,6 +267,7 @@ CREATE TABLE payments (
     voided_at        DATETIME      NULL,
     voided_by        INT           NULL,
     void_reason      VARCHAR(255)  NULL,
+    remarks          VARCHAR(255)  NULL,
     idempotency_key  VARCHAR(255)  NULL,
     created_at       DATETIME      DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_payments_idempotency (idempotency_key),

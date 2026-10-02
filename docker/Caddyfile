@@ -1,0 +1,53 @@
+# ============================================================
+# HavenStay BHMS — Production Caddy Reverse Proxy Configuration
+# ============================================================
+# Supports automated Let's Encrypt / ZeroSSL TLS certificates.
+# If DOMAIN_NAME is set to a domain (e.g., havenstay.example.com),
+# Caddy handles HTTPS on port 443 and redirects HTTP to HTTPS.
+# If DOMAIN_NAME is unset or set to :80, it serves plain HTTP.
+# ============================================================
+
+{
+    # Global options
+    email {$ACME_EMAIL:admin@havenstay.local}
+    # Suppress verbose server headers for security
+    servers {
+        trusted_proxies static private_ranges
+    }
+}
+
+{$DOMAIN_NAME::80} {
+    # High-performance compression
+    encode zstd gzip
+
+    # Route /api/* requests directly to Laravel 13 backend
+    handle /api/* {
+        reverse_proxy backend:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+        }
+    }
+
+    # Route static assets and Next.js pages to frontend standalone runner
+    handle {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+        }
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+}

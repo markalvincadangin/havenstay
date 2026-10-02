@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { StatusBadge } from '../../../src/app/_components/ui/StatusBadge';
+import { StatusBadge } from '../../../src/components/ui/StatusBadge';
 
 describe('StatusBadge', () => {
   it('renders human-readable label for moved_out', () => {

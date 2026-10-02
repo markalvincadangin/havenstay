@@ -49,6 +49,7 @@ testsprite_tests/
 .env
 .env.*
 !.env.example
+!.env.production.example
 !.env.testing.example
 !**/.env.example
 db/replica_daily_start.env
