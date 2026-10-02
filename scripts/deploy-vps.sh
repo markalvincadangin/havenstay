@@ -14,7 +14,7 @@ COLOR_RED="\033[1;31m"
 COLOR_RESET="\033[0m"
 
 echo -e "\n${COLOR_CYAN}======================================================${COLOR_RESET}"
-echo -e "${COLOR_CYAN}🏢 HavenStay BHMS — Production Cloud Deployment${COLOR_RESET}"
+echo -e "${COLOR_CYAN}[DEPLOY] HavenStay BHMS — Production Cloud Deployment${COLOR_RESET}"
 echo -e "${COLOR_CYAN}======================================================${COLOR_RESET}\n"
 
 # Step 1: Root / Sudo check & System Packages
@@ -132,7 +132,7 @@ else
 fi
 
 echo -e "\n${COLOR_GREEN}======================================================${COLOR_RESET}"
-echo -e "${COLOR_GREEN}🎉 HavenStay BHMS Production Cluster is Live!${COLOR_RESET}"
+echo -e "${COLOR_GREEN}[SUCCESS] HavenStay BHMS Production Cluster is Live${COLOR_RESET}"
 echo -e "${COLOR_GREEN}======================================================${COLOR_RESET}"
 echo -e "  Live Application:   ${COLOR_CYAN}${ACCESS_URL}${COLOR_RESET}"
 echo -e "  Backend Health:     ${COLOR_CYAN}${ACCESS_URL}/api/health${COLOR_RESET}"

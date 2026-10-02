@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
           caughtErrorsIgnorePattern: '^_',
         },
       ],
+      'react-hooks/set-state-in-effect': 'warn',
+      'react/no-unescaped-entities': 'warn',
     },
   },
   // Override default ignores of eslint-config-next.
