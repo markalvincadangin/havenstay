@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="frontend/public/brand/logo-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="frontend/public/brand/logo-light.svg">
-  <img alt="HavenStay Brand Mark" src="frontend/public/brand/logo-light.svg" width="140">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/havenstay-lockup-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/havenstay-lockup.png">
+  <img alt="HavenStay Brandmark and Typography Lockup" src="assets/havenstay-lockup.png" width="340">
 </picture>
 
 ### Multi-Tenant Student Housing & Bed-Level Property Management System
